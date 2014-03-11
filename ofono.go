@@ -4,13 +4,13 @@
  * Authors:
  * Sergio Schvezov: sergio.schvezov@cannical.com
  *
- * This file is part of ememesd.
+ * This file is part of nuntium.
  *
- * ememesd is free software; you can redistribute it and/or modify
+ * nuntium is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; version 3.
  *
- * ememesd is distributed in the hope that it will be useful,
+ * nuntium is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
@@ -32,7 +32,7 @@ import (
 )
 
 const (
-	AGENT_TAG                         = dbus.ObjectPath("/ememesd")
+	AGENT_TAG                         = dbus.ObjectPath("/nuntium")
 	PUSH_NOTIFICATION_INTERFACE       = "org.ofono.PushNotification"
 	PUSH_NOTIFICATION_AGENT_INTERFACE = "org.ofono.PushNotificationAgent"
 )
