@@ -1,8 +1,8 @@
 package main
 
 import (
-	"launchpad.net/go-dbus/v1"
 	"fmt"
+	"launchpad.net/go-dbus/v1"
 	"os"
 )
 
