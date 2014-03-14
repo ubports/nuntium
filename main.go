@@ -22,8 +22,9 @@
 package main
 
 import (
-	"launchpad.net/nuntium/mms"
 	"launchpad.net/go-dbus/v1"
+	"launchpad.net/nuntium/mms"
+	"launchpad.net/nuntium/ofono"
 	"log"
 	"os"
 	"syscall"
@@ -35,53 +36,25 @@ func main() {
 		err  error
 	)
 	if conn, err = dbus.Connect(dbus.SystemBus); err != nil {
-		log.Fatal("Connection error:", err)
+		log.Fatal("Connection error: ", err)
 	}
 	log.Print("Using dbus on ", conn.UniqueName)
-	modems, err := NewModems(conn)
+	modems, err := ofono.NewModems(conn)
 	if err != nil {
 		log.Fatal("Could not add modems")
 	}
 	log.Print("Amount of modems found: ", len(modems))
-	mmsChannel := make(chan *PushPDU)
-	proxyChannel := make(chan ProxyInfo, 1)
-
-	go func() {
-		proxy := <-proxyChannel
-		log.Print("Proxy set to ", proxy)
-		for pushMsg := range mmsChannel {
-			log.Print(pushMsg)
-			dec := mms.NewDecoder(pushMsg.Data)
-			mmsHdr := new(mms.MNotificationInd)
-			if err := dec.Decode(mmsHdr); err != nil {
-				log.Print("Unable to decode MMS Header", err)
-			}
-			log.Print(mmsHdr)
-			//TODO send m-notifyresp.ind
-			if filePath, err := mmsHdr.Download(proxy.Host, int32(proxy.Port), "", ""); err != nil {
-				log.Print("Download issues ", err)
-			} else {
-				//TODO notify upper layer
-				log.Print("downloaded ", filePath)
-			}
-		}
-	}()
 
 	//TODO refactor with new ofono work
 	for i, _ := range modems {
-		err := modems[i].GetContexts(conn, "mms")
+		_, err := modems[i].GetMMSContext(conn)
 		if err != nil {
-			log.Print("Cannot get ofono context", err)
+			log.Print("Cannot get ofono context: ", err)
 			continue
 		}
-		if len(modems[i].Contexts) == 0 {
-			log.Print("No mms contexts found, no proxy setup")
-		} else {
-			log.Print("Getting context proxy")
-			proxy, _ := modems[i].Contexts[0].GetProxy()
-			proxyChannel <- proxy
-		}
-		if err := modems[i].RegisterAgent(conn, mmsChannel); err != nil {
+		pushChannel, err := modems[i].RegisterAgent(conn)
+		go messageLoop(conn, pushChannel)
+		if err != nil {
 			log.Fatal(err)
 		}
 		defer modems[i].UnregisterAgent(conn)
@@ -95,4 +68,33 @@ func main() {
 	m.Bindings[syscall.SIGHUP] = func() { m.Stop(); HupHandler() }
 	m.Bindings[syscall.SIGINT] = func() { m.Stop(); IntHandler() }
 	m.Start()
+}
+
+func messageLoop(conn *dbus.Connection, mmsChannel chan *ofono.PushEvent) {
+	for pushMsg := range mmsChannel {
+		go func() {
+			log.Print(pushMsg)
+			dec := mms.NewDecoder(pushMsg.PDU.Data)
+			mmsHdr := new(mms.MNotificationInd)
+			if err := dec.Decode(mmsHdr); err != nil {
+				log.Print("Unable to decode MMS Header: ", err)
+			}
+			mmsContext, err := pushMsg.Modem.ActivateMMSContext(conn)
+			if err != nil {
+				log.Print("Cannot activate ofono context: ", err)
+				return
+			}
+			proxy, err := mmsContext.GetProxy()
+			if err != nil {
+				log.Print("Error retrieving proxy: ", err)
+			}
+			if filePath, err := mmsHdr.Download(proxy.Host, int32(proxy.Port), "", ""); err != nil {
+				log.Print("Download issues: ", err)
+			} else {
+				//TODO notify upper layer
+				log.Print("Downloaded ", filePath)
+			}
+			//TODO send m-notifyresp.ind
+		}()
+	}
 }

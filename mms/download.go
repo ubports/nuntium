@@ -22,6 +22,7 @@
 package mms
 
 import (
+	"errors"
 	"launchpad.net/ubuntu-download-manager/bindings/golang"
 	"log"
 )
@@ -40,11 +41,17 @@ func (pdu *MNotificationInd) Download(proxyHostname string, proxyPort int32, use
 	e := download.Error()
 	go func() {
 		for progress := range p {
-			log.Print(progress.Total, progress.Received)
+			log.Print("Progress:", progress.Total, progress.Received)
 		}
 	}()
+	log.Print("Starting download")
 	download.Start()
-	<- e
+	downloadError := <-e
+	log.Print("Error was ", downloadError)
+	if downloadError != "" {
+		return "", errors.New(downloadError)
+	}
+	log.Print("Waiting for finish")
 	downloadFilePath := <-f
 	log.Print("File downloaded to", downloadFilePath)
 	return downloadFilePath, nil

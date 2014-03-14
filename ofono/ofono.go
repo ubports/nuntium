@@ -19,7 +19,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package main
+package ofono
 
 import (
 	"errors"
@@ -35,6 +35,8 @@ const (
 	AGENT_TAG                         = dbus.ObjectPath("/nuntium")
 	PUSH_NOTIFICATION_INTERFACE       = "org.ofono.PushNotification"
 	PUSH_NOTIFICATION_AGENT_INTERFACE = "org.ofono.PushNotificationAgent"
+	CONNECTION_MANAGER_INTERFACE      = "org.ofono.ConnectionManager"
+	CONNECTION_CONTEXT_INTERFACE      = "org.ofono.ConnectionContext"
 )
 
 type PropertiesType map[string]dbus.Variant
@@ -54,10 +56,14 @@ type OfonoPushNotification struct {
 
 type Modem struct {
 	modem           dbus.ObjectPath
-	Contexts        []OfonoContext
 	agentRegistered bool
 	messageChannel  chan *dbus.Message
-	mmsChannel      chan *PushPDU
+	pushChannel     chan *PushEvent
+}
+
+type PushEvent struct {
+	PDU   *PushPDU
+	Modem *Modem
 }
 
 type ProxyInfo struct {
@@ -100,6 +106,19 @@ func getOfonoProps(obj *dbus.ObjectProxy, iface, method string) (oProps []OfonoC
 	return oProps, err
 }
 
+func (modem *Modem) ActivateMMSContext(conn *dbus.Connection) (OfonoContext, error) {
+	context, err := modem.GetMMSContext(conn)
+	if err != nil {
+		return OfonoContext{}, err
+	}
+	obj := conn.Object("org.ofono", context.ObjectPath)
+	_, err = obj.Call(CONNECTION_CONTEXT_INTERFACE, "SetProperty", "Active", dbus.Variant{true})
+	if err != nil {
+		return OfonoContext{}, fmt.Errorf("Cannot Activate interface on %s: %s", context.ObjectPath, err)
+	}
+	return context, nil
+}
+
 func (oContext OfonoContext) GetProxy() (proxyInfo ProxyInfo, err error) {
 	proxy := reflect.ValueOf(oContext.Properties["MessageProxy"].Value).String()
 	var portString string
@@ -114,45 +133,56 @@ func (oContext OfonoContext) GetProxy() (proxyInfo ProxyInfo, err error) {
 	return proxyInfo, nil
 }
 
-func (modem *Modem) GetContexts(conn *dbus.Connection, contextType string) error {
+//GetMMSContexts returns the contexts that are MMS capable; by convention it has
+//been defined that for it to be MMS capable it either has to define a MessageProxy
+//or a MessageCenter within the context.
+//
+//An implementation detail is that there are going to be at most two contexts per
+//modem.
+func (modem *Modem) GetMMSContext(conn *dbus.Connection) (OfonoContext, error) {
 	rilObj := conn.Object("org.ofono", modem.modem)
-	contexts, err := getOfonoProps(rilObj, "org.ofono.ConnectionManager", "GetContexts")
+	contexts, err := getOfonoProps(rilObj, CONNECTION_MANAGER_INTERFACE, "GetContexts")
 	if err != nil {
-		return err
+		return OfonoContext{}, err
 	}
+	var c []OfonoContext
 	for _, context := range contexts {
 		for k, v := range context.Properties {
 			if reflect.ValueOf(k).Kind() != reflect.String || reflect.ValueOf(v.Value).Kind() != reflect.String {
 				continue
 			}
-			k, v.Value = reflect.ValueOf(k).String(), reflect.ValueOf(v.Value).String()
-			if k != "Type" {
+			k = reflect.ValueOf(k).String()
+			if k != "MessageCenter" {
 				continue
 			}
-			if v.Value != contextType {
-				continue
-			}
-			modem.Contexts = append(modem.Contexts, context)
+			c = append(c, context)
 		}
 	}
-	return nil
+
+	if len(c) == 0 {
+		return OfonoContext{}, errors.New("No mms contexts found")
+	} else if len(c) != 1 {
+		return OfonoContext{}, errors.New("More than one mms context found")
+	}
+
+	return c[0], nil
 }
 
-func (modem *Modem) RegisterAgent(conn *dbus.Connection, mmsChannel chan *PushPDU) error {
+func (modem *Modem) RegisterAgent(conn *dbus.Connection) (chan *PushEvent, error) {
 	if modem.agentRegistered {
-		return nil
+		return modem.pushChannel, nil
 	}
 	obj := conn.Object("org.ofono", modem.modem)
 	_, err := obj.Call(PUSH_NOTIFICATION_INTERFACE, "RegisterAgent", AGENT_TAG)
 	if err != nil {
-		return errors.New(fmt.Sprintf("Cannot register agent for %s: %s", modem.modem, err))
+		return nil, errors.New(fmt.Sprintf("Cannot register agent for %s: %s", modem.modem, err))
 	}
 	modem.agentRegistered = true
-	modem.mmsChannel = mmsChannel
+	modem.pushChannel = make(chan *PushEvent)
 	modem.messageChannel = make(chan *dbus.Message)
 	go modem.watchDBusMethodCalls(conn)
 	conn.RegisterObjectPath(AGENT_TAG, modem.messageChannel)
-	return nil
+	return modem.pushChannel, nil
 }
 
 func (modem *Modem) UnregisterAgent(conn *dbus.Connection) error {
@@ -165,7 +195,7 @@ func (modem *Modem) UnregisterAgent(conn *dbus.Connection) error {
 	}
 	conn.UnregisterObjectPath(AGENT_TAG)
 	close(modem.messageChannel)
-	close(modem.mmsChannel)
+	close(modem.pushChannel)
 	modem.agentRegistered = false
 	return nil
 }
@@ -175,7 +205,7 @@ func (modem *Modem) watchDBusMethodCalls(conn *dbus.Connection) {
 	for msg := range modem.messageChannel {
 		switch {
 		case msg.Interface == PUSH_NOTIFICATION_AGENT_INTERFACE && msg.Member == "ReceiveNotification":
-			reply = notificationReceived(conn, msg, modem.mmsChannel)
+			reply = modem.notificationReceived(msg)
 		case msg.Interface == PUSH_NOTIFICATION_AGENT_INTERFACE && msg.Member == "Release":
 			log.Print("Received Release")
 			reply = dbus.NewMethodReturnMessage(msg)
@@ -189,7 +219,7 @@ func (modem *Modem) watchDBusMethodCalls(conn *dbus.Connection) {
 	}
 }
 
-func notificationReceived(conn *dbus.Connection, msg *dbus.Message, pushChannel chan *PushPDU) (reply *dbus.Message) {
+func (modem *Modem) notificationReceived(msg *dbus.Message) (reply *dbus.Message) {
 	var push OfonoPushNotification
 	if err := msg.Args(&(push.Data), &(push.Info)); err != nil {
 		log.Print("Error in received ReceiveNotification() method call ", msg)
@@ -205,7 +235,7 @@ func notificationReceived(conn *dbus.Connection, msg *dbus.Message, pushChannel 
 		}
 		// TODO later switch on ApplicationId and ContentType to different channels
 		if pdu.ApplicationId == 0x04 && pdu.ContentType == "application/vnd.wap.mms-message" {
-			pushChannel <- pdu
+			modem.pushChannel <- &PushEvent{PDU: pdu, Modem: modem}
 		} else {
 			log.Print("Unhandled push pdu", pdu)
 		}
