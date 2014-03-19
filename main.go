@@ -88,7 +88,7 @@ func messageLoop(conn *dbus.Connection, mmsChannel chan *ofono.PushEvent) {
 			if err != nil {
 				log.Print("Error retrieving proxy: ", err)
 			}
-			if filePath, err := mmsHdr.Download(proxy.Host, int32(proxy.Port), "", ""); err != nil {
+			if filePath, err := mmsHdr.Download(proxy.Host, int32(proxy.Port)); err != nil {
 				log.Print("Download issues: ", err)
 			} else {
 				//TODO notify upper layer
