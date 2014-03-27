@@ -51,7 +51,7 @@ func (pdu *MNotificationInd) Download(proxyHostname string, proxyPort int32) (st
 			return downloadFilePath, nil
 		case <-time.After(3 * time.Minute):
 			return "", fmt.Errorf("Download timeout exceeded while fetching %s", pdu.ContentLocation)
-		case err := <- e:
+		case err := <-e:
 			return "", err
 		}
 	}

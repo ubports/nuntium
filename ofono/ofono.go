@@ -37,6 +37,7 @@ const (
 	PUSH_NOTIFICATION_AGENT_INTERFACE = "org.ofono.PushNotificationAgent"
 	CONNECTION_MANAGER_INTERFACE      = "org.ofono.ConnectionManager"
 	CONNECTION_CONTEXT_INTERFACE      = "org.ofono.ConnectionContext"
+	SIM_MANAGER_INTERFACE             = "org.ofono.SimManager"
 )
 
 type PropertiesType map[string]dbus.Variant
@@ -166,6 +167,26 @@ func (modem *Modem) GetMMSContext(conn *dbus.Connection) (OfonoContext, error) {
 	}
 
 	return c[0], nil
+}
+
+func (modem *Modem) GetIdentity(conn *dbus.Connection) (string, error) {
+	defaultError := fmt.Errorf("Cannot retrieve SubscriberIdentity for %s", modem.modem)
+	rilObj := conn.Object("org.ofono", modem.modem)
+	reply, err := rilObj.Call(SIM_MANAGER_INTERFACE, "GetProperties")
+	if err != nil || reply.Type == dbus.TypeError {
+		return "", defaultError
+	}
+	var properties PropertiesType
+	if err := reply.Args(&properties); err != nil {
+		return "", defaultError
+	}
+	var identity string
+	if identityVariant, ok := properties["SubscriberIdentity"]; ok {
+		identity = reflect.ValueOf(identityVariant.Value).String()
+	} else {
+		return "", defaultError
+	}
+	return identity, nil
 }
 
 func (modem *Modem) RegisterAgent(conn *dbus.Connection) (chan *PushEvent, error) {

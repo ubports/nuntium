@@ -25,6 +25,7 @@ import (
 	"launchpad.net/go-dbus/v1"
 	"launchpad.net/nuntium/mms"
 	"launchpad.net/nuntium/ofono"
+	"launchpad.net/nuntium/telepathy"
 	"log"
 	"os"
 	"syscall"
@@ -32,9 +33,19 @@ import (
 
 func main() {
 	var (
-		conn *dbus.Connection
-		err  error
+		conn        *dbus.Connection
+		connSession *dbus.Connection
+		err         error
 	)
+	if connSession, err = dbus.Connect(dbus.SessionBus); err != nil {
+		log.Fatal("Connection error: ", err)
+	}
+	mmsManager, err := telepathy.NewMMSManager(connSession)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("Registered %s on bus", connSession.UniqueName)
+
 	if conn, err = dbus.Connect(dbus.SystemBus); err != nil {
 		log.Fatal("Connection error: ", err)
 	}
@@ -53,10 +64,19 @@ func main() {
 			continue
 		}
 		pushChannel, err := modems[i].RegisterAgent(conn)
-		go messageLoop(conn, pushChannel)
 		if err != nil {
 			log.Fatal(err)
 		}
+		identity, err := modems[i].GetIdentity(conn)
+		if err != nil {
+			log.Fatal(err)
+		}
+		//TODO implement Modem.GetUseDeliveryReports()
+		telepathyService, err := mmsManager.AddService(identity, false)
+		if err != nil {
+			log.Fatal(err)
+		}
+		go messageLoop(conn, pushChannel, telepathyService)
 		defer modems[i].UnregisterAgent(conn)
 	}
 
@@ -70,7 +90,7 @@ func main() {
 	m.Start()
 }
 
-func messageLoop(conn *dbus.Connection, mmsChannel chan *ofono.PushEvent) {
+func messageLoop(conn *dbus.Connection, mmsChannel chan *ofono.PushEvent, telepathyService telepathy.MMSService) {
 	for pushMsg := range mmsChannel {
 		go func() {
 			log.Print(pushMsg)
@@ -88,13 +108,14 @@ func messageLoop(conn *dbus.Connection, mmsChannel chan *ofono.PushEvent) {
 			if err != nil {
 				log.Print("Error retrieving proxy: ", err)
 			}
-			if filePath, err := mmsHdr.Download(proxy.Host, int32(proxy.Port)); err != nil {
+			filePath, err := mmsHdr.Download(proxy.Host, int32(proxy.Port))
+			if err != nil {
 				log.Print("Download issues: ", err)
-			} else {
-				//TODO notify upper layer
-				log.Print("Downloaded ", filePath)
+				return
 			}
 			//TODO send m-notifyresp.ind
+			log.Print("Downloaded ", filePath)
+			telepathyService.MessageAdded(filePath)
 		}()
 	}
 }
