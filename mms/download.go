@@ -28,7 +28,7 @@ import (
 	"time"
 )
 
-func (pdu *MNotificationInd) Download(proxyHostname string, proxyPort int32) (string, error) {
+func (pdu *MNotificationInd) DownloadContent(proxyHostname string, proxyPort int32) (string, error) {
 	downloadManager, err := udm.NewDownloadManager()
 	if err != nil {
 		return "", err

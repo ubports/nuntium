@@ -44,12 +44,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Registered %s on bus", connSession.UniqueName)
+	log.Print("Using session bus on ", connSession.UniqueName)
 
 	if conn, err = dbus.Connect(dbus.SystemBus); err != nil {
 		log.Fatal("Connection error: ", err)
 	}
-	log.Print("Using dbus on ", conn.UniqueName)
+	log.Print("Using system bus on ", conn.UniqueName)
 	modems, err := ofono.NewModems(conn)
 	if err != nil {
 		log.Fatal("Could not add modems")
@@ -76,6 +76,12 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+		//TODO add this somewhere so we react when ofono notifies something
+		/*
+			if err := mmsManager.RemoveService(identity); err != nil {
+				log.Fatal(err)
+			}
+		*/
 		go messageLoop(conn, pushChannel, telepathyService)
 		defer modems[i].UnregisterAgent(conn)
 	}
@@ -95,8 +101,8 @@ func messageLoop(conn *dbus.Connection, mmsChannel chan *ofono.PushEvent, telepa
 		go func() {
 			log.Print(pushMsg)
 			dec := mms.NewDecoder(pushMsg.PDU.Data)
-			mmsHdr := new(mms.MNotificationInd)
-			if err := dec.Decode(mmsHdr); err != nil {
+			mmsIndHdr := new(mms.MNotificationInd)
+			if err := dec.Decode(mmsIndHdr); err != nil {
 				log.Print("Unable to decode MMS Header: ", err)
 			}
 			mmsContext, err := pushMsg.Modem.ActivateMMSContext(conn)
@@ -108,7 +114,7 @@ func messageLoop(conn *dbus.Connection, mmsChannel chan *ofono.PushEvent, telepa
 			if err != nil {
 				log.Print("Error retrieving proxy: ", err)
 			}
-			filePath, err := mmsHdr.Download(proxy.Host, int32(proxy.Port))
+			filePath, err := mmsIndHdr.DownloadContent(proxy.Host, int32(proxy.Port))
 			if err != nil {
 				log.Print("Download issues: ", err)
 				return
