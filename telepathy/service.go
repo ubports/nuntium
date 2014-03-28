@@ -93,9 +93,24 @@ func (service *MMSService) watchDBusMethodCalls() {
 //is taken as a parameter
 func (service *MMSService) MessageAdded(filePath string) error {
 	signal := dbus.NewSignalMessage(service.Payload.Path, MMS_SERVICE_DBUS_IFACE, MESSAGE_ADDED)
-	signal.AppendArgs(filePath)
+	if err := signal.AppendArgs(filePath); err != nil {
+		return err
+	}
 	if err := service.conn.Send(signal); err != nil {
 		return err
 	}
 	return nil
+}
+
+func (service *MMSService) isService(identity string) bool {
+	path := dbus.ObjectPath(MMS_DBUS_PATH + "/" + identity)
+	if path == service.Payload.Path {
+		return true
+	}
+	return false
+}
+
+func (service *MMSService) Close() {
+	service.conn.UnregisterObjectPath(service.Payload.Path)
+	close(service.msgChan)
 }

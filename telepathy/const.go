@@ -33,4 +33,5 @@ const (
 	USE_DELIVERY_REPORTS = "UseDeliveryReports"
 	MESSAGE_ADDED        = "MessageAdded"
 	SERVICE_ADDED        = "ServiceAdded"
+	SERVICE_REMOVED      = "ServiceRemoved"
 )

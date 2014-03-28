@@ -80,13 +80,13 @@ func (manager *MMSManager) getServices(msg *dbus.Message) *dbus.Message {
 }
 
 func (manager *MMSManager) serviceAdded(payload *ServicePayload) error {
-	log.Print("New Service added ", payload.Path)
+	log.Print("Service added ", payload.Path)
 	signal := dbus.NewSignalMessage(MMS_DBUS_PATH, MMS_MANAGER_DBUS_IFACE, SERVICE_ADDED)
 	if err := signal.AppendArgs(payload.Path, payload.Properties); err != nil {
 		return err
 	}
 	if err := manager.conn.Send(signal); err != nil {
-		return fmt.Errorf("Cannot send MessageAdded for %s", payload.Path)
+		return fmt.Errorf("Cannot send ServiceAdded for %s", payload.Path)
 	}
 	return nil
 }
@@ -98,4 +98,29 @@ func (manager *MMSManager) AddService(identity string, useDeliveryReports bool) 
 	}
 	manager.services = append(manager.services, service)
 	return service, nil
+}
+
+func (manager *MMSManager) serviceRemoved(payload *ServicePayload) error {
+	log.Print("Service removed ", payload.Path)
+	signal := dbus.NewSignalMessage(MMS_DBUS_PATH, MMS_MANAGER_DBUS_IFACE, SERVICE_REMOVED)
+	if err := signal.AppendArgs(payload.Path); err != nil {
+		return err
+	}
+	if err := manager.conn.Send(signal); err != nil {
+		return fmt.Errorf("Cannot send ServiceRemoved for %s", payload.Path)
+	}
+	return nil
+}
+
+func (manager *MMSManager) RemoveService(identity string) error {
+	for i := range manager.services {
+		if manager.services[i].isService(identity) {
+			manager.serviceRemoved(&manager.services[i].Payload)
+			manager.services[i].Close()
+			manager.services = append(manager.services[:i], manager.services[i+1:]...)
+			log.Print("Service left: ", len(manager.services))
+			return nil
+		}
+	}
+	return fmt.Errorf("Cannot find service serving %s", identity)
 }
