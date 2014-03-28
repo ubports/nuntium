@@ -22,8 +22,8 @@
 package mms
 
 import (
-	"errors"
 	"fmt"
+	"reflect"
 )
 
 // MMS Field names from OMA-WAP-MMS section 7.3
@@ -100,14 +100,9 @@ const (
 	CLASS_AUTO          = 0x83
 )
 
-type MMSDecode interface {
-	decode(*MMSDecoder) error
-}
-
 // MNotification in holds a m-notification.ind message defined in
 // OMA-WAP-MMS-ENV section 6.2
 type MNotificationInd struct {
-	MMSDecode
 	Type, Version, Class, Size                    byte
 	TransactionId, From, Subject, ContentLocation string
 	Expiry                                        uint
@@ -126,20 +121,16 @@ type MMSDecoder struct {
 	offset int
 }
 
+func NewMNotificationInd() *MNotificationInd {
+	return &MNotificationInd{Type: TYPE_NOTIFICATION_IND}
+}
+
 func NewDecoder(data []byte) *MMSDecoder {
-	decoder := new(MMSDecoder)
-	decoder.data = data
-	return decoder
+	return &MMSDecoder{data: data}
 }
 
-func (dec *MMSDecoder) Decode(pdu MMSDecode) (err error) {
-	if err := pdu.decode(dec); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (pdu *MNotificationInd) decode(dec *MMSDecoder) error {
+func (dec *MMSDecoder) Decode(pdu interface{}) (err error) {
+	reflectedPdu := reflect.ValueOf(pdu).Elem()
 	// fmt.Printf("len data: %d, data: %x\n", len(dec.data), dec.data)
 	for ; dec.offset < len(dec.data); dec.offset++ {
 		// fmt.Printf("offset %d, value: %x\n", dec.offset, dec.data[dec.offset])
@@ -147,22 +138,24 @@ func (pdu *MNotificationInd) decode(dec *MMSDecoder) error {
 		switch param {
 		case X_MMS_MESSAGE_TYPE:
 			dec.offset++
-			pdu.Type = dec.data[dec.offset]
-			if pdu.Type != TYPE_NOTIFICATION_IND {
-				return errors.New(fmt.Sprintf("Expected message type %x got %x", TYPE_NOTIFICATION_IND, pdu.Type))
+			expectedType := byte(reflectedPdu.FieldByName("Type").Uint())
+			parsedType := dec.data[dec.offset]
+			if parsedType != expectedType {
+				return fmt.Errorf("Expected message type %x got %x", expectedType, parsedType)
 			}
-			fmt.Println("Message Type", pdu.Type)
 		case X_MMS_TRANSACTION_ID:
 			dec.offset++
 			begin := dec.offset
 			for ; dec.data[dec.offset] != 0; dec.offset++ {
 			}
-			pdu.TransactionId = string(dec.data[begin:dec.offset])
-			fmt.Println("Transaction ID", pdu.TransactionId)
+			v := string(dec.data[begin:dec.offset])
+			reflectedPdu.FieldByName("TransactionId").SetString(v)
+			fmt.Println("Transaction ID", v)
 		case X_MMS_MMS_VERSION:
 			dec.offset++
-			pdu.Version = dec.data[dec.offset] & 0x7F
-			fmt.Println("MMS Version", pdu.Version)
+			v := uint64(dec.data[dec.offset] & 0x7F)
+			reflectedPdu.FieldByName("Version").SetUint(v)
+			fmt.Println("MMS Version", v)
 		case FROM:
 			dec.offset++
 			size := int(dec.data[dec.offset])
@@ -177,19 +170,21 @@ func (pdu *MNotificationInd) decode(dec *MMSDecoder) error {
 				begin := dec.offset
 				for ; dec.data[dec.offset] != 0; dec.offset++ {
 				}
-				pdu.From = string(dec.data[begin:dec.offset])
+				v := string(dec.data[begin:dec.offset])
+				reflectedPdu.FieldByName("From").SetString(v)
 				// size - 2 == size - token - '0'
-				if len(pdu.From) != size-2 {
-					return errors.New(fmt.Sprintf("From field is %d but expected size is %d", len(pdu.From), size-2))
+				if len(v) != size-2 {
+					return fmt.Errorf("From field is %d but expected size is %d", len(v), size-2)
 				}
+				fmt.Println("From", v)
 			default:
-				return errors.New(fmt.Sprintf("Unhandled token address in from field %x", token))
+				return fmt.Errorf("Unhandled token address in from field %x", token)
 			}
-			fmt.Println("From", pdu.From)
 		case X_MMS_MESSAGE_CLASS:
 			dec.offset++
-			pdu.Class = dec.data[dec.offset]
-			fmt.Printf("Message Class %x\n", pdu.Class)
+			v := uint64(dec.data[dec.offset])
+			reflectedPdu.FieldByName("Class").SetUint(v)
+			fmt.Printf("Message Class %x\n", v)
 		case X_MMS_MESSAGE_SIZE:
 			dec.offset++
 			size := int(dec.data[dec.offset])
@@ -199,8 +194,8 @@ func (pdu *MNotificationInd) decode(dec *MMSDecoder) error {
 			for ; dec.offset < endOffset; dec.offset++ {
 				val = (val << 8) | dec.data[dec.offset]
 			}
-			pdu.Size = val
-			fmt.Println("Message Size", pdu.Size)
+			reflectedPdu.FieldByName("Class").SetUint(uint64(val))
+			fmt.Println("Message Size", val)
 		case X_MMS_EXPIRY:
 			dec.offset++
 			size := int(dec.data[dec.offset])
@@ -214,18 +209,27 @@ func (pdu *MNotificationInd) decode(dec *MMSDecoder) error {
 			}
 			// TODO add switch case for token
 			fmt.Printf("Expiry token: %x\n", token)
-			pdu.Expiry = val
-			fmt.Printf("Message Expiry %d, %x\n", pdu.Expiry, dec.data[dec.offset])
+			reflectedPdu.FieldByName("Expiry").SetUint(uint64(val))
+			fmt.Printf("Message Expiry %d, %x\n", val, dec.data[dec.offset])
 		case X_MMS_CONTENT_LOCATION:
 			dec.offset++
 			begin := dec.offset
 			for ; dec.data[dec.offset] != 0; dec.offset++ {
 			}
-			pdu.ContentLocation = string(dec.data[begin:dec.offset])
-			fmt.Println("Content Location", pdu.ContentLocation)
+			v := string(dec.data[begin:dec.offset])
+			reflectedPdu.FieldByName("ContentLocation").SetString(v)
+			fmt.Println("Content Location", v)
+		case MESSAGE_ID:
+			dec.offset++
+			begin := dec.offset
+			for ; dec.data[dec.offset] != 0; dec.offset++ {
+			}
+			v := string(dec.data[begin:dec.offset])
+			reflectedPdu.FieldByName("MessageId").SetString(v)
+			fmt.Println("Message ID", v)
 		default:
-			fmt.Printf("Unhandled %x, %d, %d\n", param, dec.offset)
-			return errors.New(fmt.Sprintf("Unhandled %x, %d, %d", param, dec.offset))
+			fmt.Printf("Unhandled %x, %d, %d\n", param, param, dec.offset)
+			return fmt.Errorf("Unhandled %x, %d, %d", param, param, dec.offset)
 		}
 	}
 	return nil

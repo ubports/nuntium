@@ -101,7 +101,7 @@ func messageLoop(conn *dbus.Connection, mmsChannel chan *ofono.PushEvent, telepa
 		go func() {
 			log.Print(pushMsg)
 			dec := mms.NewDecoder(pushMsg.PDU.Data)
-			mmsIndHdr := new(mms.MNotificationInd)
+			mmsIndHdr := mms.NewMNotificationInd()
 			if err := dec.Decode(mmsIndHdr); err != nil {
 				log.Print("Unable to decode MMS Header: ", err)
 			}
