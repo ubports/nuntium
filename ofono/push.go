@@ -157,6 +157,7 @@ type WSP interface {
 
 type PushPDU struct {
 	HeaderLength                             uint
+	ContentLength                            int
 	ApplicationId, EncodingVersion, PushFlag byte
 	ContentType                              string
 	Data                                     []byte
@@ -232,6 +233,7 @@ func (dec *PushPDUDecoder) decodeHeaders(pdu *PushPDU, hdrLengthRemain int) erro
 	var n int
 	for n = dec.offset; n < (hdrLengthRemain + dec.offset); {
 		param := dec.data[n] & 0x7F
+		//fmt.Printf("byte: %#0x\tdec: %d\tn: %d\tdec.offset: %d\n", param, param, n, dec.offset)
 		switch {
 		case param == X_WAP_APPLICATION_ID:
 			n++
@@ -245,9 +247,14 @@ func (dec *PushPDUDecoder) decodeHeaders(pdu *PushPDU, hdrLengthRemain int) erro
 			n++
 			pdu.EncodingVersion = dec.data[n] & 0x7F
 			n++
+		case param == CONTENT_LENGTH:
+			n++
+			pdu.ContentLength = int(dec.data[n] & 0x7F)
+			n++
 		default:
-			fmt.Printf("Unhandled %x, %d, %d\n", param, n, dec.offset)
-			return errors.New(fmt.Sprintf("Unhandled %x, %d, %d", param, n, dec.offset))
+			fmt.Printf("Unhandled byte: %#0x\tdec: %d\tn: %d\tdec.offset: %d\n", param, param, n, dec.offset)
+			fmt.Println(pdu)
+			return fmt.Errorf("Unhandled %x, %d, %d", param, n, dec.offset)
 		}
 	}
 	dec.offset = n
