@@ -100,21 +100,48 @@ const (
 	CLASS_AUTO          = 0x83
 )
 
+type ContentType struct {
+	Type, Name, CharSet string
+	ParameterSize       uint
+	Content             Content
+}
+
+type Content struct {
+	Id, Type, Location   string
+	HeaderSize, BodySize uint
+	data                 []byte
+}
+
 // MNotification in holds a m-notification.ind message defined in
-// OMA-WAP-MMS-ENV section 6.2
+// OMA-WAP-MMS-ENC section 6.2
 type MNotificationInd struct {
-	Type, Version, Class, Size                    byte
-	TransactionId, From, Subject, ContentLocation string
-	Expiry                                        uint
+	MMSReader
+	Type, Version, Class, ReplyCharging, ReplyChargingDeadline, DeliveryReport byte
+	TransactionId, From, Subject, ContentLocation, ReplyChargingId             string
+	Expiry                                                                     uint
+	Size                                                                       uint64
 }
 
 // MNotification in holds a m-notifyresp.ind message defined in
-// OMA-WAP-MMS-ENV-v1.1 section 6.2
+// OMA-WAP-MMS-ENC-v1.1 section 6.2
 type MNotifyRespInd struct {
-	Type, Version, Status byte
-	TransactionId         string
-	ReportAllowed         bool
+	Type, Version, Status  byte
+	TransactionId, Subject string
+	ReportAllowed          bool
 }
+
+// MRetrieveConf in holds a m-retrieve.conf message defined in
+// OMA-WAP-MMS-ENC-v1.1 section 6.3
+type MRetrieveConf struct {
+	MMSReader
+	Type, Version, Status, Class, Priority, DeliveryReport, ReplyCharging, ReplyChargingDeadline, ReadReport, RetrieveStatus byte
+	ContentType, TransactionId, MessageId, From, To, Cc, Subject, ReplyChargingId, RetrieveText                              string
+	ReportAllowed                                                                                                            bool
+	Date                                                                                                                     uint64
+	ContentPayload                                                                                                           []byte
+}
+
+type MMSReader interface{}
 
 type MMSDecoder struct {
 	data   []byte
@@ -125,37 +152,122 @@ func NewMNotificationInd() *MNotificationInd {
 	return &MNotificationInd{Type: TYPE_NOTIFICATION_IND}
 }
 
+func NewMRetrieveConf() *MRetrieveConf {
+	return &MRetrieveConf{Type: TYPE_RETRIEVE_CONF}
+}
+
 func NewDecoder(data []byte) *MMSDecoder {
 	return &MMSDecoder{data: data}
 }
 
-func (dec *MMSDecoder) Decode(pdu interface{}) (err error) {
+func (dec *MMSDecoder) readString(reflectedPdu *reflect.Value, hdr string) (string, error) {
+	dec.offset++
+	begin := dec.offset
+	//TODO protect this
+	for ; dec.data[dec.offset] != 0; dec.offset++ {
+	}
+	v := string(dec.data[begin:dec.offset])
+	if hdr != "" {
+		reflectedPdu.FieldByName(hdr).SetString(v)
+		fmt.Printf("Setting %s to %s\n", hdr, v)
+	}
+	return v, nil
+}
+
+func (dec *MMSDecoder) readShortInteger(reflectedPdu *reflect.Value, hdr string) (byte, error) {
+	dec.offset++
+	v := dec.data[dec.offset] & 0x7F
+	if hdr != "" {
+		reflectedPdu.FieldByName(hdr).SetUint(uint64(v))
+		fmt.Printf("Setting %s to %#x == %d\n", hdr, v, v)
+	}
+	return v, nil
+}
+
+func (dec *MMSDecoder) readByte(reflectedPdu *reflect.Value, hdr string) (byte, error) {
+	dec.offset++
+	v := dec.data[dec.offset]
+	if hdr != "" {
+		reflectedPdu.FieldByName(hdr).SetUint(uint64(v))
+		fmt.Printf("Setting %s to %#x == %d\n", hdr, v, v)
+	}
+	return v, nil
+}
+
+func (dec *MMSDecoder) readBytes(reflectedPdu *reflect.Value, hdr string) ([]byte, error) {
+	dec.offset++
+	v := []byte(dec.data[dec.offset:])
+	if hdr != "" {
+		reflectedPdu.FieldByName(hdr).SetBytes(v)
+		fmt.Printf("Setting %s to %#x == %d\n", hdr, v, v)
+	}
+	return v, nil
+}
+
+func (dec *MMSDecoder) readUintVar(reflectedPdu *reflect.Value, hdr string) (value uint64, err error) {
+	var n int
+	for n = dec.offset; n < (dec.offset+5) && n < len(dec.data); n++ {
+		value = (value << 7) | uint64((dec.data[n] & 0x7f))
+		if dec.data[n]&0x80 == 0 {
+			break
+		}
+	}
+	if dec.data[n]&0x80 == 1 {
+		return 0, fmt.Errorf("Could not decode uintvar from %x", dec.data[n:])
+	}
+
+	if hdr != "" {
+		reflectedPdu.FieldByName(hdr).SetUint(value)
+		fmt.Printf("Setting %s to %#x == %d\n", hdr, value, value)
+	}
+	return value, nil
+}
+
+func (dec *MMSDecoder) readLength() (length uint, err error) {
+	switch {
+	case dec.data[dec.offset + 1] < 30:
+		l, err := dec.readShortInteger(nil, "")
+		return uint(l), err
+	case dec.data[dec.offset + 1] == 31:
+		dec.offset++
+
+	}
+	return 0, fmt.Errorf("Unhandled lenght")
+}
+
+func (dec *MMSDecoder) readLongInteger(reflectedPdu *reflect.Value, hdr string) (uint64, error) {
+	dec.offset++
+	size := int(dec.data[dec.offset])
+	dec.offset++
+	var v byte
+	endOffset := dec.offset + size - 1
+	for ; dec.offset < endOffset; dec.offset++ {
+		v = (v << 8) | dec.data[dec.offset]
+	}
+	if hdr != "" {
+		reflectedPdu.FieldByName(hdr).SetUint(uint64(v))
+		fmt.Printf("Setting %s to %d\n", hdr, v)
+	}
+	return uint64(v), nil
+}
+
+func (dec *MMSDecoder) Decode(pdu MMSReader) (err error) {
 	reflectedPdu := reflect.ValueOf(pdu).Elem()
+	moreHdrToRead := true
 	// fmt.Printf("len data: %d, data: %x\n", len(dec.data), dec.data)
-	for ; dec.offset < len(dec.data); dec.offset++ {
+	for ; (dec.offset < len(dec.data)) && moreHdrToRead; dec.offset++ {
 		// fmt.Printf("offset %d, value: %x\n", dec.offset, dec.data[dec.offset])
+		err = nil
 		param := dec.data[dec.offset] & 0x7F
 		switch param {
 		case X_MMS_MESSAGE_TYPE:
 			dec.offset++
 			expectedType := byte(reflectedPdu.FieldByName("Type").Uint())
 			parsedType := dec.data[dec.offset]
+			//Unknown message types will be discarded. OMA-WAP-MMS-ENC-v1.1 section 7.2.16
 			if parsedType != expectedType {
-				return fmt.Errorf("Expected message type %x got %x", expectedType, parsedType)
+				err = fmt.Errorf("Expected message type %x got %x", expectedType, parsedType)
 			}
-		case X_MMS_TRANSACTION_ID:
-			dec.offset++
-			begin := dec.offset
-			for ; dec.data[dec.offset] != 0; dec.offset++ {
-			}
-			v := string(dec.data[begin:dec.offset])
-			reflectedPdu.FieldByName("TransactionId").SetString(v)
-			fmt.Println("Transaction ID", v)
-		case X_MMS_MMS_VERSION:
-			dec.offset++
-			v := uint64(dec.data[dec.offset] & 0x7F)
-			reflectedPdu.FieldByName("Version").SetUint(v)
-			fmt.Println("MMS Version", v)
 		case FROM:
 			dec.offset++
 			size := int(dec.data[dec.offset])
@@ -166,36 +278,15 @@ func (dec *MMSDecoder) Decode(pdu interface{}) (err error) {
 				break
 			case TOKEN_ADDRESS_PRESENT:
 				// TODO add check for /TYPE=PLMN
-				dec.offset++
-				begin := dec.offset
-				for ; dec.data[dec.offset] != 0; dec.offset++ {
-				}
-				v := string(dec.data[begin:dec.offset])
-				reflectedPdu.FieldByName("From").SetString(v)
+				var from string
+				from, err = dec.readString(&reflectedPdu, "From")
 				// size - 2 == size - token - '0'
-				if len(v) != size-2 {
-					return fmt.Errorf("From field is %d but expected size is %d", len(v), size-2)
+				if len(from) != size-2 {
+					err = fmt.Errorf("From field is %d but expected size is %d", len(from), size-2)
 				}
-				fmt.Println("From", v)
 			default:
-				return fmt.Errorf("Unhandled token address in from field %x", token)
+				err = fmt.Errorf("Unhandled token address in from field %x", token)
 			}
-		case X_MMS_MESSAGE_CLASS:
-			dec.offset++
-			v := uint64(dec.data[dec.offset])
-			reflectedPdu.FieldByName("Class").SetUint(v)
-			fmt.Printf("Message Class %x\n", v)
-		case X_MMS_MESSAGE_SIZE:
-			dec.offset++
-			size := int(dec.data[dec.offset])
-			dec.offset++
-			var val byte
-			endOffset := dec.offset + size - 1
-			for ; dec.offset < endOffset; dec.offset++ {
-				val = (val << 8) | dec.data[dec.offset]
-			}
-			reflectedPdu.FieldByName("Class").SetUint(uint64(val))
-			fmt.Println("Message Size", val)
 		case X_MMS_EXPIRY:
 			dec.offset++
 			size := int(dec.data[dec.offset])
@@ -211,25 +302,61 @@ func (dec *MMSDecoder) Decode(pdu interface{}) (err error) {
 			fmt.Printf("Expiry token: %x\n", token)
 			reflectedPdu.FieldByName("Expiry").SetUint(uint64(val))
 			fmt.Printf("Message Expiry %d, %x\n", val, dec.data[dec.offset])
+		case X_MMS_TRANSACTION_ID:
+			_, err = dec.readString(&reflectedPdu, "TransactionId")
+		case CONTENT_TYPE:
+			// Only implementing general form decoding from 8.4.2.24
+			length, err := dec.readLength()
+			fmt.Println("length", length)
+			var c string
+			c, err = dec.readString(&reflectedPdu, "ContentType")
+			if err != nil {
+				_, err = dec.readBytes(&reflectedPdu, "ContentPayload")
+			}
+			fmt.Printf("ContentType: %#x\n", c)
+			moreHdrToRead = false
 		case X_MMS_CONTENT_LOCATION:
-			dec.offset++
-			begin := dec.offset
-			for ; dec.data[dec.offset] != 0; dec.offset++ {
-			}
-			v := string(dec.data[begin:dec.offset])
-			reflectedPdu.FieldByName("ContentLocation").SetString(v)
-			fmt.Println("Content Location", v)
+			_, err = dec.readString(&reflectedPdu, "ContentLocation")
+			moreHdrToRead = false
 		case MESSAGE_ID:
-			dec.offset++
-			begin := dec.offset
-			for ; dec.data[dec.offset] != 0; dec.offset++ {
-			}
-			v := string(dec.data[begin:dec.offset])
-			reflectedPdu.FieldByName("MessageId").SetString(v)
-			fmt.Println("Message ID", v)
+			_, err = dec.readString(&reflectedPdu, "MessageId")
+		case SUBJECT:
+			_, err = dec.readString(&reflectedPdu, "Subject")
+		case TO:
+			_, err = dec.readString(&reflectedPdu, "To")
+		case CC:
+			_, err = dec.readString(&reflectedPdu, "Cc")
+		case X_MMS_REPLY_CHARGING_ID:
+			_, err = dec.readString(&reflectedPdu, "ReplyChargingId")
+		case X_MMS_RETRIEVE_TEXT:
+			_, err = dec.readString(&reflectedPdu, "RetrieveText")
+		case X_MMS_MMS_VERSION:
+			_, err = dec.readShortInteger(&reflectedPdu, "Version")
+		case X_MMS_MESSAGE_CLASS:
+			//TODO implement Token text form
+			_, err = dec.readByte(&reflectedPdu, "Class")
+		case X_MMS_REPLY_CHARGING:
+			_, err = dec.readByte(&reflectedPdu, "ReplyCharging")
+		case X_MMS_REPLY_CHARGING_DEADLINE:
+			_, err = dec.readByte(&reflectedPdu, "ReplyChargingDeadLine")
+		case X_MMS_PRIORITY:
+			_, err = dec.readByte(&reflectedPdu, "Priority")
+		case X_MMS_RETRIEVE_STATUS:
+			_, err = dec.readByte(&reflectedPdu, "RetrieveStatus")
+		case X_MMS_DELIVERY_REPORT:
+			_, err = dec.readByte(&reflectedPdu, "DeliveryReport")
+		case X_MMS_READ_REPORT:
+			_, err = dec.readByte(&reflectedPdu, "ReadReport")
+		case X_MMS_MESSAGE_SIZE:
+			_, err = dec.readLongInteger(&reflectedPdu, "Size")
+		case DATE:
+			_, err = dec.readLongInteger(&reflectedPdu, "Date")
 		default:
-			fmt.Printf("Unhandled %x, %d, %d\n", param, param, dec.offset)
-			return fmt.Errorf("Unhandled %x, %d, %d", param, param, dec.offset)
+			fmt.Printf("Unhandled byte: %#0x\tdec: %d\tdec.offset: %d\n", param, param, dec.offset)
+			return fmt.Errorf("Unhandled byte: %#0x\tdec: %d\tdec.offset: %d\n", param, param, dec.offset)
+		}
+		if err != nil {
+			return err
 		}
 	}
 	return nil
