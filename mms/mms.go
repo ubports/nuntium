@@ -100,26 +100,13 @@ const (
 	CLASS_AUTO          = 0x83
 )
 
-type ContentType struct {
-	Type, Name, CharSet string
-	ParameterSize       uint
-	Content             Content
-}
-
-type Content struct {
-	Id, Type, Location   string
-	HeaderSize, BodySize uint
-	data                 []byte
-}
-
 // MNotification in holds a m-notification.ind message defined in
 // OMA-WAP-MMS-ENC section 6.2
 type MNotificationInd struct {
 	MMSReader
 	Type, Version, Class, ReplyCharging, ReplyChargingDeadline, DeliveryReport byte
 	TransactionId, From, Subject, ContentLocation, ReplyChargingId             string
-	Expiry                                                                     uint
-	Size                                                                       uint64
+	Expiry, Size                                                               uint64
 }
 
 // MNotification in holds a m-notifyresp.ind message defined in
@@ -135,10 +122,10 @@ type MNotifyRespInd struct {
 type MRetrieveConf struct {
 	MMSReader
 	Type, Version, Status, Class, Priority, DeliveryReport, ReplyCharging, ReplyChargingDeadline, ReadReport, RetrieveStatus byte
-	ContentType, TransactionId, MessageId, From, To, Cc, Subject, ReplyChargingId, RetrieveText                              string
+	TransactionId, MessageId, From, To, Cc, Subject, ReplyChargingId, RetrieveText                                           string
 	ReportAllowed                                                                                                            bool
 	Date                                                                                                                     uint64
-	ContentPayload                                                                                                           []byte
+	ContentType															                                                     ContentType
 }
 
 type MMSReader interface{}
@@ -223,32 +210,49 @@ func (dec *MMSDecoder) readUintVar(reflectedPdu *reflect.Value, hdr string) (val
 	return value, nil
 }
 
-func (dec *MMSDecoder) readLength() (length uint, err error) {
+func (dec *MMSDecoder) readLength() (length uint64, err error) {
 	switch {
-	case dec.data[dec.offset + 1] < 30:
+	case dec.data[dec.offset+1] < 30:
 		l, err := dec.readShortInteger(nil, "")
-		return uint(l), err
-	case dec.data[dec.offset + 1] == 31:
+		return uint64(l), err
+	case dec.data[dec.offset+1] == 31:
 		dec.offset++
 
 	}
 	return 0, fmt.Errorf("Unhandled lenght")
 }
 
+func (dec *MMSDecoder) readInteger(reflectedPdu *reflect.Value, hdr string) (uint64, error) {
+	param := dec.data[dec.offset+1]
+	var v uint64
+	var err error
+	fmt.Println("Integer", param, "& 0x80", param&0x80)
+	switch {
+	case param&0x80 != 0:
+		fmt.Println("Integer is short", param&0x80)
+		var vv byte
+		vv, err = dec.readShortInteger(nil, "")
+		v = uint64(vv)
+	default:
+		v, err = dec.readLongInteger(nil, "")
+	}
+	return v, err
+}
+
 func (dec *MMSDecoder) readLongInteger(reflectedPdu *reflect.Value, hdr string) (uint64, error) {
 	dec.offset++
 	size := int(dec.data[dec.offset])
 	dec.offset++
-	var v byte
+	var v uint64
 	endOffset := dec.offset + size - 1
 	for ; dec.offset < endOffset; dec.offset++ {
-		v = (v << 8) | dec.data[dec.offset]
+		v = (v << 8) | uint64(dec.data[dec.offset])
 	}
 	if hdr != "" {
 		reflectedPdu.FieldByName(hdr).SetUint(uint64(v))
 		fmt.Printf("Setting %s to %d\n", hdr, v)
 	}
-	return uint64(v), nil
+	return v, nil
 }
 
 func (dec *MMSDecoder) Decode(pdu MMSReader) (err error) {
@@ -305,15 +309,7 @@ func (dec *MMSDecoder) Decode(pdu MMSReader) (err error) {
 		case X_MMS_TRANSACTION_ID:
 			_, err = dec.readString(&reflectedPdu, "TransactionId")
 		case CONTENT_TYPE:
-			// Only implementing general form decoding from 8.4.2.24
-			length, err := dec.readLength()
-			fmt.Println("length", length)
-			var c string
-			c, err = dec.readString(&reflectedPdu, "ContentType")
-			if err != nil {
-				_, err = dec.readBytes(&reflectedPdu, "ContentPayload")
-			}
-			fmt.Printf("ContentType: %#x\n", c)
+			err = dec.readContentType(&reflectedPdu, "ContentType")
 			moreHdrToRead = false
 		case X_MMS_CONTENT_LOCATION:
 			_, err = dec.readString(&reflectedPdu, "ContentLocation")
