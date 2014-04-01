@@ -163,6 +163,12 @@ func (dec *MMSDecoder) readString(reflectedPdu *reflect.Value, hdr string) (stri
 
 func (dec *MMSDecoder) readShortInteger(reflectedPdu *reflect.Value, hdr string) (byte, error) {
 	dec.offset++
+	/*
+	TODO fix use of short when not short
+	if dec.data[dec.offset] & 0x80 == 0 {
+		return 0, fmt.Errorf("Data on offset %d with value %#x is not a short integer", dec.offset, dec.data[dec.offset])
+	}
+	*/
 	v := dec.data[dec.offset] & 0x7F
 	if hdr != "" {
 		reflectedPdu.FieldByName(hdr).SetUint(uint64(v))
@@ -210,26 +216,12 @@ func (dec *MMSDecoder) readUintVar(reflectedPdu *reflect.Value, hdr string) (val
 	return value, nil
 }
 
-func (dec *MMSDecoder) readLength() (length uint64, err error) {
-	switch {
-	case dec.data[dec.offset+1] < 30:
-		l, err := dec.readShortInteger(nil, "")
-		return uint64(l), err
-	case dec.data[dec.offset+1] == 31:
-		dec.offset++
-
-	}
-	return 0, fmt.Errorf("Unhandled lenght")
-}
-
 func (dec *MMSDecoder) readInteger(reflectedPdu *reflect.Value, hdr string) (uint64, error) {
 	param := dec.data[dec.offset+1]
 	var v uint64
 	var err error
-	fmt.Println("Integer", param, "& 0x80", param&0x80)
 	switch {
 	case param&0x80 != 0:
-		fmt.Println("Integer is short", param&0x80)
 		var vv byte
 		vv, err = dec.readShortInteger(nil, "")
 		v = uint64(vv)
@@ -309,7 +301,15 @@ func (dec *MMSDecoder) Decode(pdu MMSReader) (err error) {
 		case X_MMS_TRANSACTION_ID:
 			_, err = dec.readString(&reflectedPdu, "TransactionId")
 		case CONTENT_TYPE:
-			err = dec.readContentType(&reflectedPdu, "ContentType")
+			var endHeaderOffset int
+			ctMember := reflectedPdu.FieldByName("ContentType")
+			if endHeaderOffset, err = dec.readContentTypeHeaders(&ctMember); err != nil {
+				return err
+			}
+			if err = dec.readContentType(&ctMember, endHeaderOffset); err != nil {
+				return err
+			}
+			err = dec.readContentTypeParts(&reflectedPdu)
 			moreHdrToRead = false
 		case X_MMS_CONTENT_LOCATION:
 			_, err = dec.readString(&reflectedPdu, "ContentLocation")

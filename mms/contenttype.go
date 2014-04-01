@@ -22,116 +22,179 @@
 package mms
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 )
 
 type ContentType struct {
-	Name, FileName, CharSet, Start, StartInfo, Domain, Path, Comment string
-	Size, Type, CreationDate, ModificationDate, ReadDate, MediaType  uint64
-	Secure                                                           bool
+	Name, Type, FileName, CharSet, Start, StartInfo, Domain, Path, Comment, MediaType string
+	Level																			  byte
+	Length, Size, CreationDate, ModificationDate, ReadDate                            uint64
+	Secure                                                                            bool
+	Q                                                                                 float64
 }
 
-func (dec *MMSDecoder) readContentType(reflectedPdu *reflect.Value, hdr string) error {
-	// Only implementing general form decoding from 8.4.2.24
+type DataPart struct {
+	ContentType		ContentType
+	Data			[]byte
+}
+
+func (dec *MMSDecoder) readQ(reflectedPdu *reflect.Value) error {
+	v, err := dec.readUintVar(nil, "") 
+	if err != nil {
+		return err
+	}
+	q := float64(v)
+	if q > 100 {
+		q = (q - 100) / 1000
+	} else {
+		q = (q - 1) / 100
+	}
+	reflectedPdu.FieldByName("Q").SetFloat(q)
+	return nil
+}
+
+func (dec *MMSDecoder) readLength(reflectedPdu *reflect.Value) (length uint64, err error) {
+	switch {
+	case dec.data[dec.offset+1] < 30:
+		l, err := dec.readShortInteger(nil, "")
+		v := uint64(l)
+		reflectedPdu.FieldByName("Length").SetUint(v)
+		return v, err
+	case dec.data[dec.offset+1] == 31:
+		dec.offset++
+
+	}
+	return 0, fmt.Errorf("Unhandled lenght")
+}
+
+func (dec *MMSDecoder) readContentTypeParts(reflectedPdu *reflect.Value) error {
+	dec.offset++
+	var err error
+	var parts uint64
+	if parts, err = dec.readUintVar(nil, ""); err != nil {
+		return err
+	}
+	dec.offset++
+	fmt.Println("Number of parts", parts)
+	for i := uint64(0); i < parts; i++ {
+		headerLen, err := dec.readUintVar(nil, "")
+		if err != nil {
+			return err
+		}
+		dataLen, err := dec.readUintVar(nil, "")
+		if err != nil {
+			return err
+		}
+		fmt.Println("header len:", headerLen, "dataLen:", dataLen)
+		var ct ContentType
+		ctReflected := reflect.ValueOf(&ct).Elem()
+		err = dec.readContentType(&ctReflected, dec.offset + int(headerLen))
+		if err != nil {
+			return err
+		}
+		fmt.Println(ct)
+	}
+
+	return nil
+}
+
+func (dec *MMSDecoder) readContentTypeHeaders(ctMember *reflect.Value) (int, error) {
 	var err error
 	var length, mediaType uint64
-	if length, err = dec.readLength(); err != nil {
-		return err
+	if length, err = dec.readLength(ctMember); err != nil {
+		return 0, err
 	}
-	fmt.Println("length", length)
-	end := int(length) + dec.offset
+	fmt.Println("Content Type Length:", length)
+	endOffset := int(length) + dec.offset
 	if mediaType, err = dec.readInteger(nil, ""); err != nil {
-		return err
+		return 0, err
 	}
-	fmt.Println("Media Type", CONTENT_TYPES[mediaType])
-	for dec.offset < len(dec.data) && dec.offset < end {
-		fmt.Printf("offset %d, value: %#x\n", dec.offset, dec.data[dec.offset])
+
+	//TODO error checking
+	ctMember.FieldByName("MediaType").SetString(CONTENT_TYPES[mediaType])
+	fmt.Println("Media Type:", CONTENT_TYPES[mediaType])
+
+	return endOffset, nil
+}
+
+func (dec *MMSDecoder) readContentType(ctMember *reflect.Value, endOffset int) error {
+	// Only implementing general form decoding from 8.4.2.24
+	var err error
+	for dec.offset < len(dec.data) && dec.offset < endOffset {
 		param, _ := dec.readInteger(nil, "")
-		//param := dec.data[dec.offset] & 0x7D
 		fmt.Printf("offset %d, value: %#x, param %#x\n", dec.offset, dec.data[dec.offset], param)
 		switch param {
 		case WSP_PARAMETER_TYPE_Q:
-			fmt.Println("Unhandled Q")
+			err = dec.readQ(ctMember)
 		case WSP_PARAMETER_TYPE_CHARSET:
 			fmt.Println("Unhandled Charset")
 		case WSP_PARAMETER_TYPE_LEVEL:
-			fmt.Println("Unhandled Level")
+			_, err = dec.readShortInteger(ctMember, "Level")
 		case WSP_PARAMETER_TYPE_TYPE:
-			v, _ := dec.readInteger(nil, "")
-			fmt.Println("Type", v)
+			_, err = dec.readInteger(ctMember, "Type")
 		case WSP_PARAMETER_TYPE_NAME_DEFUNCT:
-			v, _ := dec.readString(nil, "")
-			fmt.Println("Name(deprecated)", v)
+			_, err = dec.readString(ctMember, "Name")
+			fmt.Println("Name(deprecated)")
 		case WSP_PARAMETER_TYPE_FILENAME_DEFUNCT:
-			v, _ := dec.readString(nil, "")
-			fmt.Println("FileName(deprecated)", v)
+			fmt.Println("FileName(deprecated)")
+			_, err = dec.readString(ctMember, "FileName")
 		case WSP_PARAMETER_TYPE_DIFFERENCES:
-			fmt.Println("Unhandled Differences")
+			err = errors.New("Unhandled Differences")
 		case WSP_PARAMETER_TYPE_PADDING:
 			dec.readShortInteger(nil, "")
 		case WSP_PARAMETER_TYPE_CONTENT_TYPE:
-			v, _ := dec.readString(nil, "")
-			fmt.Println("Content Type constrained", v)
+			_, err = dec.readString(ctMember, "Type")
 		case WSP_PARAMETER_TYPE_START_DEFUNCT:
-			v, _ := dec.readString(nil, "")
-			fmt.Println("Start(deprecated)", v)
+			fmt.Println("Start(deprecated)")
+			_, err = dec.readString(ctMember, "Start")
 		case WSP_PARAMETER_TYPE_START_INFO_DEFUNCT:
-			v, _ := dec.readString(nil, "")
-			fmt.Println("Start Info(deprecated", v)
+			fmt.Println("Start Info(deprecated")
+			_, err = dec.readString(ctMember, "StartInfo")
 		case WSP_PARAMETER_TYPE_COMMENT_DEFUNCT:
-			v, _ := dec.readString(nil, "")
-			fmt.Println("Comment(deprecated", v)
+			fmt.Println("Comment(deprecated")
+			_, err = dec.readString(ctMember, "Comment")
 		case WSP_PARAMETER_TYPE_DOMAIN_DEFUNCT:
-			v, _ := dec.readString(nil, "")
-			fmt.Println("Domain(deprecated)", v)
+			fmt.Println("Domain(deprecated)")
+			_, err = dec.readString(ctMember, "Domain")
 		case WSP_PARAMETER_TYPE_MAX_AGE:
-			fmt.Println("Unhandled MAX Age")
+			err = errors.New("Unhandled Max Age")
 		case WSP_PARAMETER_TYPE_PATH_DEFUNCT:
-			v, _ := dec.readString(nil, "")
-			fmt.Println("Path(deprecated)", v)
+			fmt.Println("Path(deprecated)")
+			_, err = dec.readString(ctMember, "Path")
 		case WSP_PARAMETER_TYPE_SECURE:
 			fmt.Println("Secure")
 		case WSP_PARAMETER_TYPE_SEC:
 			v, _ := dec.readShortInteger(nil, "")
 			fmt.Println("SEC(deprecated)", v)
 		case WSP_PARAMETER_TYPE_MAC:
-			fmt.Println("Unhandled MAC")
+			err = errors.New("Unhandled MAC")
 		case WSP_PARAMETER_TYPE_CREATION_DATE:
-			fmt.Println("Unhandled Creation Date")
 		case WSP_PARAMETER_TYPE_MODIFICATION_DATE:
-			fmt.Println("Unhandled Modification Date")
 		case WSP_PARAMETER_TYPE_READ_DATE:
-			fmt.Println("Unhandled Read Date")
+			err = errors.New("Unhandled Date parameters")
 		case WSP_PARAMETER_TYPE_SIZE:
-			v, _ := dec.readInteger(nil, "")
-			fmt.Println("Size", v)
+			_, err = dec.readInteger(ctMember, "Size")
 		case WSP_PARAMETER_TYPE_NAME:
-			v, _ := dec.readString(nil, "")
-			fmt.Println("Name", v)
+			_, err = dec.readString(ctMember, "Name")
 		case WSP_PARAMETER_TYPE_FILENAME:
-			v, _ := dec.readString(nil, "")
-			fmt.Println("FileName", v)
+			_, err = dec.readString(ctMember, "FileName")
 		case WSP_PARAMETER_TYPE_START:
-			v, _ := dec.readString(nil, "")
-			fmt.Println("Start", v)
+			_, err = dec.readString(ctMember, "Start")
 		case WSP_PARAMETER_TYPE_START_INFO:
-			v, _ := dec.readString(nil, "")
-			fmt.Println("Start Info", v)
+			_, err = dec.readString(ctMember, "StartInfo")
 		case WSP_PARAMETER_TYPE_COMMENT:
-			v, _ := dec.readString(nil, "")
-			fmt.Println("Comment", v)
+			_, err = dec.readString(ctMember, "Comment")
 		case WSP_PARAMETER_TYPE_DOMAIN:
-			v, _ := dec.readString(nil, "")
-			fmt.Println("Domain", v)
+			_, err = dec.readString(ctMember, "Domain")
 		case WSP_PARAMETER_TYPE_PATH:
-			v, _ := dec.readString(nil, "")
-			fmt.Println("Path", v)
+			_, err = dec.readString(ctMember, "Path")
 		case WSP_PARAMETER_TYPE_UNTYPED:
 			v, _ := dec.readString(nil, "")
 			fmt.Println("Untyped", v)
 		default:
-			fmt.Println("Unhandled")
+			err = fmt.Errorf("Unhandled parameter %#x == %d at offset %d", param, param, dec.offset)
 		}
 		if err != nil {
 			return err
@@ -139,4 +202,3 @@ func (dec *MMSDecoder) readContentType(reflectedPdu *reflect.Value, hdr string) 
 	}
 	return nil
 }
-

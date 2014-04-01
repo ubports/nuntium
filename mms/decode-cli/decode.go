@@ -32,5 +32,4 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("Decoded message: ", retConfHdr)
-
 }
