@@ -127,12 +127,13 @@ func (dec *MMSDecoder) readContentTypeParts(reflectedPdu *reflect.Value) error {
 		if err != nil {
 			return err
 		}
-		headerEnd := dec.offset + int(headerLen)
 		fmt.Printf("offset %d, value: %#x\n", dec.offset, dec.data[dec.offset])
 		dataLen, err := dec.readUintVar(nil, "")
 		if err != nil {
 			return err
 		}
+		headerEnd := dec.offset + int(headerLen)
+		fmt.Printf("header end offset %d, value: %#x\n", headerEnd, dec.data[headerEnd])
 		fmt.Println("header len:", headerLen, "dataLen:", dataLen)
 		var ct ContentType
 		ctReflected := reflect.ValueOf(&ct).Elem()
@@ -140,7 +141,7 @@ func (dec *MMSDecoder) readContentTypeParts(reflectedPdu *reflect.Value) error {
 			return err
 		}
 		//TODO skipping non ContentType headers for now
-		dec.offset = headerEnd + 3
+		dec.offset = headerEnd + 1
 		if _, err := dec.readBoundedBytes(&ctReflected, "Data", dec.offset + int(dataLen)); err != nil {
 			return err
 		}

@@ -211,22 +211,15 @@ func (dec *MMSDecoder) readBoundedBytes(reflectedPdu *reflect.Value, hdr string,
 }
 
 func (dec *MMSDecoder) readUintVar(reflectedPdu *reflect.Value, hdr string) (value uint64, err error) {
-		fmt.Printf("offset %d, value: %#x\n", dec.offset, dec.data[dec.offset])
 	dec.offset++
-		fmt.Printf("offset %d, value: %#x\n", dec.offset, dec.data[dec.offset])
-	fmt.Println("shift", dec.data[dec.offset] >> 7)
 	for ; dec.data[dec.offset] >> 7 == 0x01; {
-		fmt.Printf("offset %d, value: %#x\n", dec.offset, dec.data[dec.offset])
 		value = value << 7
 		value |= uint64(dec.data[dec.offset] & 0x7F)
-		fmt.Println("value uint intermediate:", value)
 		dec.offset++ 
 	}
 	
-		fmt.Printf("offset %d, value: %#x\n", dec.offset, dec.data[dec.offset])
 	value = value << 7
 	value |= uint64(dec.data[dec.offset] & 0x7F)
-	fmt.Printf("value uint: %d %#x\n", value, dec.data[dec.offset])
 	return value, nil
 }
 
