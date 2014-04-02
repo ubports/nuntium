@@ -149,6 +149,9 @@ func NewDecoder(data []byte) *MMSDecoder {
 
 func (dec *MMSDecoder) readString(reflectedPdu *reflect.Value, hdr string) (string, error) {
 	dec.offset++
+	if dec.data[dec.offset] == 127 {
+		dec.offset++
+	}
 	begin := dec.offset
 	//TODO protect this
 	for ; dec.data[dec.offset] != 0; dec.offset++ {
@@ -197,22 +200,33 @@ func (dec *MMSDecoder) readBytes(reflectedPdu *reflect.Value, hdr string) ([]byt
 	return v, nil
 }
 
-func (dec *MMSDecoder) readUintVar(reflectedPdu *reflect.Value, hdr string) (value uint64, err error) {
-	var n int
-	for n = dec.offset; n < (dec.offset+5) && n < len(dec.data); n++ {
-		value = (value << 7) | uint64((dec.data[n] & 0x7f))
-		if dec.data[n]&0x80 == 0 {
-			break
-		}
-	}
-	if dec.data[n]&0x80 == 1 {
-		return 0, fmt.Errorf("Could not decode uintvar from %x", dec.data[n:])
-	}
-
+func (dec *MMSDecoder) readBoundedBytes(reflectedPdu *reflect.Value, hdr string, end int) ([]byte, error) {
+	v := []byte(dec.data[dec.offset:end])
 	if hdr != "" {
-		reflectedPdu.FieldByName(hdr).SetUint(value)
-		fmt.Printf("Setting %s to %#x == %d\n", hdr, value, value)
+		reflectedPdu.FieldByName(hdr).SetBytes(v)
+		fmt.Printf("Setting %s to %#x == %d\n", hdr, v, v)
 	}
+	dec.offset = end - 1
+	return v, nil
+}
+
+func (dec *MMSDecoder) readUintVar(reflectedPdu *reflect.Value, hdr string) (value uint64, err error) {
+		fmt.Printf("offset %d, value: %#x\n", dec.offset, dec.data[dec.offset])
+	dec.offset++
+		fmt.Printf("offset %d, value: %#x\n", dec.offset, dec.data[dec.offset])
+	fmt.Println("shift", dec.data[dec.offset] >> 7)
+	for ; dec.data[dec.offset] >> 7 == 0x01; {
+		fmt.Printf("offset %d, value: %#x\n", dec.offset, dec.data[dec.offset])
+		value = value << 7
+		value |= uint64(dec.data[dec.offset] & 0x7F)
+		fmt.Println("value uint intermediate:", value)
+		dec.offset++ 
+	}
+	
+		fmt.Printf("offset %d, value: %#x\n", dec.offset, dec.data[dec.offset])
+	value = value << 7
+	value |= uint64(dec.data[dec.offset] & 0x7F)
+	fmt.Printf("value uint: %d %#x\n", value, dec.data[dec.offset])
 	return value, nil
 }
 
@@ -301,12 +315,8 @@ func (dec *MMSDecoder) Decode(pdu MMSReader) (err error) {
 		case X_MMS_TRANSACTION_ID:
 			_, err = dec.readString(&reflectedPdu, "TransactionId")
 		case CONTENT_TYPE:
-			var endHeaderOffset int
 			ctMember := reflectedPdu.FieldByName("ContentType")
-			if endHeaderOffset, err = dec.readContentTypeHeaders(&ctMember); err != nil {
-				return err
-			}
-			if err = dec.readContentType(&ctMember, endHeaderOffset); err != nil {
+			if err = dec.readContentType(&ctMember); err != nil {
 				return err
 			}
 			err = dec.readContentTypeParts(&reflectedPdu)

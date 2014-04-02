@@ -116,3 +116,22 @@ var CONTENT_TYPES []string = []string{
     "application/vnd.oma.drm.rights+xml",
     "application/vnd.oma.drm.rights+wbxml",
 }
+
+var CHARSETS map[uint64]string = map[uint64]string {
+    0x07EA: "big5",
+    0x03E8: "iso-10646-ucs-2",
+    0x04: "iso-8859-1",
+    0x05: "iso-8859-2",
+    0x06: "iso-8859-3",
+    0x07: "iso-8859-4",
+    0x08: "iso-8859-5",
+    0x09: "iso-8859-6",
+    0x0A: "iso-8859-7",
+    0x0B: "iso-8859-8",
+    0x0C: "iso-8859-9",
+    0x11: "shift_JIS",
+    0x03: "us-ascii",
+    0x6A: "utf-8",
+}
+
+

@@ -28,11 +28,12 @@ import (
 )
 
 type ContentType struct {
-	Name, Type, FileName, CharSet, Start, StartInfo, Domain, Path, Comment, MediaType string
+	Name, Type, FileName, Charset, Start, StartInfo, Domain, Path, Comment, MediaType string
 	Level																			  byte
 	Length, Size, CreationDate, ModificationDate, ReadDate                            uint64
 	Secure                                                                            bool
 	Q                                                                                 float64
+	Data	[]byte
 }
 
 type DataPart struct {
@@ -64,25 +65,70 @@ func (dec *MMSDecoder) readLength(reflectedPdu *reflect.Value) (length uint64, e
 		return v, err
 	case dec.data[dec.offset+1] == 31:
 		dec.offset++
-
+		l, err := dec.readUintVar(reflectedPdu, "Length")
+		return l, err
 	}
-	return 0, fmt.Errorf("Unhandled lenght")
+	return 0, fmt.Errorf("Unhandled length %#x", dec.data[dec.offset+1])
+}
+
+func (dec *MMSDecoder) readCharset(reflectedPdu *reflect.Value) error {
+	var charset string
+
+	if dec.data[dec.offset] == 127 {
+		dec.offset++
+		charset = "*"
+	} else {
+		charCode, err := dec.readInteger(nil, "")
+		if err != nil {
+			return err
+		}
+		var ok bool
+		if charset, ok = CHARSETS[charCode]; !ok {
+			return fmt.Errorf("Cannot find matching charset for %#x == %d", charCode, charCode)
+		}
+	}
+	reflectedPdu.FieldByName("Charset").SetString(charset)
+	return nil
+
+
+}
+
+func (dec *MMSDecoder) readMediaType(reflectedPdu *reflect.Value) (err error) {
+	var mediaType string
+	origOffset := dec.offset
+
+	if mt, err := dec.readInteger(nil, ""); err == nil && len(CONTENT_TYPES) > int(mt) {
+		mediaType = CONTENT_TYPES[mt]
+	} else {
+		err = nil
+		dec.offset = origOffset
+		mediaType, err = dec.readString(nil, "")
+		if err != nil {
+			return err
+		}
+	}
+
+	reflectedPdu.FieldByName("MediaType").SetString(mediaType)
+	fmt.Println("Media Type:", mediaType)
+	return nil
 }
 
 func (dec *MMSDecoder) readContentTypeParts(reflectedPdu *reflect.Value) error {
-	dec.offset++
 	var err error
 	var parts uint64
 	if parts, err = dec.readUintVar(nil, ""); err != nil {
 		return err
 	}
-	dec.offset++
 	fmt.Println("Number of parts", parts)
 	for i := uint64(0); i < parts; i++ {
+		fmt.Println("\nPart", i, "\n")
+		fmt.Printf("offset %d, value: %#x\n", dec.offset, dec.data[dec.offset])
 		headerLen, err := dec.readUintVar(nil, "")
 		if err != nil {
 			return err
 		}
+		headerEnd := dec.offset + int(headerLen)
+		fmt.Printf("offset %d, value: %#x\n", dec.offset, dec.data[dec.offset])
 		dataLen, err := dec.readUintVar(nil, "")
 		if err != nil {
 			return err
@@ -90,9 +136,16 @@ func (dec *MMSDecoder) readContentTypeParts(reflectedPdu *reflect.Value) error {
 		fmt.Println("header len:", headerLen, "dataLen:", dataLen)
 		var ct ContentType
 		ctReflected := reflect.ValueOf(&ct).Elem()
-		err = dec.readContentType(&ctReflected, dec.offset + int(headerLen))
-		if err != nil {
+		if err = dec.readContentType(&ctReflected); err != nil {
 			return err
+		}
+		//TODO skipping non ContentType headers for now
+		dec.offset = headerEnd + 3
+		if _, err := dec.readBoundedBytes(&ctReflected, "Data", dec.offset + int(dataLen)); err != nil {
+			return err
+		}
+		if ct.MediaType == "application/smil" || ct.MediaType == "text/plain" {
+			fmt.Printf("%s\n", ct.Data)
 		}
 		fmt.Println(ct)
 	}
@@ -100,28 +153,20 @@ func (dec *MMSDecoder) readContentTypeParts(reflectedPdu *reflect.Value) error {
 	return nil
 }
 
-func (dec *MMSDecoder) readContentTypeHeaders(ctMember *reflect.Value) (int, error) {
+func (dec *MMSDecoder) readContentType(ctMember *reflect.Value) error {
+	// Only implementing general form decoding from 8.4.2.24
 	var err error
-	var length, mediaType uint64
+	var length uint64
 	if length, err = dec.readLength(ctMember); err != nil {
-		return 0, err
+		return err
 	}
 	fmt.Println("Content Type Length:", length)
 	endOffset := int(length) + dec.offset
-	if mediaType, err = dec.readInteger(nil, ""); err != nil {
-		return 0, err
+
+	if err := dec.readMediaType(ctMember); err != nil {
+		return err
 	}
 
-	//TODO error checking
-	ctMember.FieldByName("MediaType").SetString(CONTENT_TYPES[mediaType])
-	fmt.Println("Media Type:", CONTENT_TYPES[mediaType])
-
-	return endOffset, nil
-}
-
-func (dec *MMSDecoder) readContentType(ctMember *reflect.Value, endOffset int) error {
-	// Only implementing general form decoding from 8.4.2.24
-	var err error
 	for dec.offset < len(dec.data) && dec.offset < endOffset {
 		param, _ := dec.readInteger(nil, "")
 		fmt.Printf("offset %d, value: %#x, param %#x\n", dec.offset, dec.data[dec.offset], param)
@@ -129,14 +174,14 @@ func (dec *MMSDecoder) readContentType(ctMember *reflect.Value, endOffset int) e
 		case WSP_PARAMETER_TYPE_Q:
 			err = dec.readQ(ctMember)
 		case WSP_PARAMETER_TYPE_CHARSET:
-			fmt.Println("Unhandled Charset")
+			err = dec.readCharset(ctMember)
 		case WSP_PARAMETER_TYPE_LEVEL:
 			_, err = dec.readShortInteger(ctMember, "Level")
 		case WSP_PARAMETER_TYPE_TYPE:
 			_, err = dec.readInteger(ctMember, "Type")
 		case WSP_PARAMETER_TYPE_NAME_DEFUNCT:
-			_, err = dec.readString(ctMember, "Name")
 			fmt.Println("Name(deprecated)")
+			_, err = dec.readString(ctMember, "Name")
 		case WSP_PARAMETER_TYPE_FILENAME_DEFUNCT:
 			fmt.Println("FileName(deprecated)")
 			_, err = dec.readString(ctMember, "FileName")
