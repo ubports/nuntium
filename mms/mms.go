@@ -125,7 +125,8 @@ type MRetrieveConf struct {
 	TransactionId, MessageId, From, To, Cc, Subject, ReplyChargingId, RetrieveText                                           string
 	ReportAllowed                                                                                                            bool
 	Date                                                                                                                     uint64
-	ContentType															                                                     ContentType
+	ContentType                                                                                                              ContentType
+	DataParts                                                                                                                []ContentType
 }
 
 type MMSReader interface{}
@@ -167,10 +168,10 @@ func (dec *MMSDecoder) readString(reflectedPdu *reflect.Value, hdr string) (stri
 func (dec *MMSDecoder) readShortInteger(reflectedPdu *reflect.Value, hdr string) (byte, error) {
 	dec.offset++
 	/*
-	TODO fix use of short when not short
-	if dec.data[dec.offset] & 0x80 == 0 {
-		return 0, fmt.Errorf("Data on offset %d with value %#x is not a short integer", dec.offset, dec.data[dec.offset])
-	}
+		TODO fix use of short when not short
+		if dec.data[dec.offset] & 0x80 == 0 {
+			return 0, fmt.Errorf("Data on offset %d with value %#x is not a short integer", dec.offset, dec.data[dec.offset])
+		}
 	*/
 	v := dec.data[dec.offset] & 0x7F
 	if hdr != "" {
@@ -204,7 +205,7 @@ func (dec *MMSDecoder) readBoundedBytes(reflectedPdu *reflect.Value, hdr string,
 	v := []byte(dec.data[dec.offset:end])
 	if hdr != "" {
 		reflectedPdu.FieldByName(hdr).SetBytes(v)
-		fmt.Printf("Setting %s to %#x == %d\n", hdr, v, v)
+		//fmt.Printf("Setting %s to %#x == %d\n", hdr, v, v)
 	}
 	dec.offset = end - 1
 	return v, nil
@@ -212,12 +213,12 @@ func (dec *MMSDecoder) readBoundedBytes(reflectedPdu *reflect.Value, hdr string,
 
 func (dec *MMSDecoder) readUintVar(reflectedPdu *reflect.Value, hdr string) (value uint64, err error) {
 	dec.offset++
-	for ; dec.data[dec.offset] >> 7 == 0x01; {
+	for dec.data[dec.offset]>>7 == 0x01 {
 		value = value << 7
 		value |= uint64(dec.data[dec.offset] & 0x7F)
-		dec.offset++ 
+		dec.offset++
 	}
-	
+
 	value = value << 7
 	value |= uint64(dec.data[dec.offset] & 0x7F)
 	return value, nil

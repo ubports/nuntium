@@ -29,20 +29,19 @@ import (
 
 type ContentType struct {
 	Name, Type, FileName, Charset, Start, StartInfo, Domain, Path, Comment, MediaType string
-	Level																			  byte
+	Level                                                                             byte
 	Length, Size, CreationDate, ModificationDate, ReadDate                            uint64
 	Secure                                                                            bool
 	Q                                                                                 float64
-	Data	[]byte
+	Data                                                                              []byte
 }
 
 type DataPart struct {
-	ContentType		ContentType
-	Data			[]byte
+	ContentType ContentType
 }
 
 func (dec *MMSDecoder) readQ(reflectedPdu *reflect.Value) error {
-	v, err := dec.readUintVar(nil, "") 
+	v, err := dec.readUintVar(nil, "")
 	if err != nil {
 		return err
 	}
@@ -90,7 +89,6 @@ func (dec *MMSDecoder) readCharset(reflectedPdu *reflect.Value) error {
 	reflectedPdu.FieldByName("Charset").SetString(charset)
 	return nil
 
-
 }
 
 func (dec *MMSDecoder) readMediaType(reflectedPdu *reflect.Value) (err error) {
@@ -119,22 +117,20 @@ func (dec *MMSDecoder) readContentTypeParts(reflectedPdu *reflect.Value) error {
 	if parts, err = dec.readUintVar(nil, ""); err != nil {
 		return err
 	}
+	var dataParts []ContentType
 	fmt.Println("Number of parts", parts)
 	for i := uint64(0); i < parts; i++ {
 		fmt.Println("\nPart", i, "\n")
-		fmt.Printf("offset %d, value: %#x\n", dec.offset, dec.data[dec.offset])
 		headerLen, err := dec.readUintVar(nil, "")
 		if err != nil {
 			return err
 		}
-		fmt.Printf("offset %d, value: %#x\n", dec.offset, dec.data[dec.offset])
 		dataLen, err := dec.readUintVar(nil, "")
 		if err != nil {
 			return err
 		}
 		headerEnd := dec.offset + int(headerLen)
-		fmt.Printf("header end offset %d, value: %#x\n", headerEnd, dec.data[headerEnd])
-		fmt.Println("header len:", headerLen, "dataLen:", dataLen)
+		//fmt.Println("header len:", headerLen, "dataLen:", dataLen)
 		var ct ContentType
 		ctReflected := reflect.ValueOf(&ct).Elem()
 		if err = dec.readContentType(&ctReflected); err != nil {
@@ -142,14 +138,18 @@ func (dec *MMSDecoder) readContentTypeParts(reflectedPdu *reflect.Value) error {
 		}
 		//TODO skipping non ContentType headers for now
 		dec.offset = headerEnd + 1
-		if _, err := dec.readBoundedBytes(&ctReflected, "Data", dec.offset + int(dataLen)); err != nil {
+		if _, err := dec.readBoundedBytes(&ctReflected, "Data", dec.offset+int(dataLen)); err != nil {
 			return err
 		}
 		if ct.MediaType == "application/smil" || ct.MediaType == "text/plain" {
 			fmt.Printf("%s\n", ct.Data)
 		}
-		fmt.Println(ct)
+		//fmt.Println(ct)
+		dataParts = append(dataParts, ct)
 	}
+	dataPartsR := reflect.ValueOf(dataParts)
+	fmt.Println(reflect.TypeOf(dataPartsR), dataPartsR.Kind())
+	reflectedPdu.FieldByName("DataParts").Set(dataPartsR)
 
 	return nil
 }
@@ -170,7 +170,7 @@ func (dec *MMSDecoder) readContentType(ctMember *reflect.Value) error {
 
 	for dec.offset < len(dec.data) && dec.offset < endOffset {
 		param, _ := dec.readInteger(nil, "")
-		fmt.Printf("offset %d, value: %#x, param %#x\n", dec.offset, dec.data[dec.offset], param)
+		//fmt.Printf("offset %d, value: %#x, param %#x\n", dec.offset, dec.data[dec.offset], param)
 		switch param {
 		case WSP_PARAMETER_TYPE_Q:
 			err = dec.readQ(ctMember)

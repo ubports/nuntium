@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"launchpad.net/nuntium/mms"
 	"os"
-	"io/ioutil"
 )
 
 func main() {
@@ -12,7 +12,7 @@ func main() {
 		fmt.Println("Missing filepath to MMS to decode")
 		os.Exit(1)
 	}
-	
+
 	mmsFile := os.Args[1]
 	if _, err := os.Stat(mmsFile); os.IsNotExist(err) {
 		fmt.Printf("File argument %s does no exist\n", mmsFile)
