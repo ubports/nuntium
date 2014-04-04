@@ -29,15 +29,35 @@ import (
 
 type ContentType struct {
 	Name, Type, FileName, Charset, Start, StartInfo, Domain, Path, Comment, MediaType string
+	ContentLocation, ContentId string
 	Level                                                                             byte
 	Length, Size, CreationDate, ModificationDate, ReadDate                            uint64
+	Offset                                                                            int
 	Secure                                                                            bool
 	Q                                                                                 float64
 	Data                                                                              []byte
 }
 
-type DataPart struct {
-	ContentType ContentType
+//GetSmil returns the text corresponding to the ContentType that holds the SMIL
+func (pdu *MRetrieveConf) GetSmil() (string, error) {
+	for i := range pdu.DataParts {
+		if pdu.DataParts[i].Type == "application/smil" {
+			return string(pdu.DataParts[i].Data), nil
+		}
+	}
+	return "", errors.New("Cannot find SMIL data part")
+}
+
+//GetDataParts returns the non SMIL ContentType data parts
+func (pdu *MRetrieveConf) GetDataParts() []ContentType {
+	var dataParts []ContentType 
+	for i := range pdu.DataParts {
+		if pdu.DataParts[i].Type == "application/smil" {
+			continue
+		}
+		dataParts = append(dataParts, pdu.DataParts[i])
+	}
+	return dataParts
 }
 
 func (dec *MMSDecoder) readQ(reflectedPdu *reflect.Value) error {
@@ -130,11 +150,28 @@ func (dec *MMSDecoder) readContentTypeParts(reflectedPdu *reflect.Value) error {
 			return err
 		}
 		headerEnd := dec.offset + int(headerLen)
-		//fmt.Println("header len:", headerLen, "dataLen:", dataLen)
+		fmt.Println("header len:", headerLen, "dataLen:", dataLen, "headerEnd:", headerEnd)
 		var ct ContentType
+		ct.Offset = headerEnd + 1
 		ctReflected := reflect.ValueOf(&ct).Elem()
 		if err = dec.readContentType(&ctReflected); err != nil {
 			return err
+		}
+		for dec.offset < headerEnd {
+			var err error
+			param, _ := dec.readInteger(nil, "")
+			//fmt.Printf("offset %d, value: %#x, param %#x\n", dec.offset, dec.data[dec.offset], param)
+			switch param {
+				case MMS_PART_CONTENT_LOCATION:
+					_, err = dec.readString(&ctReflected, "ContentLocation")
+				case MMS_PART_CONTENT_ID:
+					_, err = dec.readString(&ctReflected, "ContentId")
+				default:
+					err = fmt.Errorf("Unhandled parameter %#x == %d at offset %d", param, param, dec.offset)
+				}
+			if err != nil {
+				return err
+			}
 		}
 		//TODO skipping non ContentType headers for now
 		dec.offset = headerEnd + 1
@@ -144,11 +181,12 @@ func (dec *MMSDecoder) readContentTypeParts(reflectedPdu *reflect.Value) error {
 		if ct.MediaType == "application/smil" || ct.MediaType == "text/plain" {
 			fmt.Printf("%s\n", ct.Data)
 		}
-		//fmt.Println(ct)
+		if ct.Charset != "" {
+			ct.MediaType = ct.MediaType + ";charset=" + ct.Charset
+		}
 		dataParts = append(dataParts, ct)
 	}
 	dataPartsR := reflect.ValueOf(dataParts)
-	fmt.Println(reflect.TypeOf(dataPartsR), dataPartsR.Kind())
 	reflectedPdu.FieldByName("DataParts").Set(dataPartsR)
 
 	return nil

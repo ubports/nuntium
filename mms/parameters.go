@@ -55,6 +55,11 @@ const (
 	WSP_PARAMETER_TYPE_UNTYPED            = 0xFF // Version 1.4 Text-value
 )
 
+const (
+	MMS_PART_CONTENT_LOCATION = 0x0E
+	MMS_PART_CONTENT_ID = 0x40
+)
+
 var CONTENT_TYPES []string = []string{
 	"*/*", "text/*", "text/html", "text/plain",
 	"text/x-hdml", "text/x-ttml", "text/x-vCalendar",

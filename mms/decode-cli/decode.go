@@ -25,7 +25,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	retConfHdr := mms.NewMRetrieveConf()
+	retConfHdr := mms.NewMRetrieveConf(mmsFile)
 	dec := mms.NewDecoder(mmsData)
 	if err := dec.Decode(retConfHdr); err != nil {
 		fmt.Println(err)
