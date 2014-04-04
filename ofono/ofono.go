@@ -107,10 +107,19 @@ func getOfonoProps(obj *dbus.ObjectProxy, iface, method string) (oProps []OfonoC
 	return oProps, err
 }
 
+//ActivateMMSContext activates a context if necessary and returns the context 
+//to operate with MMS.
+//
+//If the context is already active it's a nop.
+//Returns either the type=internet context or the type=mms, if none is found
+//an error is returned.
 func (modem *Modem) ActivateMMSContext(conn *dbus.Connection) (OfonoContext, error) {
 	context, err := modem.GetMMSContext(conn)
 	if err != nil {
 		return OfonoContext{}, err
+	}
+	if context.isActive() {
+		return context, nil
 	}
 	obj := conn.Object("org.ofono", context.ObjectPath)
 	_, err = obj.Call(CONNECTION_CONTEXT_INTERFACE, "SetProperty", "Active", dbus.Variant{true})
@@ -118,6 +127,10 @@ func (modem *Modem) ActivateMMSContext(conn *dbus.Connection) (OfonoContext, err
 		return OfonoContext{}, fmt.Errorf("Cannot Activate interface on %s: %s", context.ObjectPath, err)
 	}
 	return context, nil
+}
+
+func (oContext OfonoContext) isActive() bool {
+	return reflect.ValueOf(oContext.Properties["Active"].Value).Bool()
 }
 
 func (oContext OfonoContext) GetProxy() (proxyInfo ProxyInfo, err error) {
@@ -136,37 +149,48 @@ func (oContext OfonoContext) GetProxy() (proxyInfo ProxyInfo, err error) {
 
 //GetMMSContexts returns the contexts that are MMS capable; by convention it has
 //been defined that for it to be MMS capable it either has to define a MessageProxy
-//or a MessageCenter within the context.
+//and a MessageCenter within the context.
 //
-//An implementation detail is that there are going to be at most two contexts per
-//modem.
+//The following rules take place:
+//- check current type=internet context for MessageProxy & MessageCenter; 
+//  if they exist and aren't empty AND the context is active, select it as the 
+//  context to use for MMS.
+//- otherwise search for type=mms, if found, use it and activate
+//
+//Returns either the type=internet context or the type=mms, if none is found
+//an error is returned.
 func (modem *Modem) GetMMSContext(conn *dbus.Connection) (OfonoContext, error) {
 	rilObj := conn.Object("org.ofono", modem.modem)
 	contexts, err := getOfonoProps(rilObj, CONNECTION_MANAGER_INTERFACE, "GetContexts")
 	if err != nil {
 		return OfonoContext{}, err
 	}
-	var c []OfonoContext
 	for _, context := range contexts {
+		var contextType, msgCenter, msgProxy string
+		var active bool
 		for k, v := range context.Properties {
 			if reflect.ValueOf(k).Kind() != reflect.String || reflect.ValueOf(v.Value).Kind() != reflect.String {
 				continue
 			}
 			k = reflect.ValueOf(k).String()
-			if k != "MessageCenter" {
-				continue
+			switch k {
+			case "Type":
+				contextType = reflect.ValueOf(v.Value).String()
+			case "MessageCenter":
+				msgCenter = reflect.ValueOf(v.Value).String()
+			case "MessageProxy":
+				msgProxy = reflect.ValueOf(v.Value).String()
+			case "Active":
+				active =  reflect.ValueOf(v.Value).Bool()
 			}
-			c = append(c, context)
+		}
+		if contextType == "internet" && active && msgProxy != "" && msgCenter != "" {
+			return context, nil
+		} else if contextType == "mms" {
+			return context, nil
 		}
 	}
-
-	if len(c) == 0 {
-		return OfonoContext{}, errors.New("No mms contexts found")
-	} else if len(c) != 1 {
-		return OfonoContext{}, errors.New("More than one mms context found")
-	}
-
-	return c[0], nil
+	return OfonoContext{}, errors.New("No mms contexts found")
 }
 
 func (modem *Modem) GetIdentity(conn *dbus.Connection) (string, error) {
