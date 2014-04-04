@@ -57,7 +57,7 @@ const (
 
 const (
 	MMS_PART_CONTENT_LOCATION = 0x0E
-	MMS_PART_CONTENT_ID = 0x40
+	MMS_PART_CONTENT_ID       = 0x40
 )
 
 var CONTENT_TYPES []string = []string{

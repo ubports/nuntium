@@ -26,8 +26,8 @@ import (
 	"launchpad.net/go-dbus/v1"
 	"launchpad.net/nuntium/mms"
 	"log"
-	"strings"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -47,11 +47,11 @@ type MMSService struct {
 }
 
 type Attachment struct {
-	Id          string
-	MediaType   string
-	FilePath    string
-	Offset      uint64
-	Length      uint64
+	Id        string
+	MediaType string
+	FilePath  string
+	Offset    uint64
+	Length    uint64
 }
 
 func NewMMSService(conn *dbus.Connection, identity string, useDeliveryReports bool) MMSService {
@@ -147,7 +147,7 @@ func (service *MMSService) parseMessage(mRetConf *mms.MRetrieveConf) (ServicePay
 	if strings.HasSuffix(mRetConf.From, PLMN) {
 		params["Sender"] = dbus.Variant{sender[:len(sender)-len(PLMN)]}
 	}
-	
+
 	params["Recipients"] = dbus.Variant{parseRecipients(mRetConf.To)}
 	if smil, err := mRetConf.GetSmil(); err == nil {
 		params["Smil"] = dbus.Variant{smil}
@@ -158,11 +158,11 @@ func (service *MMSService) parseMessage(mRetConf *mms.MRetrieveConf) (ServicePay
 	dataParts := mRetConf.GetDataParts()
 	for i := range dataParts {
 		attachment := Attachment{
-			Id: dataParts[i].ContentId,
+			Id:        dataParts[i].ContentId,
 			MediaType: dataParts[i].MediaType,
-			FilePath: mRetConf.FilePath,
-			Offset: uint64(dataParts[i].Offset),
-			Length: uint64(len(dataParts[i].Data)),
+			FilePath:  mRetConf.FilePath,
+			Offset:    uint64(dataParts[i].Offset),
+			Length:    uint64(len(dataParts[i].Data)),
 		}
 		attachments = append(attachments, attachment)
 	}

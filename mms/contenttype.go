@@ -29,7 +29,7 @@ import (
 
 type ContentType struct {
 	Name, Type, FileName, Charset, Start, StartInfo, Domain, Path, Comment, MediaType string
-	ContentLocation, ContentId string
+	ContentLocation, ContentId                                                        string
 	Level                                                                             byte
 	Length, Size, CreationDate, ModificationDate, ReadDate                            uint64
 	Offset                                                                            int
@@ -50,7 +50,7 @@ func (pdu *MRetrieveConf) GetSmil() (string, error) {
 
 //GetDataParts returns the non SMIL ContentType data parts
 func (pdu *MRetrieveConf) GetDataParts() []ContentType {
-	var dataParts []ContentType 
+	var dataParts []ContentType
 	for i := range pdu.DataParts {
 		if pdu.DataParts[i].MediaType == "application/smil" {
 			continue
@@ -162,13 +162,13 @@ func (dec *MMSDecoder) readContentTypeParts(reflectedPdu *reflect.Value) error {
 			param, _ := dec.readInteger(nil, "")
 			//fmt.Printf("offset %d, value: %#x, param %#x\n", dec.offset, dec.data[dec.offset], param)
 			switch param {
-				case MMS_PART_CONTENT_LOCATION:
-					_, err = dec.readString(&ctReflected, "ContentLocation")
-				case MMS_PART_CONTENT_ID:
-					_, err = dec.readString(&ctReflected, "ContentId")
-				default:
-					err = fmt.Errorf("Unhandled parameter %#x == %d at offset %d", param, param, dec.offset)
-				}
+			case MMS_PART_CONTENT_LOCATION:
+				_, err = dec.readString(&ctReflected, "ContentLocation")
+			case MMS_PART_CONTENT_ID:
+				_, err = dec.readString(&ctReflected, "ContentId")
+			default:
+				err = fmt.Errorf("Unhandled parameter %#x == %d at offset %d", param, param, dec.offset)
+			}
 			if err != nil {
 				return err
 			}

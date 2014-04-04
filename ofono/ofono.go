@@ -107,7 +107,7 @@ func getOfonoProps(obj *dbus.ObjectProxy, iface, method string) (oProps []OfonoC
 	return oProps, err
 }
 
-//ActivateMMSContext activates a context if necessary and returns the context 
+//ActivateMMSContext activates a context if necessary and returns the context
 //to operate with MMS.
 //
 //If the context is already active it's a nop.
@@ -152,8 +152,8 @@ func (oContext OfonoContext) GetProxy() (proxyInfo ProxyInfo, err error) {
 //and a MessageCenter within the context.
 //
 //The following rules take place:
-//- check current type=internet context for MessageProxy & MessageCenter; 
-//  if they exist and aren't empty AND the context is active, select it as the 
+//- check current type=internet context for MessageProxy & MessageCenter;
+//  if they exist and aren't empty AND the context is active, select it as the
 //  context to use for MMS.
 //- otherwise search for type=mms, if found, use it and activate
 //
@@ -181,7 +181,7 @@ func (modem *Modem) GetMMSContext(conn *dbus.Connection) (OfonoContext, error) {
 			case "MessageProxy":
 				msgProxy = reflect.ValueOf(v.Value).String()
 			case "Active":
-				active =  reflect.ValueOf(v.Value).Bool()
+				active = reflect.ValueOf(v.Value).Bool()
 			}
 		}
 		if contextType == "internet" && active && msgProxy != "" && msgCenter != "" {
