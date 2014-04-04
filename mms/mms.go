@@ -248,8 +248,10 @@ func (dec *MMSDecoder) readLongInteger(reflectedPdu *reflect.Value, hdr string) 
 	dec.offset++
 	var v uint64
 	endOffset := dec.offset + size - 1
+	v = v << 8
 	for ; dec.offset < endOffset; dec.offset++ {
-		v = (v << 8) | uint64(dec.data[dec.offset])
+		v |= uint64(dec.data[dec.offset])
+		v = v << 8
 	}
 	if hdr != "" {
 		reflectedPdu.FieldByName(hdr).SetUint(uint64(v))
