@@ -28,6 +28,7 @@ import (
 	"log"
 	"strings"
 	"os"
+	"time"
 )
 
 //ServicePayload is used to build the dbus messages; this is a workaround as v1 of go-dbus
@@ -82,8 +83,8 @@ func (service *MMSService) watchDBusMethodCalls() {
 		case msg.Interface == MMS_SERVICE_DBUS_IFACE && msg.Member == "GetMessages":
 			reply = dbus.NewMethodReturnMessage(msg)
 			//TODO implement store and forward
-			var noMessages []string
-			if err := reply.AppendArgs(noMessages); err != nil {
+			var payload []ServicePayload
+			if err := reply.AppendArgs(payload); err != nil {
 				log.Print("Cannot parse payload data from services")
 				reply = dbus.NewErrorMessage(msg, "Error.InvalidArguments", "Cannot parse services")
 			}
@@ -106,36 +107,11 @@ func (service *MMSService) watchDBusMethodCalls() {
 //MessageAdded emits a MessageAdded with the path to the added message which
 //is taken as a parameter
 func (service *MMSService) MessageAdded(mRetConf *mms.MRetrieveConf) error {
-	signal := dbus.NewSignalMessage(service.Payload.Path, MMS_SERVICE_DBUS_IFACE, MESSAGE_ADDED)
-	params := make(map[string]dbus.Variant)
-	params["Status"] = dbus.Variant{"received"}
-	//TODO retrieve date correctly
-	params["Date"] = dbus.Variant{""}
-	params["Subject"] = dbus.Variant{mRetConf.Subject}
-	sender := mRetConf.From
-	if strings.HasSuffix(mRetConf.From, PLMN) {
-		params["Sender"] = dbus.Variant{sender[:len(sender)-len(PLMN)]}
-	}
-	params["Recipients"] = dbus.Variant{strings.Split(mRetConf.To, ",")}
-	if smil, err := mRetConf.GetSmil(); err == nil {
-		params["Smil"] = dbus.Variant{smil}
-	} else {
+	payload, err := service.parseMessage(mRetConf)
+	if err != nil {
 		return err
 	}
-	var attachments []Attachment
-	dataParts := mRetConf.GetDataParts()
-	for i := range dataParts {
-		attachment := Attachment{
-			Id: dataParts[i].ContentId,
-			MediaType: dataParts[i].MediaType,
-			FilePath: mRetConf.FilePath,
-			Offset: uint64(dataParts[i].Offset),
-			Length: uint64(len(dataParts[i].Data)),
-		}
-		attachments = append(attachments, attachment)
-	}
-	params["Attachments"] = dbus.Variant{attachments}
-	payload := ServicePayload{Path: service.genMessagePath(), Properties: params}
+	signal := dbus.NewSignalMessage(payload.Path, MMS_SERVICE_DBUS_IFACE, MESSAGE_ADDED)
 	if err := signal.AppendArgs(payload); err != nil {
 		return err
 	}
@@ -156,6 +132,59 @@ func (service *MMSService) isService(identity string) bool {
 func (service *MMSService) Close() {
 	service.conn.UnregisterObjectPath(service.Payload.Path)
 	close(service.msgChan)
+}
+
+func (service *MMSService) parseMessage(mRetConf *mms.MRetrieveConf) (ServicePayload, error) {
+	params := make(map[string]dbus.Variant)
+	params["Status"] = dbus.Variant{"received"}
+	//TODO retrieve date correctly
+	date := parseDate(mRetConf.Date)
+	params["Date"] = dbus.Variant{date}
+	if mRetConf.Subject != "" {
+		params["Subject"] = dbus.Variant{mRetConf.Subject}
+	}
+	sender := mRetConf.From
+	if strings.HasSuffix(mRetConf.From, PLMN) {
+		params["Sender"] = dbus.Variant{sender[:len(sender)-len(PLMN)]}
+	}
+	
+	params["Recipients"] = dbus.Variant{parseRecipients(mRetConf.To)}
+	if smil, err := mRetConf.GetSmil(); err == nil {
+		params["Smil"] = dbus.Variant{smil}
+	} else {
+		return ServicePayload{}, err
+	}
+	var attachments []Attachment
+	dataParts := mRetConf.GetDataParts()
+	for i := range dataParts {
+		attachment := Attachment{
+			Id: dataParts[i].ContentId,
+			MediaType: dataParts[i].MediaType,
+			FilePath: mRetConf.FilePath,
+			Offset: uint64(dataParts[i].Offset),
+			Length: uint64(len(dataParts[i].Data)),
+		}
+		attachments = append(attachments, attachment)
+	}
+	params["Attachments"] = dbus.Variant{attachments}
+	payload := ServicePayload{Path: service.genMessagePath(), Properties: params}
+	return payload, nil
+}
+
+func parseDate(unixTime uint64) string {
+	const layout = "2014-03-30T18:15:30-0300"
+	date := time.Unix(int64(unixTime), 0)
+	return date.Format(time.RFC3339)
+}
+
+func parseRecipients(to string) []string {
+	recipients := strings.Split(to, ",")
+	for i := range recipients {
+		if strings.HasSuffix(recipients[i], PLMN) {
+			recipients[i] = recipients[i][:len(recipients[i])-len(PLMN)]
+		}
+	}
+	return recipients
 }
 
 //TODO randomly creating a uuid until the download manager does this for us

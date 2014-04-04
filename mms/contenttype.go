@@ -41,7 +41,7 @@ type ContentType struct {
 //GetSmil returns the text corresponding to the ContentType that holds the SMIL
 func (pdu *MRetrieveConf) GetSmil() (string, error) {
 	for i := range pdu.DataParts {
-		if pdu.DataParts[i].Type == "application/smil" {
+		if pdu.DataParts[i].MediaType == "application/smil" {
 			return string(pdu.DataParts[i].Data), nil
 		}
 	}
@@ -52,7 +52,7 @@ func (pdu *MRetrieveConf) GetSmil() (string, error) {
 func (pdu *MRetrieveConf) GetDataParts() []ContentType {
 	var dataParts []ContentType 
 	for i := range pdu.DataParts {
-		if pdu.DataParts[i].Type == "application/smil" {
+		if pdu.DataParts[i].MediaType == "application/smil" {
 			continue
 		}
 		dataParts = append(dataParts, pdu.DataParts[i])
