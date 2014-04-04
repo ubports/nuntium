@@ -1,0 +1,3 @@
+no-upstream-changelog
+binary-without-manpage usr/bin/nuntium
+hardening-no-relro usr/bin/nuntium

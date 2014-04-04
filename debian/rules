@@ -1,0 +1,17 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+
+export DH_OPTIONS
+export DH_GOPKG := launchpad.net/nuntium
+
+%:
+	dh $@ --buildsystem=golang --with=golang --fail-missing
+
+override_dh_auto_install:
+	dh_auto_install -O--buildsystem=golang
+	mv ${CURDIR}/debian/tmp/usr/bin/decode-cli \
+		${CURDIR}/debian/tmp/usr/bin/nuntium-decode-cli 
+	rm -rf ${CURDIR}/debian/tmp/usr/share/gocode/src/launchpad.net/nuntium/udm
+	rm -rf ${CURDIR}/debian/tmp/usr/share/gocode/src/launchpad.net/nuntium/test
+	rm ${CURDIR}/debian/tmp/usr/bin/test
+	rm ${CURDIR}/debian/tmp/usr/share/gocode/src/launchpad.net/nuntium/*.go

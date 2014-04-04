@@ -23,7 +23,7 @@ package mms
 
 import (
 	"fmt"
-	"launchpad.net/ubuntu-download-manager/bindings/golang"
+	"launchpad.net/nuntium/udm"
 	"log"
 	"time"
 )
