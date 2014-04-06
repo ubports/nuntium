@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 )
 
 type ContentType struct {
@@ -87,7 +88,7 @@ func (dec *MMSDecoder) readLength(reflectedPdu *reflect.Value) (length uint64, e
 		l, err := dec.readUintVar(reflectedPdu, "Length")
 		return l, err
 	}
-	return 0, fmt.Errorf("Unhandled length %#x", dec.data[dec.offset+1])
+	return 0, fmt.Errorf("Unhandled length %#x @%d", dec.data[dec.offset+1], dec.offset)
 }
 
 func (dec *MMSDecoder) readCharset(reflectedPdu *reflect.Value) error {
@@ -154,31 +155,18 @@ func (dec *MMSDecoder) readContentTypeParts(reflectedPdu *reflect.Value) error {
 		var ct ContentType
 		ct.Offset = headerEnd + 1
 		ctReflected := reflect.ValueOf(&ct).Elem()
-		if err = dec.readContentType(&ctReflected); err != nil {
-			return err
-		}
-		for dec.offset < headerEnd {
-			var err error
-			param, _ := dec.readInteger(nil, "")
-			//fmt.Printf("offset %d, value: %#x, param %#x\n", dec.offset, dec.data[dec.offset], param)
-			switch param {
-			case MMS_PART_CONTENT_LOCATION:
-				_, err = dec.readString(&ctReflected, "ContentLocation")
-			case MMS_PART_CONTENT_ID:
-				_, err = dec.readString(&ctReflected, "ContentId")
-			default:
-				err = fmt.Errorf("Unhandled parameter %#x == %d at offset %d", param, param, dec.offset)
-			}
-			if err != nil {
+		if err := dec.readContentType(&ctReflected); err == nil {
+			if err := dec.readMMSHeaders(&ctReflected, headerEnd); err != nil {
 				return err
 			}
+		} else if err != nil && err.Error() != "WAP message" { //TODO create error type
+			return err
 		}
-		//TODO skipping non ContentType headers for now
 		dec.offset = headerEnd + 1
 		if _, err := dec.readBoundedBytes(&ctReflected, "Data", dec.offset+int(dataLen)); err != nil {
 			return err
 		}
-		if ct.MediaType == "application/smil" || ct.MediaType == "text/plain" {
+		if ct.MediaType == "application/smil" || strings.HasPrefix(ct.MediaType, "text/plain") || ct.MediaType == "" {
 			fmt.Printf("%s\n", ct.Data)
 		}
 		if ct.Charset != "" {
@@ -192,8 +180,30 @@ func (dec *MMSDecoder) readContentTypeParts(reflectedPdu *reflect.Value) error {
 	return nil
 }
 
+func (dec *MMSDecoder) readMMSHeaders(ctMember *reflect.Value, headerEnd int) error {
+	for dec.offset < headerEnd {
+		var err error
+		param, _ := dec.readInteger(nil, "")
+		//fmt.Printf("offset %d, value: %#x, param %#x\n", dec.offset, dec.data[dec.offset], param)
+		switch param {
+		case MMS_PART_CONTENT_LOCATION:
+			_, err = dec.readString(ctMember, "ContentLocation")
+		case MMS_PART_CONTENT_ID:
+			_, err = dec.readString(ctMember, "ContentId")
+		default:
+			err = fmt.Errorf("Unhandled MMS parameter %#x == %d at offset %d", param, param, dec.offset)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (dec *MMSDecoder) readContentType(ctMember *reflect.Value) error {
-	// Only implementing general form decoding from 8.4.2.24
+	if dec.data[dec.offset+1] > 127 {
+		return errors.New("WAP message")
+	}
 	var err error
 	var length uint64
 	if length, err = dec.readLength(ctMember); err != nil {
