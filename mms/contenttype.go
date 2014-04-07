@@ -204,13 +204,10 @@ func (dec *MMSDecoder) readMMSHeaders(ctMember *reflect.Value, headerEnd int) er
 
 func (dec *MMSDecoder) readContentType(ctMember *reflect.Value) error {
 	next := dec.data[dec.offset+1]
-	if next > 127 {
+	if next > TEXT_MAX {
 		return errors.New("WAP message")
-	} else if next >= 32 && next <= 127 {
-		if err := dec.readMediaType(ctMember); err != nil {
-			return err
-		}
-		return nil
+	} else if next >= TEXT_MIN && next <= TEXT_MAX {
+		return dec.readMediaType(ctMember)
 	}
 	var err error
 	var length uint64

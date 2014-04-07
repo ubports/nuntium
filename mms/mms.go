@@ -152,11 +152,11 @@ func (dec *MMSDecoder) readEncodedString(reflectedPdu *reflect.Value, hdr string
 	var length uint64
 	var err error
 	switch {
-	case dec.data[dec.offset+1] < 30:
+	case dec.data[dec.offset+1] < SHORT_LENGTH_MAX:
 		var l byte
 		l, err = dec.readShortInteger(nil, "")
 		length = uint64(l)
-	case dec.data[dec.offset+1] == 31:
+	case dec.data[dec.offset+1] == LENGTH_QUOTE:
 		dec.offset++
 		length, err = dec.readUintVar(nil, "")
 	}
