@@ -169,7 +169,7 @@ func (modem *Modem) GetMMSContext(conn *dbus.Connection) (OfonoContext, error) {
 		var contextType, msgCenter, msgProxy string
 		var active bool
 		for k, v := range context.Properties {
-			if reflect.ValueOf(k).Kind() != reflect.String || reflect.ValueOf(v.Value).Kind() != reflect.String {
+			if reflect.ValueOf(k).Kind() != reflect.String {
 				continue
 			}
 			k = reflect.ValueOf(k).String()
@@ -184,6 +184,10 @@ func (modem *Modem) GetMMSContext(conn *dbus.Connection) (OfonoContext, error) {
 				active = reflect.ValueOf(v.Value).Bool()
 			}
 		}
+		log.Println("Context type:", contextType,
+			"MessageCenter:", msgCenter,
+			"MessageProxy:", msgProxy,
+			"Active:", active)
 		if contextType == "internet" && active && msgProxy != "" && msgCenter != "" {
 			return context, nil
 		} else if contextType == "mms" {
