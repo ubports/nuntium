@@ -91,7 +91,7 @@ func (dec *MMSDecoder) readLength(reflectedPdu *reflect.Value) (length uint64, e
 	return 0, fmt.Errorf("Unhandled length %#x @%d", dec.data[dec.offset+1], dec.offset)
 }
 
-func (dec *MMSDecoder) readCharset(reflectedPdu *reflect.Value) error {
+func (dec *MMSDecoder) readCharset(reflectedPdu *reflect.Value, hdr string) (string, error) {
 	var charset string
 
 	if dec.data[dec.offset] == 127 {
@@ -100,15 +100,17 @@ func (dec *MMSDecoder) readCharset(reflectedPdu *reflect.Value) error {
 	} else {
 		charCode, err := dec.readInteger(nil, "")
 		if err != nil {
-			return err
+			return "", err
 		}
 		var ok bool
 		if charset, ok = CHARSETS[charCode]; !ok {
-			return fmt.Errorf("Cannot find matching charset for %#x == %d", charCode, charCode)
+			return "", fmt.Errorf("Cannot find matching charset for %#x == %d", charCode, charCode)
 		}
 	}
-	reflectedPdu.FieldByName("Charset").SetString(charset)
-	return nil
+	if hdr != "" {
+		reflectedPdu.FieldByName("Charset").SetString(charset)
+	}
+	return charset, nil
 
 }
 
@@ -191,7 +193,7 @@ func (dec *MMSDecoder) readMMSHeaders(ctMember *reflect.Value, headerEnd int) er
 		case MMS_PART_CONTENT_ID:
 			_, err = dec.readString(ctMember, "ContentId")
 		default:
-			err = fmt.Errorf("Unhandled MMS parameter %#x == %d at offset %d", param, param, dec.offset)
+			break
 		}
 		if err != nil {
 			return err
@@ -201,8 +203,14 @@ func (dec *MMSDecoder) readMMSHeaders(ctMember *reflect.Value, headerEnd int) er
 }
 
 func (dec *MMSDecoder) readContentType(ctMember *reflect.Value) error {
-	if dec.data[dec.offset+1] > 127 {
+	next := dec.data[dec.offset+1]
+	if next > 127 {
 		return errors.New("WAP message")
+	} else if next >= 32 && next <= 127 {
+		if err := dec.readMediaType(ctMember); err != nil {
+			return err
+		}
+		return nil
 	}
 	var err error
 	var length uint64
@@ -223,7 +231,7 @@ func (dec *MMSDecoder) readContentType(ctMember *reflect.Value) error {
 		case WSP_PARAMETER_TYPE_Q:
 			err = dec.readQ(ctMember)
 		case WSP_PARAMETER_TYPE_CHARSET:
-			err = dec.readCharset(ctMember)
+			_, err = dec.readCharset(ctMember, "Charset")
 		case WSP_PARAMETER_TYPE_LEVEL:
 			_, err = dec.readShortInteger(ctMember, "Level")
 		case WSP_PARAMETER_TYPE_TYPE:
