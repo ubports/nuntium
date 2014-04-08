@@ -179,10 +179,7 @@ func (dec *MMSDecoder) readEncodedString(reflectedPdu *reflect.Value, hdr string
 
 func (dec *MMSDecoder) readString(reflectedPdu *reflect.Value, hdr string) (string, error) {
 	dec.offset++
-	if dec.data[dec.offset] == 34 { // "
-		dec.offset++
-	}
-	if dec.data[dec.offset] >= 127 {
+	if dec.data[dec.offset] == 34 { // Skip the quote char(34) == "
 		dec.offset++
 	}
 	begin := dec.offset
