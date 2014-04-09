@@ -66,6 +66,7 @@ type Modem struct {
 	identity        string
 	IdentityAdded   chan string
 	IdentityRemoved chan string
+	ReadySignal     chan bool
 	ready           bool
 }
 
@@ -98,6 +99,7 @@ func NewModems(conn *dbus.Connection) ([]*Modem, error) {
 	for _, modemReply := range modemsReply {
 		modem := new(Modem)
 		modem.modem = modemReply.ObjectPath
+		modem.ReadySignal = make(chan bool)
 		modem.IdentityAdded = make(chan string)
 		modem.IdentityRemoved = make(chan string)
 		if err := modem.watchPushInterface(conn, modemReply.Properties); err != nil {
@@ -115,9 +117,7 @@ func (modem *Modem) watchPushInterface(conn *dbus.Connection, prop PropertiesTyp
 			interfaceName := reflect.ValueOf(availableInterfaces.Index(i).Interface().(string)).String()
 			if interfaceName == PUSH_NOTIFICATION_INTERFACE {
 				modem.ready = true
-				if err := modem.RegisterAgent(conn); err != nil {
-					log.Print("Error while registering agent: ", err)
-				}
+				modem.ReadySignal <- modem.ready
 				break
 			}
 		}
@@ -158,9 +158,7 @@ func (modem *Modem) watchPushInterface(conn *dbus.Connection, prop PropertiesTyp
 			}
 			if pushInterfaceAvailable && online {
 				modem.ready = true
-				if err := modem.RegisterAgent(conn); err != nil {
-					log.Print("Error while registering agent: ", err)
-				}
+				modem.ReadySignal <- modem.ready
 			}
 		}
 	}()
