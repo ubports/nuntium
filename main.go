@@ -22,6 +22,7 @@
 package main
 
 import (
+	"io/ioutil"
 	"launchpad.net/go-dbus/v1"
 	"launchpad.net/nuntium/mms"
 	"launchpad.net/nuntium/ofono"
@@ -103,7 +104,7 @@ func messageLoop(conn *dbus.Connection, mmsChannel chan *ofono.PushEvent, telepa
 			dec := mms.NewDecoder(pushMsg.PDU.Data)
 			mmsIndHdr := mms.NewMNotificationInd()
 			if err := dec.Decode(mmsIndHdr); err != nil {
-				log.Print("Unable to decode MMS Header: ", err)
+				log.Print("Unable to decode m-notification.ind: ", err)
 			}
 			mmsContext, err := pushMsg.Modem.ActivateMMSContext(conn)
 			if err != nil {
@@ -119,9 +120,20 @@ func messageLoop(conn *dbus.Connection, mmsChannel chan *ofono.PushEvent, telepa
 				log.Print("Download issues: ", err)
 				return
 			}
-			//TODO send m-notifyresp.ind
 			log.Print("Downloaded ", filePath)
-			telepathyService.MessageAdded(filePath)
+			mmsData, err := ioutil.ReadFile(filePath)
+			if err != nil {
+				log.Print("Issues while reading from downloaded file: ", err)
+				return
+			}
+			mmsRetConfHdr := mms.NewMRetrieveConf(filePath)
+			dec = mms.NewDecoder(mmsData)
+			if err := dec.Decode(mmsRetConfHdr); err != nil {
+				log.Print("Unable to decode m-retrieve.conf: ", err)
+				return
+			}
+			//TODO send m-notifyresp.ind
+			telepathyService.MessageAdded(mmsRetConfHdr)
 		}()
 	}
 }

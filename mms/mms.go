@@ -122,7 +122,7 @@ type MNotifyRespInd struct {
 type MRetrieveConf struct {
 	MMSReader
 	Type, Version, Status, Class, Priority, DeliveryReport, ReplyCharging, ReplyChargingDeadline, ReadReport, RetrieveStatus byte
-	TransactionId, MessageId, From, To, Cc, Subject, ReplyChargingId, RetrieveText                                           string
+	TransactionId, MessageId, From, To, Cc, Subject, ReplyChargingId, RetrieveText, FilePath                                 string
 	ReportAllowed                                                                                                            bool
 	Date                                                                                                                     uint64
 	ContentType                                                                                                              ContentType
@@ -140,8 +140,8 @@ func NewMNotificationInd() *MNotificationInd {
 	return &MNotificationInd{Type: TYPE_NOTIFICATION_IND}
 }
 
-func NewMRetrieveConf() *MRetrieveConf {
-	return &MRetrieveConf{Type: TYPE_RETRIEVE_CONF}
+func NewMRetrieveConf(filePath string) *MRetrieveConf {
+	return &MRetrieveConf{Type: TYPE_RETRIEVE_CONF, FilePath: filePath}
 }
 
 func NewDecoder(data []byte) *MMSDecoder {
@@ -151,6 +151,9 @@ func NewDecoder(data []byte) *MMSDecoder {
 func (dec *MMSDecoder) readString(reflectedPdu *reflect.Value, hdr string) (string, error) {
 	dec.offset++
 	if dec.data[dec.offset] == 127 {
+		dec.offset++
+	}
+	if dec.data[dec.offset] == 34 { // "
 		dec.offset++
 	}
 	begin := dec.offset
@@ -245,8 +248,10 @@ func (dec *MMSDecoder) readLongInteger(reflectedPdu *reflect.Value, hdr string) 
 	dec.offset++
 	var v uint64
 	endOffset := dec.offset + size - 1
+	v = v << 8
 	for ; dec.offset < endOffset; dec.offset++ {
-		v = (v << 8) | uint64(dec.data[dec.offset])
+		v |= uint64(dec.data[dec.offset])
+		v = v << 8
 	}
 	if hdr != "" {
 		reflectedPdu.FieldByName(hdr).SetUint(uint64(v))

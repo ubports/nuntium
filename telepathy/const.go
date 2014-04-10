@@ -35,3 +35,7 @@ const (
 	SERVICE_ADDED        = "ServiceAdded"
 	SERVICE_REMOVED      = "ServiceRemoved"
 )
+
+const (
+	PLMN = "/TYPE=PLMN"
+)
