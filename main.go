@@ -83,8 +83,10 @@ func main() {
 				}
 			}
 		}()
-		err := modems[i].GetIdentity(conn)
-		if err != nil {
+		if err := modems[i].WatchPushInterface(conn); err != nil {
+			log.Fatal(err)
+		}
+		if err := modems[i].GetIdentity(conn); err != nil {
 			log.Fatal(err)
 		}
 	}

@@ -23,6 +23,7 @@ package ofono
 
 import (
 	"errors"
+	"encoding/hex"
 	"fmt"
 	"launchpad.net/go-dbus/v1"
 	"log"
@@ -102,17 +103,14 @@ func NewModems(conn *dbus.Connection) ([]*Modem, error) {
 		modem.ReadySignal = make(chan bool)
 		modem.IdentityAdded = make(chan string)
 		modem.IdentityRemoved = make(chan string)
-		if err := modem.watchPushInterface(conn, modemReply.Properties); err != nil {
-			return modems, err
-		}
 		modems = append(modems, modem)
 	}
 	return modems, nil
 }
 
-func (modem *Modem) watchPushInterface(conn *dbus.Connection, prop PropertiesType) error {
-	if availInterfaces, ok := prop["Interfaces"]; ok {
-		availableInterfaces := reflect.ValueOf(availInterfaces.Value)
+func (modem *Modem) WatchPushInterface(conn *dbus.Connection) error {
+	if v, err := modem.getProperty(conn, MODEM_INTERFACE, "Interfaces"); err == nil {
+		availableInterfaces := reflect.ValueOf(v.Value)
 		for i := 0; i < availableInterfaces.Len(); i++ {
 			interfaceName := reflect.ValueOf(availableInterfaces.Index(i).Interface().(string)).String()
 			if interfaceName == PUSH_NOTIFICATION_INTERFACE {
@@ -121,6 +119,8 @@ func (modem *Modem) watchPushInterface(conn *dbus.Connection, prop PropertiesTyp
 				break
 			}
 		}
+	} else {
+		log.Print("Initial value couldn't be retrieved: ", err)
 	}
 	propModemSignal, err := connectToPropertySignal(conn, modem.modem, MODEM_INTERFACE)
 	if err != nil {
@@ -282,19 +282,26 @@ func (modem *Modem) GetMMSContext(conn *dbus.Connection) (OfonoContext, error) {
 	return OfonoContext{}, errors.New("No mms contexts found")
 }
 
+func (modem *Modem) getProperty(conn *dbus.Connection, interfaceName, propertyName string) (*dbus.Variant, error) {
+	errorString := "Cannot retrieve %s from %s for %s: %s"
+	rilObj := conn.Object(OFONO_SENDER, modem.modem)
+	if reply, err := rilObj.Call(interfaceName, "GetProperties"); err == nil {
+		var property PropertiesType
+		if err := reply.Args(&property); err != nil {
+			return nil, fmt.Errorf(errorString, propertyName, interfaceName, modem.modem, err)
+		}
+		if v, ok := property[propertyName]; ok {
+			return &v, nil
+		}
+		return nil, fmt.Errorf(errorString, propertyName, interfaceName, modem.modem, "property not found")
+	} else {
+		return nil, fmt.Errorf(errorString, propertyName, interfaceName, modem.modem, err)
+	}
+}
+
 func (modem *Modem) GetIdentity(conn *dbus.Connection) error {
-	//wait for the push interface to be available
-	defaultError := fmt.Errorf("Cannot retrieve SubscriberIdentity for %s", modem.modem)
-	rilObj := conn.Object("org.ofono", modem.modem)
-	reply, err := rilObj.Call(SIM_MANAGER_INTERFACE, "GetProperties")
-	if err == nil {
-		var properties PropertiesType
-		if err := reply.Args(&properties); err != nil {
-			return defaultError
-		}
-		if identityVariant, ok := properties["SubscriberIdentity"]; ok {
-			modem.identity = reflect.ValueOf(identityVariant.Value).String()
-		}
+	if v, err := modem.getProperty(conn, SIM_MANAGER_INTERFACE, "SubscriberIdentity"); err == nil {
+		modem.identity = reflect.ValueOf(v.Value).String()
 		if modem.identity != "" {
 			log.Print("Updating id ", modem.identity)
 			modem.IdentityAdded <- modem.identity
@@ -406,7 +413,7 @@ func (modem *Modem) notificationReceived(msg *dbus.Message) (reply *dbus.Message
 		return dbus.NewErrorMessage(msg, "org.freedesktop.DBus.Error", "FormatError")
 	} else {
 		log.Print("Received ReceiveNotification() method call from ", push.Info["Sender"].Value)
-		log.Printf("Push data %#x", push.Data)
+		log.Print("Push data\n", hex.Dump(push.Data))
 		dec := NewDecoder(push.Data)
 		pdu := new(PushPDU)
 		if err := dec.Decode(pdu); err != nil {
