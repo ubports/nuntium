@@ -60,6 +60,13 @@ const (
 	MMS_PART_CONTENT_ID       = 0x40
 )
 
+const (
+	TEXT_MAX = 127
+	TEXT_MIN = 32
+	SHORT_LENGTH_MAX = 30
+	LENGTH_QUOTE = 31
+)
+
 var CONTENT_TYPES []string = []string{
 	"*/*", "text/*", "text/html", "text/plain",
 	"text/x-hdml", "text/x-ttml", "text/x-vCalendar",

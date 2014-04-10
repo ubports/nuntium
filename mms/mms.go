@@ -148,12 +148,38 @@ func NewDecoder(data []byte) *MMSDecoder {
 	return &MMSDecoder{data: data}
 }
 
+func (dec *MMSDecoder) readEncodedString(reflectedPdu *reflect.Value, hdr string) (string, error) {
+	var length uint64
+	var err error
+	switch {
+	case dec.data[dec.offset+1] < SHORT_LENGTH_MAX:
+		var l byte
+		l, err = dec.readShortInteger(nil, "")
+		length = uint64(l)
+	case dec.data[dec.offset+1] == LENGTH_QUOTE:
+		dec.offset++
+		length, err = dec.readUintVar(nil, "")
+	}
+	if err != nil {
+		return "", err
+	}
+	if length != 0 {
+		charset, err := dec.readCharset(nil, "")
+		if err != nil {
+			return "", err
+		}
+		fmt.Println("Next string encoded with:", charset)
+	}
+	var str string
+	if str, err = dec.readString(reflectedPdu, hdr); err != nil {
+		return "", err
+	}
+	return str, nil
+}
+
 func (dec *MMSDecoder) readString(reflectedPdu *reflect.Value, hdr string) (string, error) {
 	dec.offset++
-	if dec.data[dec.offset] == 127 {
-		dec.offset++
-	}
-	if dec.data[dec.offset] == 34 { // "
+	if dec.data[dec.offset] == 34 { // Skip the quote char(34) == "
 		dec.offset++
 	}
 	begin := dec.offset
@@ -326,11 +352,11 @@ func (dec *MMSDecoder) Decode(pdu MMSReader) (err error) {
 		case MESSAGE_ID:
 			_, err = dec.readString(&reflectedPdu, "MessageId")
 		case SUBJECT:
-			_, err = dec.readString(&reflectedPdu, "Subject")
+			_, err = dec.readEncodedString(&reflectedPdu, "Subject")
 		case TO:
-			_, err = dec.readString(&reflectedPdu, "To")
+			_, err = dec.readEncodedString(&reflectedPdu, "To")
 		case CC:
-			_, err = dec.readString(&reflectedPdu, "Cc")
+			_, err = dec.readEncodedString(&reflectedPdu, "Cc")
 		case X_MMS_REPLY_CHARGING_ID:
 			_, err = dec.readString(&reflectedPdu, "ReplyChargingId")
 		case X_MMS_RETRIEVE_TEXT:

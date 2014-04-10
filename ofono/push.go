@@ -233,7 +233,6 @@ func (dec *PushPDUDecoder) decodeHeaders(pdu *PushPDU, hdrLengthRemain int) erro
 	var n int
 	for n = dec.offset; n < (hdrLengthRemain + dec.offset); {
 		param := dec.data[n] & 0x7F
-		//fmt.Printf("byte: %#0x\tdec: %d\tn: %d\tdec.offset: %d\n", param, param, n, dec.offset)
 		switch {
 		case param == X_WAP_APPLICATION_ID:
 			n++
@@ -252,9 +251,13 @@ func (dec *PushPDUDecoder) decodeHeaders(pdu *PushPDU, hdrLengthRemain int) erro
 			pdu.ContentLength = int(dec.data[n] & 0x7F)
 			n++
 		default:
-			fmt.Printf("Unhandled byte: %#0x\tdec: %d\tn: %d\tdec.offset: %d\n", param, param, n, dec.offset)
-			fmt.Println(pdu)
-			return fmt.Errorf("Unhandled %x, %d, %d", param, n, dec.offset)
+			if pdu.ContentLength != 0 && pdu.ApplicationId != 0 {
+				return nil
+			} else {
+				fmt.Printf("Unhandled byte: %#0x\tdec: %d\tn: %d\tdec.offset: %d\n", param, param, n, dec.offset)
+				fmt.Println(pdu)
+				return fmt.Errorf("Unhandled %x, %d, %d", param, n, dec.offset)
+			}
 		}
 	}
 	dec.offset = n

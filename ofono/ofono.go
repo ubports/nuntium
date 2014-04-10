@@ -29,6 +29,7 @@ import (
 	"net"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -135,10 +136,16 @@ func (oContext OfonoContext) isActive() bool {
 
 func (oContext OfonoContext) GetProxy() (proxyInfo ProxyInfo, err error) {
 	proxy := reflect.ValueOf(oContext.Properties["MessageProxy"].Value).String()
+	if strings.HasPrefix(proxy, "http://") {
+		proxy = proxy[len("http://"):]
+	}
 	var portString string
 	proxyInfo.Host, portString, err = net.SplitHostPort(proxy)
 	if err != nil {
-		return proxyInfo, err
+		proxyInfo.Host = proxy
+		proxyInfo.Port = 80
+		fmt.Println("Setting proxy to:", proxyInfo)
+		return proxyInfo, nil
 	}
 	proxyInfo.Port, err = strconv.ParseUint(portString, 0, 64)
 	if err != nil {
