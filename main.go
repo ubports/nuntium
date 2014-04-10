@@ -105,6 +105,7 @@ func messageLoop(conn *dbus.Connection, mmsChannel chan *ofono.PushEvent, telepa
 			mmsIndHdr := mms.NewMNotificationInd()
 			if err := dec.Decode(mmsIndHdr); err != nil {
 				log.Print("Unable to decode m-notification.ind: ", err)
+				return
 			}
 			mmsContext, err := pushMsg.Modem.ActivateMMSContext(conn)
 			if err != nil {
@@ -114,6 +115,7 @@ func messageLoop(conn *dbus.Connection, mmsChannel chan *ofono.PushEvent, telepa
 			proxy, err := mmsContext.GetProxy()
 			if err != nil {
 				log.Print("Error retrieving proxy: ", err)
+				return
 			}
 			filePath, err := mmsIndHdr.DownloadContent(proxy.Host, int32(proxy.Port))
 			if err != nil {
@@ -133,7 +135,10 @@ func messageLoop(conn *dbus.Connection, mmsChannel chan *ofono.PushEvent, telepa
 				return
 			}
 			//TODO send m-notifyresp.ind
-			telepathyService.MessageAdded(mmsRetConfHdr)
+			if err := telepathyService.MessageAdded(mmsRetConfHdr); err != nil {
+				log.Print("Unable to signal MessageAdded: ", err)
+				return
+			}
 		}()
 	}
 }
