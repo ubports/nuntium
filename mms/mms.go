@@ -127,6 +127,7 @@ type MRetrieveConf struct {
 	Date                                                                                                                     uint64
 	ContentType                                                                                                              ContentType
 	DataParts                                                                                                                []ContentType
+	Data                                                                                                                     []byte
 }
 
 type MMSReader interface{}
@@ -344,7 +345,13 @@ func (dec *MMSDecoder) Decode(pdu MMSReader) (err error) {
 			if err = dec.readContentType(&ctMember); err != nil {
 				return err
 			}
-			err = dec.readContentTypeParts(&reflectedPdu)
+			//application/vnd.wap.multipart.related and others
+			if ctMember.FieldByName("MediaType").String() != "text/plain" {
+				err = dec.readContentTypeParts(&reflectedPdu)
+			} else {
+				dec.offset++
+				_, err = dec.readBoundedBytes(&reflectedPdu, "Data", len(dec.data))
+			}
 			moreHdrToRead = false
 		case X_MMS_CONTENT_LOCATION:
 			_, err = dec.readString(&reflectedPdu, "ContentLocation")
