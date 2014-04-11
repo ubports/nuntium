@@ -61,8 +61,8 @@ func (pdu *MRetrieveConf) GetDataParts() []ContentType {
 	return dataParts
 }
 
-func (dec *MMSDecoder) readQ(reflectedPdu *reflect.Value) error {
-	v, err := dec.readUintVar(nil, "")
+func (dec *MMSDecoder) ReadQ(reflectedPdu *reflect.Value) error {
+	v, err := dec.ReadUintVar(nil, "")
 	if err != nil {
 		return err
 	}
@@ -76,29 +76,29 @@ func (dec *MMSDecoder) readQ(reflectedPdu *reflect.Value) error {
 	return nil
 }
 
-func (dec *MMSDecoder) readLength(reflectedPdu *reflect.Value) (length uint64, err error) {
+func (dec *MMSDecoder) ReadLength(reflectedPdu *reflect.Value) (length uint64, err error) {
 	switch {
-	case dec.data[dec.offset+1] < 30:
-		l, err := dec.readShortInteger(nil, "")
+	case dec.Data[dec.Offset+1] < 30:
+		l, err := dec.ReadShortInteger(nil, "")
 		v := uint64(l)
 		reflectedPdu.FieldByName("Length").SetUint(v)
 		return v, err
-	case dec.data[dec.offset+1] == 31:
-		dec.offset++
-		l, err := dec.readUintVar(reflectedPdu, "Length")
+	case dec.Data[dec.Offset+1] == 31:
+		dec.Offset++
+		l, err := dec.ReadUintVar(reflectedPdu, "Length")
 		return l, err
 	}
-	return 0, fmt.Errorf("Unhandled length %#x @%d", dec.data[dec.offset+1], dec.offset)
+	return 0, fmt.Errorf("Unhandled length %#x @%d", dec.Data[dec.Offset+1], dec.Offset)
 }
 
-func (dec *MMSDecoder) readCharset(reflectedPdu *reflect.Value, hdr string) (string, error) {
+func (dec *MMSDecoder) ReadCharset(reflectedPdu *reflect.Value, hdr string) (string, error) {
 	var charset string
 
-	if dec.data[dec.offset] == 127 {
-		dec.offset++
+	if dec.Data[dec.Offset] == 127 {
+		dec.Offset++
 		charset = "*"
 	} else {
-		charCode, err := dec.readInteger(nil, "")
+		charCode, err := dec.ReadInteger(nil, "")
 		if err != nil {
 			return "", err
 		}
@@ -114,16 +114,16 @@ func (dec *MMSDecoder) readCharset(reflectedPdu *reflect.Value, hdr string) (str
 
 }
 
-func (dec *MMSDecoder) readMediaType(reflectedPdu *reflect.Value) (err error) {
+func (dec *MMSDecoder) ReadMediaType(reflectedPdu *reflect.Value) (err error) {
 	var mediaType string
-	origOffset := dec.offset
+	origOffset := dec.Offset
 
-	if mt, err := dec.readInteger(nil, ""); err == nil && len(CONTENT_TYPES) > int(mt) {
+	if mt, err := dec.ReadInteger(nil, ""); err == nil && len(CONTENT_TYPES) > int(mt) {
 		mediaType = CONTENT_TYPES[mt]
 	} else {
 		err = nil
-		dec.offset = origOffset
-		mediaType, err = dec.readString(nil, "")
+		dec.Offset = origOffset
+		mediaType, err = dec.ReadString(nil, "")
 		if err != nil {
 			return err
 		}
@@ -134,38 +134,38 @@ func (dec *MMSDecoder) readMediaType(reflectedPdu *reflect.Value) (err error) {
 	return nil
 }
 
-func (dec *MMSDecoder) readContentTypeParts(reflectedPdu *reflect.Value) error {
+func (dec *MMSDecoder) ReadContentTypeParts(reflectedPdu *reflect.Value) error {
 	var err error
 	var parts uint64
-	if parts, err = dec.readUintVar(nil, ""); err != nil {
+	if parts, err = dec.ReadUintVar(nil, ""); err != nil {
 		return err
 	}
 	var dataParts []ContentType
 	fmt.Println("Number of parts", parts)
 	for i := uint64(0); i < parts; i++ {
 		fmt.Println("\nPart", i, "\n")
-		headerLen, err := dec.readUintVar(nil, "")
+		headerLen, err := dec.ReadUintVar(nil, "")
 		if err != nil {
 			return err
 		}
-		dataLen, err := dec.readUintVar(nil, "")
+		dataLen, err := dec.ReadUintVar(nil, "")
 		if err != nil {
 			return err
 		}
-		headerEnd := dec.offset + int(headerLen)
+		headerEnd := dec.Offset + int(headerLen)
 		fmt.Println("header len:", headerLen, "dataLen:", dataLen, "headerEnd:", headerEnd)
 		var ct ContentType
 		ct.Offset = headerEnd + 1
 		ctReflected := reflect.ValueOf(&ct).Elem()
-		if err := dec.readContentType(&ctReflected); err == nil {
-			if err := dec.readMMSHeaders(&ctReflected, headerEnd); err != nil {
+		if err := dec.ReadContentType(&ctReflected); err == nil {
+			if err := dec.ReadMMSHeaders(&ctReflected, headerEnd); err != nil {
 				return err
 			}
 		} else if err != nil && err.Error() != "WAP message" { //TODO create error type
 			return err
 		}
-		dec.offset = headerEnd + 1
-		if _, err := dec.readBoundedBytes(&ctReflected, "Data", dec.offset+int(dataLen)); err != nil {
+		dec.Offset = headerEnd + 1
+		if _, err := dec.ReadBoundedBytes(&ctReflected, "Data", dec.Offset+int(dataLen)); err != nil {
 			return err
 		}
 		if ct.MediaType == "application/smil" || strings.HasPrefix(ct.MediaType, "text/plain") || ct.MediaType == "" {
@@ -182,16 +182,16 @@ func (dec *MMSDecoder) readContentTypeParts(reflectedPdu *reflect.Value) error {
 	return nil
 }
 
-func (dec *MMSDecoder) readMMSHeaders(ctMember *reflect.Value, headerEnd int) error {
-	for dec.offset < headerEnd {
+func (dec *MMSDecoder) ReadMMSHeaders(ctMember *reflect.Value, headerEnd int) error {
+	for dec.Offset < headerEnd {
 		var err error
-		param, _ := dec.readInteger(nil, "")
-		//fmt.Printf("offset %d, value: %#x, param %#x\n", dec.offset, dec.data[dec.offset], param)
+		param, _ := dec.ReadInteger(nil, "")
+		//fmt.Printf("offset %d, value: %#x, param %#x\n", dec.Offset, dec.Data[dec.Offset], param)
 		switch param {
 		case MMS_PART_CONTENT_LOCATION:
-			_, err = dec.readString(ctMember, "ContentLocation")
+			_, err = dec.ReadString(ctMember, "ContentLocation")
 		case MMS_PART_CONTENT_ID:
-			_, err = dec.readString(ctMember, "ContentId")
+			_, err = dec.ReadString(ctMember, "ContentId")
 		default:
 			break
 		}
@@ -202,70 +202,70 @@ func (dec *MMSDecoder) readMMSHeaders(ctMember *reflect.Value, headerEnd int) er
 	return nil
 }
 
-func (dec *MMSDecoder) readContentType(ctMember *reflect.Value) error {
-	next := dec.data[dec.offset+1]
+func (dec *MMSDecoder) ReadContentType(ctMember *reflect.Value) error {
+	next := dec.Data[dec.Offset+1]
 	if next > TEXT_MAX {
 		return errors.New("WAP message")
 	} else if next >= TEXT_MIN && next <= TEXT_MAX {
-		return dec.readMediaType(ctMember)
+		return dec.ReadMediaType(ctMember)
 	}
 	var err error
 	var length uint64
-	if length, err = dec.readLength(ctMember); err != nil {
+	if length, err = dec.ReadLength(ctMember); err != nil {
 		return err
 	}
 	fmt.Println("Content Type Length:", length)
-	endOffset := int(length) + dec.offset
+	endOffset := int(length) + dec.Offset
 
-	if err := dec.readMediaType(ctMember); err != nil {
+	if err := dec.ReadMediaType(ctMember); err != nil {
 		return err
 	}
 
-	for dec.offset < len(dec.data) && dec.offset < endOffset {
-		param, _ := dec.readInteger(nil, "")
-		//fmt.Printf("offset %d, value: %#x, param %#x\n", dec.offset, dec.data[dec.offset], param)
+	for dec.Offset < len(dec.Data) && dec.Offset < endOffset {
+		param, _ := dec.ReadInteger(nil, "")
+		//fmt.Printf("offset %d, value: %#x, param %#x\n", dec.Offset, dec.Data[dec.Offset], param)
 		switch param {
 		case WSP_PARAMETER_TYPE_Q:
-			err = dec.readQ(ctMember)
+			err = dec.ReadQ(ctMember)
 		case WSP_PARAMETER_TYPE_CHARSET:
-			_, err = dec.readCharset(ctMember, "Charset")
+			_, err = dec.ReadCharset(ctMember, "Charset")
 		case WSP_PARAMETER_TYPE_LEVEL:
-			_, err = dec.readShortInteger(ctMember, "Level")
+			_, err = dec.ReadShortInteger(ctMember, "Level")
 		case WSP_PARAMETER_TYPE_TYPE:
-			_, err = dec.readInteger(ctMember, "Type")
+			_, err = dec.ReadInteger(ctMember, "Type")
 		case WSP_PARAMETER_TYPE_NAME_DEFUNCT:
 			fmt.Println("Name(deprecated)")
-			_, err = dec.readString(ctMember, "Name")
+			_, err = dec.ReadString(ctMember, "Name")
 		case WSP_PARAMETER_TYPE_FILENAME_DEFUNCT:
 			fmt.Println("FileName(deprecated)")
-			_, err = dec.readString(ctMember, "FileName")
+			_, err = dec.ReadString(ctMember, "FileName")
 		case WSP_PARAMETER_TYPE_DIFFERENCES:
 			err = errors.New("Unhandled Differences")
 		case WSP_PARAMETER_TYPE_PADDING:
-			dec.readShortInteger(nil, "")
+			dec.ReadShortInteger(nil, "")
 		case WSP_PARAMETER_TYPE_CONTENT_TYPE:
-			_, err = dec.readString(ctMember, "Type")
+			_, err = dec.ReadString(ctMember, "Type")
 		case WSP_PARAMETER_TYPE_START_DEFUNCT:
 			fmt.Println("Start(deprecated)")
-			_, err = dec.readString(ctMember, "Start")
+			_, err = dec.ReadString(ctMember, "Start")
 		case WSP_PARAMETER_TYPE_START_INFO_DEFUNCT:
 			fmt.Println("Start Info(deprecated")
-			_, err = dec.readString(ctMember, "StartInfo")
+			_, err = dec.ReadString(ctMember, "StartInfo")
 		case WSP_PARAMETER_TYPE_COMMENT_DEFUNCT:
 			fmt.Println("Comment(deprecated")
-			_, err = dec.readString(ctMember, "Comment")
+			_, err = dec.ReadString(ctMember, "Comment")
 		case WSP_PARAMETER_TYPE_DOMAIN_DEFUNCT:
 			fmt.Println("Domain(deprecated)")
-			_, err = dec.readString(ctMember, "Domain")
+			_, err = dec.ReadString(ctMember, "Domain")
 		case WSP_PARAMETER_TYPE_MAX_AGE:
 			err = errors.New("Unhandled Max Age")
 		case WSP_PARAMETER_TYPE_PATH_DEFUNCT:
 			fmt.Println("Path(deprecated)")
-			_, err = dec.readString(ctMember, "Path")
+			_, err = dec.ReadString(ctMember, "Path")
 		case WSP_PARAMETER_TYPE_SECURE:
 			fmt.Println("Secure")
 		case WSP_PARAMETER_TYPE_SEC:
-			v, _ := dec.readShortInteger(nil, "")
+			v, _ := dec.ReadShortInteger(nil, "")
 			fmt.Println("SEC(deprecated)", v)
 		case WSP_PARAMETER_TYPE_MAC:
 			err = errors.New("Unhandled MAC")
@@ -274,26 +274,26 @@ func (dec *MMSDecoder) readContentType(ctMember *reflect.Value) error {
 		case WSP_PARAMETER_TYPE_READ_DATE:
 			err = errors.New("Unhandled Date parameters")
 		case WSP_PARAMETER_TYPE_SIZE:
-			_, err = dec.readInteger(ctMember, "Size")
+			_, err = dec.ReadInteger(ctMember, "Size")
 		case WSP_PARAMETER_TYPE_NAME:
-			_, err = dec.readString(ctMember, "Name")
+			_, err = dec.ReadString(ctMember, "Name")
 		case WSP_PARAMETER_TYPE_FILENAME:
-			_, err = dec.readString(ctMember, "FileName")
+			_, err = dec.ReadString(ctMember, "FileName")
 		case WSP_PARAMETER_TYPE_START:
-			_, err = dec.readString(ctMember, "Start")
+			_, err = dec.ReadString(ctMember, "Start")
 		case WSP_PARAMETER_TYPE_START_INFO:
-			_, err = dec.readString(ctMember, "StartInfo")
+			_, err = dec.ReadString(ctMember, "StartInfo")
 		case WSP_PARAMETER_TYPE_COMMENT:
-			_, err = dec.readString(ctMember, "Comment")
+			_, err = dec.ReadString(ctMember, "Comment")
 		case WSP_PARAMETER_TYPE_DOMAIN:
-			_, err = dec.readString(ctMember, "Domain")
+			_, err = dec.ReadString(ctMember, "Domain")
 		case WSP_PARAMETER_TYPE_PATH:
-			_, err = dec.readString(ctMember, "Path")
+			_, err = dec.ReadString(ctMember, "Path")
 		case WSP_PARAMETER_TYPE_UNTYPED:
-			v, _ := dec.readString(nil, "")
+			v, _ := dec.ReadString(nil, "")
 			fmt.Println("Untyped", v)
 		default:
-			err = fmt.Errorf("Unhandled parameter %#x == %d at offset %d", param, param, dec.offset)
+			err = fmt.Errorf("Unhandled parameter %#x == %d at offset %d", param, param, dec.Offset)
 		}
 		if err != nil {
 			return err
