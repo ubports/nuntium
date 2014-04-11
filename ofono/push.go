@@ -104,7 +104,7 @@ func (dec *PushPDUDecoder) decodeHeaders(pdu *PushPDU, hdrLengthRemain int) erro
 		} else if pdu.ApplicationId != 0 {
 			return nil
 		}
-		
+
 	}
 	return nil
 }

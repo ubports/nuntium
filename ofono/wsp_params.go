@@ -37,7 +37,7 @@ const (
 	POST           PDU = 0x60
 )
 
-//These are the WSP assigned numbers from Table 38 . Well-Known Parameter 
+//These are the WSP assigned numbers from Table 38 . Well-Known Parameter
 //Assignments - Appendix A Assigned Numbers in WAP-230-WSP
 const (
 	WSP_PARAMETER_TYPE_Q                  = 0x00
@@ -148,4 +148,3 @@ const (
 	X_WAP_SECURITY        = 0x46
 	CACHE_CONTROL         = 0x47
 )
-

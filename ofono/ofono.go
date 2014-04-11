@@ -22,8 +22,8 @@
 package ofono
 
 import (
-	"errors"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"launchpad.net/go-dbus/v1"
 	"log"

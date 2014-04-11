@@ -301,13 +301,13 @@ func (dec *MMSDecoder) ReadLongInteger(reflectedPdu *reflect.Value, hdr string) 
 //or just decodes and discards if it's application specific, if the latter is the
 //case it also returns false
 func (dec *MMSDecoder) getParam() (byte, bool, error) {
-	if dec.Data[dec.Offset] & 0x80 != 0 {
+	if dec.Data[dec.Offset]&0x80 != 0 {
 		return dec.Data[dec.Offset] & 0x7f, true, nil
 	} else {
 		var param, value string
 		var err error
 		dec.Offset--
-		if param, err = dec.ReadString(nil, ""); err != nil { 
+		if param, err = dec.ReadString(nil, ""); err != nil {
 			return 0, false, err
 		}
 		if value, err = dec.ReadString(nil, ""); err != nil {
