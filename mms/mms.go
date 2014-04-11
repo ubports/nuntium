@@ -381,6 +381,7 @@ func (dec *MMSDecoder) Decode(pdu MMSReader) (err error) {
 			if err = dec.ReadContentType(&ctMember); err != nil {
 				return err
 			}
+			//application/vnd.wap.multipart.related and others
 			if ctMember.FieldByName("MediaType").String() != "text/plain" {
 				err = dec.ReadContentTypeParts(&reflectedPdu)
 			} else {
