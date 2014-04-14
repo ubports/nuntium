@@ -67,6 +67,10 @@ const (
 	LENGTH_QUOTE     = 31
 )
 
+const (
+	ANY_CHARSET = 128
+)
+
 var CONTENT_TYPES []string = []string{
 	"*/*", "text/*", "text/html", "text/plain",
 	"text/x-hdml", "text/x-ttml", "text/x-vCalendar",

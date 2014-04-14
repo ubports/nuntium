@@ -78,12 +78,12 @@ func (dec *MMSDecoder) ReadQ(reflectedPdu *reflect.Value) error {
 
 func (dec *MMSDecoder) ReadLength(reflectedPdu *reflect.Value) (length uint64, err error) {
 	switch {
-	case dec.Data[dec.Offset+1] < 30:
+	case dec.Data[dec.Offset+1] < SHORT_LENGTH_MAX:
 		l, err := dec.ReadShortInteger(nil, "")
 		v := uint64(l)
 		reflectedPdu.FieldByName("Length").SetUint(v)
 		return v, err
-	case dec.Data[dec.Offset+1] == 31:
+	case dec.Data[dec.Offset+1] == LENGTH_QUOTE:
 		dec.Offset++
 		l, err := dec.ReadUintVar(reflectedPdu, "Length")
 		return l, err
@@ -94,7 +94,7 @@ func (dec *MMSDecoder) ReadLength(reflectedPdu *reflect.Value) (length uint64, e
 func (dec *MMSDecoder) ReadCharset(reflectedPdu *reflect.Value, hdr string) (string, error) {
 	var charset string
 
-	if dec.Data[dec.Offset] == 127 {
+	if dec.Data[dec.Offset] == ANY_CHARSET {
 		dec.Offset++
 		charset = "*"
 	} else {
