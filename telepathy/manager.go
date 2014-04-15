@@ -30,7 +30,7 @@ import (
 type MMSManager struct {
 	conn     *dbus.Connection
 	msgChan  chan *dbus.Message
-	services []MMSService
+	services []*MMSService
 }
 
 func NewMMSManager(conn *dbus.Connection) (*MMSManager, error) {
@@ -91,10 +91,15 @@ func (manager *MMSManager) serviceAdded(payload *ServicePayload) error {
 	return nil
 }
 
-func (manager *MMSManager) AddService(identity string, useDeliveryReports bool) (MMSService, error) {
+func (manager *MMSManager) AddService(identity string, useDeliveryReports bool) (*MMSService, error) {
+	for i := range manager.services {
+		if manager.services[i].isService(identity) {
+			return manager.services[i], nil
+		}
+	}
 	service := NewMMSService(manager.conn, identity, useDeliveryReports)
 	if err := manager.serviceAdded(&service.Payload); err != nil {
-		return MMSService{}, err
+		return &MMSService{}, err
 	}
 	manager.services = append(manager.services, service)
 	return service, nil

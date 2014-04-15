@@ -54,7 +54,7 @@ type Attachment struct {
 	Length    uint64
 }
 
-func NewMMSService(conn *dbus.Connection, identity string, useDeliveryReports bool) MMSService {
+func NewMMSService(conn *dbus.Connection, identity string, useDeliveryReports bool) *MMSService {
 	properties := make(map[string]dbus.Variant)
 	properties[IDENTITY] = dbus.Variant{identity}
 	serviceProperties := make(map[string]dbus.Variant)
@@ -72,7 +72,7 @@ func NewMMSService(conn *dbus.Connection, identity string, useDeliveryReports bo
 	}
 	go service.watchDBusMethodCalls()
 	conn.RegisterObjectPath(payload.Path, service.msgChan)
-	return service
+	return &service
 }
 
 func (service *MMSService) watchDBusMethodCalls() {

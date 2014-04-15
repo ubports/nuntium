@@ -59,32 +59,36 @@ func main() {
 
 	//TODO refactor with new ofono work
 	for i, _ := range modems {
-		_, err := modems[i].GetMMSContext(conn)
-		if err != nil {
-			log.Print("Cannot get ofono context: ", err)
-			continue
-		}
-		pushChannel, err := modems[i].RegisterAgent(conn)
-		if err != nil {
-			log.Fatal(err)
-		}
-		identity, err := modems[i].GetIdentity(conn)
-		if err != nil {
-			log.Fatal(err)
-		}
-		//TODO implement Modem.GetUseDeliveryReports()
-		telepathyService, err := mmsManager.AddService(identity, false)
-		if err != nil {
-			log.Fatal(err)
-		}
-		//TODO add this somewhere so we react when ofono notifies something
-		/*
-			if err := mmsManager.RemoveService(identity); err != nil {
-				log.Fatal(err)
+		go func() {
+			var telepathyService *telepathy.MMSService
+			for {
+				select {
+				case id := <-modems[i].IdentityAdded:
+					telepathyService, err = mmsManager.AddService(id, false)
+					if err != nil {
+						log.Fatal(err)
+					}
+				case id := <-modems[i].IdentityRemoved:
+					err := mmsManager.RemoveService(id)
+					if err != nil {
+						log.Fatal(err)
+					}
+					telepathyService = nil
+				case <- modems[i].ReadySignal:
+					if err := modems[i].RegisterAgent(conn); err != nil {
+						log.Fatal("Error while registering agent: ", err)
+					}
+				case pushMsg := <-modems[i].PushChannel:
+					go processMessage(conn, pushMsg, telepathyService)
+				}
 			}
-		*/
-		go messageLoop(conn, pushChannel, telepathyService)
-		defer modems[i].UnregisterAgent(conn)
+		}()
+		if err := modems[i].WatchPushInterface(conn); err != nil {
+			log.Fatal(err)
+		}
+		if err := modems[i].GetIdentity(conn); err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	m := Mainloop{
@@ -97,48 +101,48 @@ func main() {
 	m.Start()
 }
 
-func messageLoop(conn *dbus.Connection, mmsChannel chan *ofono.PushEvent, telepathyService telepathy.MMSService) {
-	for pushMsg := range mmsChannel {
-		go func() {
-			log.Print(pushMsg)
-			dec := mms.NewDecoder(pushMsg.PDU.Data)
-			mmsIndHdr := mms.NewMNotificationInd()
-			if err := dec.Decode(mmsIndHdr); err != nil {
-				log.Print("Unable to decode m-notification.ind: ", err)
-				return
-			}
-			mmsContext, err := pushMsg.Modem.ActivateMMSContext(conn)
-			if err != nil {
-				log.Print("Cannot activate ofono context: ", err)
-				return
-			}
-			proxy, err := mmsContext.GetProxy()
-			if err != nil {
-				log.Print("Error retrieving proxy: ", err)
-				return
-			}
-			filePath, err := mmsIndHdr.DownloadContent(proxy.Host, int32(proxy.Port))
-			if err != nil {
-				log.Print("Download issues: ", err)
-				return
-			}
-			log.Print("Downloaded ", filePath)
-			mmsData, err := ioutil.ReadFile(filePath)
-			if err != nil {
-				log.Print("Issues while reading from downloaded file: ", err)
-				return
-			}
-			mmsRetConfHdr := mms.NewMRetrieveConf(filePath)
-			dec = mms.NewDecoder(mmsData)
-			if err := dec.Decode(mmsRetConfHdr); err != nil {
-				log.Print("Unable to decode m-retrieve.conf: ", err)
-				return
-			}
-			//TODO send m-notifyresp.ind
-			if err := telepathyService.MessageAdded(mmsRetConfHdr); err != nil {
-				log.Print("Unable to signal MessageAdded: ", err)
-				return
-			}
-		}()
+func processMessage(conn *dbus.Connection, pushMsg *ofono.PushEvent, telepathyService *telepathy.MMSService) {
+	if pushMsg == nil {
+		return
+	}
+	log.Print(pushMsg)
+	dec := mms.NewDecoder(pushMsg.PDU.Data)
+	mmsIndHdr := mms.NewMNotificationInd()
+	if err := dec.Decode(mmsIndHdr); err != nil {
+		log.Print("Unable to decode m-notification.ind: ", err)
+		return
+	}
+	mmsContext, err := pushMsg.Modem.ActivateMMSContext(conn)
+	if err != nil {
+		log.Print("Cannot activate ofono context: ", err)
+		return
+	}
+	proxy, err := mmsContext.GetProxy()
+	if err != nil {
+		log.Print("Error retrieving proxy: ", err)
+		return
+	}
+	filePath, err := mmsIndHdr.DownloadContent(proxy.Host, int32(proxy.Port))
+	if err != nil {
+		log.Print("Download issues: ", err)
+		return
+	}
+	log.Print("Downloaded ", filePath)
+	mmsData, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		log.Print("Issues while reading from downloaded file: ", err)
+		return
+	}
+	mmsRetConfHdr := mms.NewMRetrieveConf(filePath)
+	dec = mms.NewDecoder(mmsData)
+	if err := dec.Decode(mmsRetConfHdr); err != nil {
+		log.Print("Unable to decode m-retrieve.conf: ", err)
+		return
+	}
+	//TODO send m-notifyresp.ind
+	if telepathyService != nil {
+		telepathyService.MessageAdded(mmsRetConfHdr)
+	} else {
+		log.Print("Not sending recently retrieved message")
 	}
 }
