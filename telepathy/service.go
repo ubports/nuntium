@@ -111,8 +111,8 @@ func (service *MMSService) MessageAdded(mRetConf *mms.MRetrieveConf) error {
 	if err != nil {
 		return err
 	}
-	signal := dbus.NewSignalMessage(payload.Path, MMS_SERVICE_DBUS_IFACE, MESSAGE_ADDED)
-	if err := signal.AppendArgs(payload); err != nil {
+	signal := dbus.NewSignalMessage(service.Payload.Path, MMS_SERVICE_DBUS_IFACE, MESSAGE_ADDED)
+	if err := signal.AppendArgs(payload.Path, payload.Properties); err != nil {
 		return err
 	}
 	if err := service.conn.Send(signal); err != nil {
