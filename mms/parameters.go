@@ -61,10 +61,14 @@ const (
 )
 
 const (
-	TEXT_MAX = 127
-	TEXT_MIN = 32
+	TEXT_MAX         = 127
+	TEXT_MIN         = 32
 	SHORT_LENGTH_MAX = 30
-	LENGTH_QUOTE = 31
+	LENGTH_QUOTE     = 31
+)
+
+const (
+	ANY_CHARSET = 128
 )
 
 var CONTENT_TYPES []string = []string{

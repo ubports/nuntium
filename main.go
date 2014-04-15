@@ -74,7 +74,7 @@ func main() {
 						log.Fatal(err)
 					}
 					telepathyService = nil
-				case <- modems[i].ReadySignal:
+				case <-modems[i].ReadySignal:
 					if err := modems[i].RegisterAgent(conn); err != nil {
 						log.Fatal("Error while registering agent: ", err)
 					}
