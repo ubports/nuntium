@@ -11,10 +11,11 @@ import (
 func main() {
 	var targetPath string
 	if len(os.Args) < 2 {
-		fmt.Println("Missing filepath to MMS to decode")
-		os.Exit(1)
+		usage()
 	} else if len(os.Args) == 3 {
 		targetPath = os.Args[2]
+	} else if len(os.Args) > 3 {
+		usage()
 	}
 
 	mmsFile := os.Args[1]
@@ -40,6 +41,11 @@ func main() {
 		fmt.Println("Saving to", targetPath)
 		writeParts(targetPath, retConfHdr.DataParts)
 	}
+}
+
+func usage() {
+	fmt.Printf("Usage: %s [mms] [decode dir]\n", os.Args[0])
+	os.Exit(1)
 }
 
 func writeParts(targetPath string, parts []mms.ContentType) {
