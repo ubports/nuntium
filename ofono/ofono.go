@@ -61,6 +61,7 @@ type OfonoPushNotification struct {
 }
 
 type Modem struct {
+	conn            *dbus.Connection
 	modem           dbus.ObjectPath
 	agentRegistered bool
 	messageChannel  chan *dbus.Message
@@ -100,6 +101,7 @@ func NewModems(conn *dbus.Connection) ([]*Modem, error) {
 	}
 	for _, modemReply := range modemsReply {
 		modem := new(Modem)
+		modem.conn = conn
 		modem.modem = modemReply.ObjectPath
 		modem.ReadySignal = make(chan bool)
 		modem.IdentityAdded = make(chan string)
@@ -109,8 +111,8 @@ func NewModems(conn *dbus.Connection) ([]*Modem, error) {
 	return modems, nil
 }
 
-func (modem *Modem) WatchPushInterface(conn *dbus.Connection) error {
-	if v, err := modem.getProperty(conn, MODEM_INTERFACE, "Interfaces"); err == nil {
+func (modem *Modem) WatchPushInterface() error {
+	if v, err := modem.getProperty(MODEM_INTERFACE, "Interfaces"); err == nil {
 		availableInterfaces := reflect.ValueOf(v.Value)
 		for i := 0; i < availableInterfaces.Len(); i++ {
 			interfaceName := reflect.ValueOf(availableInterfaces.Index(i).Interface().(string)).String()
@@ -123,7 +125,7 @@ func (modem *Modem) WatchPushInterface(conn *dbus.Connection) error {
 	} else {
 		log.Print("Initial value couldn't be retrieved: ", err)
 	}
-	propModemSignal, err := connectToPropertySignal(conn, modem.modem, MODEM_INTERFACE)
+	propModemSignal, err := connectToPropertySignal(modem.conn, modem.modem, MODEM_INTERFACE)
 	if err != nil {
 		return err
 	}
@@ -193,15 +195,15 @@ func getOfonoProps(obj *dbus.ObjectProxy, iface, method string) (oProps []OfonoC
 //If the context is already active it's a nop.
 //Returns either the type=internet context or the type=mms, if none is found
 //an error is returned.
-func (modem *Modem) ActivateMMSContext(conn *dbus.Connection) (OfonoContext, error) {
-	context, err := modem.GetMMSContext(conn)
+func (modem *Modem) ActivateMMSContext() (OfonoContext, error) {
+	context, err := modem.GetMMSContext()
 	if err != nil {
 		return OfonoContext{}, err
 	}
 	if context.isActive() {
 		return context, nil
 	}
-	obj := conn.Object("org.ofono", context.ObjectPath)
+	obj := modem.conn.Object("org.ofono", context.ObjectPath)
 	_, err = obj.Call(CONNECTION_CONTEXT_INTERFACE, "SetProperty", "Active", dbus.Variant{true})
 	if err != nil {
 		return OfonoContext{}, fmt.Errorf("Cannot Activate interface on %s: %s", context.ObjectPath, err)
@@ -245,8 +247,8 @@ func (oContext OfonoContext) GetProxy() (proxyInfo ProxyInfo, err error) {
 //
 //Returns either the type=internet context or the type=mms, if none is found
 //an error is returned.
-func (modem *Modem) GetMMSContext(conn *dbus.Connection) (OfonoContext, error) {
-	rilObj := conn.Object("org.ofono", modem.modem)
+func (modem *Modem) GetMMSContext() (OfonoContext, error) {
+	rilObj := modem.conn.Object("org.ofono", modem.modem)
 	contexts, err := getOfonoProps(rilObj, CONNECTION_MANAGER_INTERFACE, "GetContexts")
 	if err != nil {
 		return OfonoContext{}, err
@@ -283,9 +285,9 @@ func (modem *Modem) GetMMSContext(conn *dbus.Connection) (OfonoContext, error) {
 	return OfonoContext{}, errors.New("No mms contexts found")
 }
 
-func (modem *Modem) getProperty(conn *dbus.Connection, interfaceName, propertyName string) (*dbus.Variant, error) {
+func (modem *Modem) getProperty(interfaceName, propertyName string) (*dbus.Variant, error) {
 	errorString := "Cannot retrieve %s from %s for %s: %s"
-	rilObj := conn.Object(OFONO_SENDER, modem.modem)
+	rilObj := modem.conn.Object(OFONO_SENDER, modem.modem)
 	if reply, err := rilObj.Call(interfaceName, "GetProperties"); err == nil {
 		var property PropertiesType
 		if err := reply.Args(&property); err != nil {
@@ -300,15 +302,15 @@ func (modem *Modem) getProperty(conn *dbus.Connection, interfaceName, propertyNa
 	}
 }
 
-func (modem *Modem) GetIdentity(conn *dbus.Connection) error {
-	if v, err := modem.getProperty(conn, SIM_MANAGER_INTERFACE, "SubscriberIdentity"); err == nil {
+func (modem *Modem) GetIdentity() error {
+	if v, err := modem.getProperty(SIM_MANAGER_INTERFACE, "SubscriberIdentity"); err == nil {
 		modem.identity = reflect.ValueOf(v.Value).String()
 		if modem.identity != "" {
 			log.Print("Updating id ", modem.identity)
 			modem.IdentityAdded <- modem.identity
 		}
 	}
-	propSimSignal, err := connectToPropertySignal(conn, modem.modem, SIM_MANAGER_INTERFACE)
+	propSimSignal, err := connectToPropertySignal(modem.conn, modem.modem, SIM_MANAGER_INTERFACE)
 	if err != nil {
 		return err
 	}
@@ -341,7 +343,7 @@ func (modem *Modem) GetIdentity(conn *dbus.Connection) error {
 	return nil
 }
 
-func (modem *Modem) RegisterAgent(conn *dbus.Connection) error {
+func (modem *Modem) RegisterAgent() error {
 	if modem.agentRegistered {
 		log.Print("Agent already registered")
 		return nil
@@ -349,7 +351,7 @@ func (modem *Modem) RegisterAgent(conn *dbus.Connection) error {
 	//it seems that ofono is still doing stuff after advertising the interface as available
 	//we will need to sleep a bit
 	log.Print("Registering Agent for", modem.modem, " on path ", AGENT_TAG)
-	obj := conn.Object("org.ofono", modem.modem)
+	obj := modem.conn.Object("org.ofono", modem.modem)
 	_, err := obj.Call(PUSH_NOTIFICATION_INTERFACE, "RegisterAgent", AGENT_TAG)
 	if err != nil {
 		return fmt.Errorf("Cannot register agent for %s: %s", modem.modem, err)
@@ -357,27 +359,27 @@ func (modem *Modem) RegisterAgent(conn *dbus.Connection) error {
 	modem.agentRegistered = true
 	modem.PushChannel = make(chan *PushEvent)
 	modem.messageChannel = make(chan *dbus.Message)
-	go modem.watchDBusMethodCalls(conn)
-	conn.RegisterObjectPath(AGENT_TAG, modem.messageChannel)
+	go modem.watchDBusMethodCalls()
+	modem.conn.RegisterObjectPath(AGENT_TAG, modem.messageChannel)
 	log.Print("Agent Registered for ", modem.modem, " on path ", AGENT_TAG)
 	return nil
 }
 
-func (modem *Modem) UnregisterAgent(conn *dbus.Connection) error {
+func (modem *Modem) UnregisterAgent() error {
 	log.Print("Unregistering agent on ", modem.modem)
-	obj := conn.Object("org.ofono", modem.modem)
+	obj := modem.conn.Object("org.ofono", modem.modem)
 	_, err := obj.Call(PUSH_NOTIFICATION_INTERFACE, "UnregisterAgent", AGENT_TAG)
 	if err != nil {
 		log.Print("Unregister failed ", err)
 		return err
 	}
-	modem.Reset(conn)
+	modem.Reset()
 	return nil
 }
 
-func (modem *Modem) Reset(conn *dbus.Connection) {
+func (modem *Modem) Reset() {
 	log.Print("Resetting modem")
-	conn.UnregisterObjectPath(AGENT_TAG)
+	modem.conn.UnregisterObjectPath(AGENT_TAG)
 	modem.agentRegistered = false
 	close(modem.PushChannel)
 	close(modem.messageChannel)
@@ -386,7 +388,7 @@ func (modem *Modem) Reset(conn *dbus.Connection) {
 	modem.ready = false
 }
 
-func (modem *Modem) watchDBusMethodCalls(conn *dbus.Connection) {
+func (modem *Modem) watchDBusMethodCalls() {
 	var reply *dbus.Message
 	for msg := range modem.messageChannel {
 		switch {
@@ -396,12 +398,12 @@ func (modem *Modem) watchDBusMethodCalls(conn *dbus.Connection) {
 			log.Print("Received Release")
 			reply = dbus.NewMethodReturnMessage(msg)
 			fmt.Println("Identity before reset", modem.identity)
-			modem.Reset(conn)
+			modem.Reset()
 		default:
 			log.Print("Received unkown method call on", msg.Interface, msg.Member)
 			reply = dbus.NewErrorMessage(msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method")
 		}
-		if err := conn.Send(reply); err != nil {
+		if err := modem.conn.Send(reply); err != nil {
 			log.Print("Could not send reply: ", err)
 		}
 	}

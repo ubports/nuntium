@@ -77,18 +77,18 @@ func main() {
 					}
 					telepathyService = nil
 				case <-modems[i].ReadySignal:
-					if err := modems[i].RegisterAgent(conn); err != nil {
+					if err := modems[i].RegisterAgent(); err != nil {
 						log.Fatal("Error while registering agent: ", err)
 					}
 				case pushMsg := <-modems[i].PushChannel:
-					go processMessage(conn, pushMsg, telepathyService)
+					go processMessage(pushMsg, telepathyService)
 				}
 			}
 		}()
-		if err := modems[i].WatchPushInterface(conn); err != nil {
+		if err := modems[i].WatchPushInterface(); err != nil {
 			log.Fatal(err)
 		}
-		if err := modems[i].GetIdentity(conn); err != nil {
+		if err := modems[i].GetIdentity(); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -103,7 +103,7 @@ func main() {
 	m.Start()
 }
 
-func processMessage(conn *dbus.Connection, pushMsg *ofono.PushEvent, telepathyService *telepathy.MMSService) {
+func processMessage(pushMsg *ofono.PushEvent, telepathyService *telepathy.MMSService) {
 	if pushMsg == nil {
 		return
 	}
@@ -114,7 +114,7 @@ func processMessage(conn *dbus.Connection, pushMsg *ofono.PushEvent, telepathySe
 		log.Print("Unable to decode m-notification.ind: ", err)
 		return
 	}
-	mmsContext, err := pushMsg.Modem.ActivateMMSContext(conn)
+	mmsContext, err := pushMsg.Modem.ActivateMMSContext()
 	if err != nil {
 		log.Print("Cannot activate ofono context: ", err)
 		return
