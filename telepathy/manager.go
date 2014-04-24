@@ -23,8 +23,9 @@ package telepathy
 
 import (
 	"fmt"
-	"launchpad.net/go-dbus/v1"
 	"log"
+
+	"launchpad.net/go-dbus/v1"
 )
 
 type MMSManager struct {

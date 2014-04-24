@@ -3,9 +3,10 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
-	"launchpad.net/nuntium/mms"
 	"os"
 	"path/filepath"
+
+	"launchpad.net/nuntium/mms"
 )
 
 func main() {

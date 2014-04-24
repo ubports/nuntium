@@ -24,8 +24,9 @@ package ofono
 import (
 	"errors"
 	"fmt"
-	"launchpad.net/nuntium/mms"
 	"reflect"
+
+	"launchpad.net/nuntium/mms"
 )
 
 type PDU byte

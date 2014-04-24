@@ -24,8 +24,9 @@ package udm
 
 import (
 	"errors"
-	"launchpad.net/go-dbus/v1"
 	"runtime"
+
+	"launchpad.net/go-dbus/v1"
 )
 
 const (

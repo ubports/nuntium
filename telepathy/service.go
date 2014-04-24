@@ -23,12 +23,13 @@ package telepathy
 
 import (
 	"fmt"
-	"launchpad.net/go-dbus/v1"
-	"launchpad.net/nuntium/mms"
 	"log"
 	"os"
 	"strings"
 	"time"
+
+	"launchpad.net/go-dbus/v1"
+	"launchpad.net/nuntium/mms"
 )
 
 //ServicePayload is used to build the dbus messages; this is a workaround as v1 of go-dbus

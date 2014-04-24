@@ -23,13 +23,15 @@ package main
 
 import (
 	"io/ioutil"
-	"launchpad.net/go-dbus/v1"
-	"launchpad.net/nuntium/mms"
-	"launchpad.net/nuntium/ofono"
-	"launchpad.net/nuntium/telepathy"
 	"log"
 	"os"
 	"syscall"
+
+	"launchpad.net/go-dbus/v1"
+
+	"launchpad.net/nuntium/mms"
+	"launchpad.net/nuntium/ofono"
+	"launchpad.net/nuntium/telepathy"
 )
 
 func main() {

@@ -298,7 +298,7 @@ func (dec *MMSDecoder) ReadLongInteger(reflectedPdu *reflect.Value, hdr string) 
 }
 
 //getParam reads the next parameter to decode and returns it if it's well known
-//or just decodes and discards if it's application specific, if the latter is 
+//or just decodes and discards if it's application specific, if the latter is
 //the case it also returns false
 func (dec *MMSDecoder) getParam() (byte, bool, error) {
 	if dec.Data[dec.Offset]&0x80 != 0 {

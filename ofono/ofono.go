@@ -25,12 +25,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"launchpad.net/go-dbus/v1"
 	"log"
 	"net"
 	"reflect"
 	"strconv"
 	"strings"
+
+	"launchpad.net/go-dbus/v1"
 )
 
 const (

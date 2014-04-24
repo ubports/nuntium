@@ -23,9 +23,10 @@ package mms
 
 import (
 	"fmt"
-	"launchpad.net/nuntium/udm"
 	"log"
 	"time"
+
+	"launchpad.net/nuntium/udm"
 )
 
 func (pdu *MNotificationInd) DownloadContent(proxyHostname string, proxyPort int32) (string, error) {
