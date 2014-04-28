@@ -21,6 +21,11 @@
 
 package mms
 
+import (
+	"fmt"
+	"os"
+)
+
 // MMS Field names from OMA-WAP-MMS section 7.3
 const (
 	BCC                           = 0x01
@@ -99,6 +104,7 @@ const (
 // OMA-WAP-MMS-ENC section 6.2
 type MNotificationInd struct {
 	MMSReader
+	UUID                                 string
 	Type, Version, Class, DeliveryReport byte
 	ReplyCharging, ReplyChargingDeadline byte
 	ReplyChargingId                      string
@@ -110,6 +116,7 @@ type MNotificationInd struct {
 // MNotification in holds a m-notifyresp.ind message defined in
 // OMA-WAP-MMS-ENC-v1.1 section 6.2
 type MNotifyRespInd struct {
+	UUID                   string
 	Type, Version, Status  byte
 	TransactionId, Subject string
 	ReportAllowed          bool
@@ -119,6 +126,7 @@ type MNotifyRespInd struct {
 // OMA-WAP-MMS-ENC-v1.1 section 6.3
 type MRetrieveConf struct {
 	MMSReader
+	UUID                                       string
 	Type, Version, Status, Class, Priority     byte
 	ReplyCharging, ReplyChargingDeadline       byte
 	ReplyChargingId                            string
@@ -135,9 +143,23 @@ type MRetrieveConf struct {
 type MMSReader interface{}
 
 func NewMNotificationInd() *MNotificationInd {
-	return &MNotificationInd{Type: TYPE_NOTIFICATION_IND}
+	return &MNotificationInd{Type: TYPE_NOTIFICATION_IND, UUID: genUUID()}
 }
 
-func NewMRetrieveConf(filePath string) *MRetrieveConf {
-	return &MRetrieveConf{Type: TYPE_RETRIEVE_CONF}
+func NewMRetrieveConf(uuid string) *MRetrieveConf {
+	return &MRetrieveConf{Type: TYPE_RETRIEVE_CONF, UUID: uuid}
+}
+
+func genUUID() string {
+	var id string
+	random, err := os.Open("/dev/urandom")
+	if err != nil {
+		id = "1234567890ABCDEF"
+	} else {
+		defer random.Close()
+		b := make([]byte, 16)
+		random.Read(b)
+		id = fmt.Sprintf("%x", b)
+	}
+	return id
 }

@@ -26,17 +26,18 @@ import (
 	"log"
 	"time"
 
+	"launchpad.net/nuntium/storage"
 	"launchpad.net/nuntium/udm"
 )
 
-func (pdu *MNotificationInd) DownloadContent(proxyHostname string, proxyPort int32) (string, error) {
+func (pdu *MNotificationInd) DownloadContent(proxyHostname string, proxyPort int32) error {
 	downloadManager, err := udm.NewDownloadManager()
 	if err != nil {
-		return "", err
+		return err
 	}
 	download, err := downloadManager.CreateMmsDownload(pdu.ContentLocation, proxyHostname, proxyPort)
 	if err != nil {
-		return "", err
+		return err
 	}
 	f := download.Finished()
 	p := download.DownloadProgress()
@@ -49,11 +50,12 @@ func (pdu *MNotificationInd) DownloadContent(proxyHostname string, proxyPort int
 			log.Print("Progress:", progress.Total, progress.Received)
 		case downloadFilePath := <-f:
 			log.Print("File downloaded to ", downloadFilePath)
-			return downloadFilePath, nil
+			storage.UpdateDownloaded(pdu.UUID, downloadFilePath)
+			return nil
 		case <-time.After(3 * time.Minute):
-			return "", fmt.Errorf("Download timeout exceeded while fetching %s", pdu.ContentLocation)
+			return fmt.Errorf("Download timeout exceeded while fetching %s", pdu.ContentLocation)
 		case err := <-e:
-			return "", err
+			return err
 		}
 	}
 }

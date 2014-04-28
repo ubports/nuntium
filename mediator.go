@@ -27,6 +27,7 @@ import (
 
 	"launchpad.net/nuntium/mms"
 	"launchpad.net/nuntium/ofono"
+	"launchpad.net/nuntium/storage"
 	"launchpad.net/nuntium/telepathy"
 )
 
@@ -127,6 +128,7 @@ func (mediator *Mediator) handleMNotificationInd(pushMsg *ofono.PushPDU) {
 		log.Print("Unable to decode m-notification.ind: ", err)
 		return
 	}
+	storage.Create(mNotificationInd.UUID, mNotificationInd.ContentLocation)
 	mediator.NewMNotificationInd <- mNotificationInd
 }
 
@@ -145,26 +147,35 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		log.Print("Error retrieving proxy: ", err)
 		return
 	}
-	filePath, err := mNotificationInd.DownloadContent(proxy.Host, int32(proxy.Port))
-	if err != nil {
+	if err := mNotificationInd.DownloadContent(proxy.Host, int32(proxy.Port)); err != nil {
 		//TODO telepathy service signal the download error
 		log.Print("Download issues: ", err)
 		return
 	}
-	log.Print("Downloaded ", filePath)
-	mediator.NewMRetrieveConfFile <- filePath
+	mediator.NewMRetrieveConfFile <- mNotificationInd.UUID
 }
 
-func (mediator *Mediator) handleMRetrieveConf(filePath string) {
+func (mediator *Mediator) handleMRetrieveConf(uuid string) {
+	var filePath string
+	if f, err := storage.GetMMS(uuid); err == nil {
+		filePath = f
+	} else {
+		log.Print("Unable to retrieve MMS: ", err)
+		return
+	}
 	mmsData, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		log.Print("Issues while reading from downloaded file: ", err)
 		return
 	}
-	mRetrieveConf := mms.NewMRetrieveConf(filePath)
+	mRetrieveConf := mms.NewMRetrieveConf(uuid)
 	dec := mms.NewDecoder(mmsData)
 	if err := dec.Decode(mRetrieveConf); err != nil {
 		log.Print("Unable to decode m-retrieve.conf: ", err)
+		return
+	}
+	if err := storage.UpdateRetrieved(uuid); err != nil {
+		log.Print("Can't update mms status: ", err)
 		return
 	}
 	if mediator.telepathyService != nil {
