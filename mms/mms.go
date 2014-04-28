@@ -119,6 +119,7 @@ type MNotifyRespInd struct {
 // OMA-WAP-MMS-ENC-v1.1 section 6.3
 type MRetrieveConf struct {
 	MMSReader
+	FilePath                                   string
 	Type, Version, Status, Class, Priority     byte
 	ReplyCharging, ReplyChargingDeadline       byte
 	ReplyChargingId                            string
