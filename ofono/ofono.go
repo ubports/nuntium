@@ -65,17 +65,12 @@ type Modem struct {
 	modem           dbus.ObjectPath
 	agentRegistered bool
 	messageChannel  chan *dbus.Message
-	PushChannel     chan *PushEvent
+	PushChannel     chan *PushPDU
 	identity        string
 	IdentityAdded   chan string
 	IdentityRemoved chan string
 	ReadySignal     chan bool
 	ready           bool
-}
-
-type PushEvent struct {
-	PDU   *PushPDU
-	Modem *Modem
 }
 
 type ProxyInfo struct {
@@ -357,7 +352,7 @@ func (modem *Modem) RegisterAgent() error {
 		return fmt.Errorf("Cannot register agent for %s: %s", modem.modem, err)
 	}
 	modem.agentRegistered = true
-	modem.PushChannel = make(chan *PushEvent)
+	modem.PushChannel = make(chan *PushPDU)
 	modem.messageChannel = make(chan *dbus.Message)
 	go modem.watchDBusMethodCalls()
 	modem.conn.RegisterObjectPath(AGENT_TAG, modem.messageChannel)
@@ -382,7 +377,9 @@ func (modem *Modem) Reset() {
 	modem.conn.UnregisterObjectPath(AGENT_TAG)
 	modem.agentRegistered = false
 	close(modem.PushChannel)
+	modem.PushChannel = nil
 	close(modem.messageChannel)
+	modem.messageChannel = nil
 	modem.IdentityRemoved <- modem.identity
 	modem.identity = ""
 	modem.ready = false
@@ -425,7 +422,7 @@ func (modem *Modem) notificationReceived(msg *dbus.Message) (reply *dbus.Message
 		}
 		// TODO later switch on ApplicationId and ContentType to different channels
 		if pdu.ApplicationId == 0x04 && pdu.ContentType == "application/vnd.wap.mms-message" {
-			modem.PushChannel <- &PushEvent{PDU: pdu, Modem: modem}
+			modem.PushChannel <- pdu
 		} else {
 			log.Print("Unhandled push pdu", pdu)
 		}
