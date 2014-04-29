@@ -30,14 +30,14 @@ import (
 	"launchpad.net/go-xdg"
 )
 
-const NAME = "nuntium"
+const SUBPATH = "nuntium/store"
 
 func Create(uuid, contentLocation string) error {
 	state := MMSState{
 		State:           NOTIFICATION,
 		ContentLocation: contentLocation,
 	}
-	storePath, err := xdg.Data.Ensure(path.Join(NAME, uuid, ".db"))
+	storePath, err := xdg.Data.Ensure(path.Join(SUBPATH, uuid+".db"))
 	if err != nil {
 		return err
 	}
@@ -45,7 +45,7 @@ func Create(uuid, contentLocation string) error {
 }
 
 func UpdateDownloaded(uuid, filePath string) error {
-	mmsPath, err := xdg.Data.Ensure(path.Join(NAME, uuid))
+	mmsPath, err := xdg.Data.Ensure(path.Join(SUBPATH, uuid+".mms"))
 	if err != nil {
 		return err
 	}
@@ -56,7 +56,7 @@ func UpdateDownloaded(uuid, filePath string) error {
 	state := MMSState{
 		State: DOWNLOADED,
 	}
-	storePath, err := xdg.Data.Find(path.Join(NAME, uuid, ".db"))
+	storePath, err := xdg.Data.Find(path.Join(SUBPATH, uuid+".db"))
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func UpdateRetrieved(uuid string) error {
 	state := MMSState{
 		State: RETRIEVED,
 	}
-	storePath, err := xdg.Data.Find(path.Join(NAME, uuid, ".db"))
+	storePath, err := xdg.Data.Find(path.Join(SUBPATH, uuid+".db"))
 	if err != nil {
 		return err
 	}
@@ -75,7 +75,7 @@ func UpdateRetrieved(uuid string) error {
 }
 
 func GetMMS(uuid string) (string, error) {
-	return xdg.Data.Ensure(path.Join(NAME, uuid))
+	return xdg.Data.Find(path.Join(SUBPATH, uuid+".mms"))
 }
 
 func writeState(state MMSState, storePath string) error {
