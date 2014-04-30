@@ -147,10 +147,12 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		log.Print("Error retrieving proxy: ", err)
 		return
 	}
-	if err := mNotificationInd.DownloadContent(proxy.Host, int32(proxy.Port)); err != nil {
+	if filePath, err := mNotificationInd.DownloadContent(proxy.Host, int32(proxy.Port)); err != nil {
 		//TODO telepathy service signal the download error
 		log.Print("Download issues: ", err)
 		return
+	} else {
+		storage.UpdateDownloaded(mNotificationInd.UUID, filePath)
 	}
 	mediator.NewMRetrieveConfFile <- mNotificationInd.UUID
 }
