@@ -100,7 +100,35 @@ const (
 	CLASS_AUTO          = 0x83
 )
 
-// MNotification in holds a m-notification.ind message defined in
+// Report Allowed defined in OMA-WAP-MMS 7.2.19
+const (
+	REPORT_ALLOWED_YES = 128
+	REPORT_ALLOWED_NO  = 129
+)
+
+// Response Status defined in OMA-WAP-MMS section 7.2.20
+const (
+	RESPONSE_STATUS_OK                               = 128
+	RESPONSE_STATUS_ERROR_UNSPECIFIED                = 129
+	RESPONSE_STATUS_ERROR_SERVICE_DENIED             = 130
+	RESPONSE_STATUS_ERROR_MESSAGE_FORMAT_CORRUPT     = 131
+	RESPONSE_STATUS_ERROR_SENDING_ADDRESS_UNRESOLVED = 132
+	RESPONSE_STATUS_ERROR_MESSAGE_NOT_FOUND          = 133
+	RESPONSE_STATUS_ERROR_NETWORK_PROBLEM            = 134
+	RESPONSE_STATUS_ERROR_CONTENT_NOT_ACCEPTED       = 135
+	RESPONSE_STATUS_ERROR_UNSUPPORTED_MESSAGE        = 136
+)
+
+// Status defined in OMA-WAP-MMS section 7.2.23
+const (
+	STATUS_EXPIRED      = 128
+	STATUS_RETRIEVED    = 129
+	STATUS_REJECTED     = 130
+	STATUS_DEFERRED     = 131
+	STATUS_UNRECOGNIZED = 132
+)
+
+// MNotificationInd holds a m-notification.ind message defined in
 // OMA-WAP-MMS-ENC section 6.2
 type MNotificationInd struct {
 	MMSReader
@@ -113,16 +141,17 @@ type MNotificationInd struct {
 	Expiry, Size                         uint64
 }
 
-// MNotification in holds a m-notifyresp.ind message defined in
+// MNotificationInd holds a m-notifyresp.ind message defined in
 // OMA-WAP-MMS-ENC-v1.1 section 6.2
 type MNotifyRespInd struct {
-	UUID                   string
-	Type, Version, Status  byte
-	TransactionId, Subject string
-	ReportAllowed          bool
+	MMSWriter
+	UUID                  string
+	Type, Version, Status byte
+	TransactionId         string
+	ReportAllowed         bool
 }
 
-// MRetrieveConf in holds a m-retrieve.conf message defined in
+// MRetrieveConf holds a m-retrieve.conf message defined in
 // OMA-WAP-MMS-ENC-v1.1 section 6.3
 type MRetrieveConf struct {
 	MMSReader
@@ -141,9 +170,36 @@ type MRetrieveConf struct {
 }
 
 type MMSReader interface{}
+type MMSWriter interface{}
 
 func NewMNotificationInd() *MNotificationInd {
 	return &MNotificationInd{Type: TYPE_NOTIFICATION_IND, UUID: genUUID()}
+}
+
+func (mNotificationInd *MNotificationInd) NewMNotifyRespInd(status byte, deliveryReport bool) *MNotifyRespInd {
+	return &MNotifyRespInd{
+		Type:          TYPE_NOTIFYRESP_IND,
+		UUID:          mNotificationInd.UUID,
+		TransactionId: mNotificationInd.TransactionId,
+		Version:       mNotificationInd.Version,
+		Status:        status,
+		ReportAllowed: deliveryReport,
+	}
+}
+
+func (mRetrieveConf *MRetrieveConf) NewMNotifyRespInd(deliveryReport bool) *MNotifyRespInd {
+	return &MNotifyRespInd{
+		Type:          TYPE_NOTIFYRESP_IND,
+		UUID:          mRetrieveConf.UUID,
+		TransactionId: mRetrieveConf.TransactionId,
+		Version:       mRetrieveConf.Version,
+		Status:        STATUS_RETRIEVED,
+		ReportAllowed: deliveryReport,
+	}
+}
+
+func NewMNotifyRespInd() *MNotifyRespInd {
+	return &MNotifyRespInd{Type: TYPE_NOTIFYRESP_IND}
 }
 
 func NewMRetrieveConf(uuid string) *MRetrieveConf {

@@ -44,6 +44,14 @@ func Create(uuid, contentLocation string) error {
 	return writeState(state, storePath)
 }
 
+func CreateResponseFile(uuid string) (*os.File, error) {
+	filePath, err := xdg.Cache.Ensure(path.Join(SUBPATH, uuid+".m-notifyresp.ind"))
+	if err != nil {
+		return nil, err
+	}
+	return os.Create(filePath)
+}
+
 func UpdateDownloaded(uuid, filePath string) error {
 	mmsPath, err := xdg.Data.Ensure(path.Join(SUBPATH, uuid+".mms"))
 	if err != nil {

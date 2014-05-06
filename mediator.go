@@ -24,6 +24,7 @@ package main
 import (
 	"io/ioutil"
 	"log"
+	"os"
 
 	"launchpad.net/nuntium/mms"
 	"launchpad.net/nuntium/ofono"
@@ -35,6 +36,7 @@ type Mediator struct {
 	modem                *ofono.Modem
 	telepathyService     *telepathy.MMSService
 	NewMNotificationInd  chan *mms.MNotificationInd
+	NewMNotifyRespInd    chan *mms.MNotifyRespInd
 	NewMRetrieveConf     chan *mms.MRetrieveConf
 	NewMRetrieveConfFile chan string
 }
@@ -52,6 +54,7 @@ func NewMediator(modem *ofono.Modem) *Mediator {
 	mediator.NewMNotificationInd = make(chan *mms.MNotificationInd)
 	mediator.NewMRetrieveConf = make(chan *mms.MRetrieveConf)
 	mediator.NewMRetrieveConfFile = make(chan string)
+	mediator.NewMNotifyRespInd = make(chan *mms.MNotifyRespInd)
 	return mediator
 }
 
@@ -79,7 +82,9 @@ func (mediator *Mediator) init(mmsManager *telepathy.MMSManager) {
 		case mRetrieveConfFilePath := <-mediator.NewMRetrieveConfFile:
 			go mediator.handleMRetrieveConf(mRetrieveConfFilePath)
 		case mRetrieveConf := <-mediator.NewMRetrieveConf:
-			go mediator.sendMNotifyRespInd(mRetrieveConf)
+			go mediator.handleRetrieved(mRetrieveConf)
+		case mNotifyRespInd := <-mediator.NewMNotifyRespInd:
+			go mediator.sendNotifyRespInd(mNotifyRespInd)
 		case id := <-mediator.modem.IdentityAdded:
 			var err error
 			mediator.telepathyService, err = mmsManager.AddService(id, useDeliveryReports)
@@ -176,10 +181,7 @@ func (mediator *Mediator) handleMRetrieveConf(uuid string) {
 		log.Print("Unable to decode m-retrieve.conf: ", err)
 		return
 	}
-	if err := storage.UpdateRetrieved(uuid); err != nil {
-		log.Print("Can't update mms status: ", err)
-		return
-	}
+	mediator.NewMRetrieveConf <- mRetrieveConf
 	if mediator.telepathyService != nil {
 		mediator.telepathyService.MessageAdded(mRetrieveConf)
 	} else {
@@ -187,6 +189,48 @@ func (mediator *Mediator) handleMRetrieveConf(uuid string) {
 	}
 }
 
-func (mediator *Mediator) sendMNotifyRespInd(mRetrieveConf *mms.MRetrieveConf) {
+func (mediator *Mediator) handleRetrieved(mRetrieveConf *mms.MRetrieveConf) {
 	//TODO chann for send m-notifyresp.ind
+	mNotifyRespInd := mRetrieveConf.NewMNotifyRespInd(useDeliveryReports)
+	if err := storage.UpdateRetrieved(mNotifyRespInd.UUID); err != nil {
+		log.Print("Can't update mms status: ", err)
+		return
+	}
+	mediator.NewMNotifyRespInd <- mNotifyRespInd
+}
+
+func (mediator *Mediator) sendNotifyRespInd(mNotifyRespInd *mms.MNotifyRespInd) {
+	f, err := storage.CreateResponseFile(mNotifyRespInd.UUID)
+	if err != nil {
+		log.Print("Unable to create m-notifyresp.ind file for ", mNotifyRespInd.UUID)
+		return
+	}
+	enc := mms.NewEncoder(f)
+	if err := enc.Encode(mNotifyRespInd); err != nil {
+		log.Print("Unable to encode m-notifyresp.ind for ", mNotifyRespInd.UUID)
+		f.Close()
+		return
+	}
+	f.Close()
+	defer os.Remove(f.Name())
+	if err := mediator.uploadFile(f.Name()); err != nil {
+		log.Printf("Cannot upload m-notifyresp.ind to message center for ", mNotifyRespInd.UUID)
+	}
+}
+
+func (mediator *Mediator) uploadFile(filePath string) error {
+	// TODO Upload file part
+	/*
+		mmsContext, err := mediator.modem.ActivateMMSContext()
+		if err != nil {
+			log.Print("Cannot activate ofono context: ", err)
+			return
+		}
+		proxy, err := mmsContext.GetProxy()
+		if err != nil {
+			log.Print("Error retrieving proxy: ", err)
+			return
+		}
+	*/
+	return nil
 }
