@@ -200,20 +200,23 @@ func (mediator *Mediator) handleRetrieved(mRetrieveConf *mms.MRetrieveConf) {
 }
 
 func (mediator *Mediator) sendNotifyRespInd(mNotifyRespInd *mms.MNotifyRespInd) {
-	f, err := storage.CreateResponseFile(mNotifyRespInd.UUID)
-	if err != nil {
-		log.Print("Unable to create m-notifyresp.ind file for ", mNotifyRespInd.UUID)
-		return
-	}
-	enc := mms.NewEncoder(f)
-	if err := enc.Encode(mNotifyRespInd); err != nil {
-		log.Print("Unable to encode m-notifyresp.ind for ", mNotifyRespInd.UUID)
-		f.Close()
-		return
-	}
-	f.Close()
-	defer os.Remove(f.Name())
-	if err := mediator.uploadFile(f.Name()); err != nil {
+	var mNotifyRespIndFile string
+	func() {
+		f, err := storage.CreateResponseFile(mNotifyRespInd.UUID)
+		if err != nil {
+			log.Print("Unable to create m-notifyresp.ind file for ", mNotifyRespInd.UUID)
+			return
+		}
+		defer f.Close()
+		enc := mms.NewEncoder(f)
+		if err := enc.Encode(mNotifyRespInd); err != nil {
+			log.Print("Unable to encode m-notifyresp.ind for ", mNotifyRespInd.UUID)
+			return
+		}
+		mNotifyRespIndFile = f.Name()
+	}()
+	defer os.Remove(mNotifyRespIndFile)
+	if err := mediator.uploadFile(mNotifyRespIndFile); err != nil {
 		log.Printf("Cannot upload m-notifyresp.ind to message center for ", mNotifyRespInd.UUID)
 	}
 }
