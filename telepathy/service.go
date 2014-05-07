@@ -22,14 +22,13 @@
 package telepathy
 
 import (
-	"fmt"
 	"log"
-	"os"
 	"strings"
 	"time"
 
 	"launchpad.net/go-dbus/v1"
 	"launchpad.net/nuntium/mms"
+	"launchpad.net/nuntium/storage"
 )
 
 //ServicePayload is used to build the dbus messages; this is a workaround as v1 of go-dbus
@@ -158,17 +157,23 @@ func (service *MMSService) parseMessage(mRetConf *mms.MRetrieveConf) (ServicePay
 	var attachments []Attachment
 	dataParts := mRetConf.GetDataParts()
 	for i := range dataParts {
+		var filePath string
+		if f, err := storage.GetMMS(mRetConf.UUID); err == nil {
+			filePath = f
+		} else {
+			return ServicePayload{}, err
+		}
 		attachment := Attachment{
 			Id:        dataParts[i].ContentId,
 			MediaType: dataParts[i].MediaType,
-			FilePath:  mRetConf.FilePath,
+			FilePath:  filePath,
 			Offset:    uint64(dataParts[i].Offset),
 			Length:    uint64(len(dataParts[i].Data)),
 		}
 		attachments = append(attachments, attachment)
 	}
 	params["Attachments"] = dbus.Variant{attachments}
-	payload := ServicePayload{Path: service.genMessagePath(), Properties: params}
+	payload := ServicePayload{Path: service.genMessagePath(mRetConf.UUID), Properties: params}
 	return payload, nil
 }
 
@@ -189,16 +194,6 @@ func parseRecipients(to string) []string {
 }
 
 //TODO randomly creating a uuid until the download manager does this for us
-func (service *MMSService) genMessagePath() dbus.ObjectPath {
-	var id string
-	random, err := os.Open("/dev/urandom")
-	if err != nil {
-		id = "1234567890ABCDEF"
-	} else {
-		defer random.Close()
-		b := make([]byte, 16)
-		random.Read(b)
-		id = fmt.Sprintf("%x", b)
-	}
-	return dbus.ObjectPath(MMS_DBUS_PATH + "/" + service.identity + "/" + id)
+func (service *MMSService) genMessagePath(uuid string) dbus.ObjectPath {
+	return dbus.ObjectPath(MMS_DBUS_PATH + "/" + service.identity + "/" + uuid)
 }
