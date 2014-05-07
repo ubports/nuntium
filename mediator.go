@@ -33,12 +33,13 @@ import (
 )
 
 type Mediator struct {
-	modem                *ofono.Modem
-	telepathyService     *telepathy.MMSService
-	NewMNotificationInd  chan *mms.MNotificationInd
-	NewMNotifyRespInd    chan *mms.MNotifyRespInd
-	NewMRetrieveConf     chan *mms.MRetrieveConf
-	NewMRetrieveConfFile chan string
+	modem                 *ofono.Modem
+	telepathyService      *telepathy.MMSService
+	NewMNotificationInd   chan *mms.MNotificationInd
+	NewMNotifyRespInd     chan *mms.MNotifyRespInd
+	NewMRetrieveConf      chan *mms.MRetrieveConf
+	NewMRetrieveConfFile  chan string
+	NewMNotifyRespIndFile chan string
 }
 
 //TODO these vars need a configuration location managed by system settings or
@@ -55,6 +56,7 @@ func NewMediator(modem *ofono.Modem) *Mediator {
 	mediator.NewMRetrieveConf = make(chan *mms.MRetrieveConf)
 	mediator.NewMRetrieveConfFile = make(chan string)
 	mediator.NewMNotifyRespInd = make(chan *mms.MNotifyRespInd)
+	mediator.NewMNotifyRespIndFile = make(chan string)
 	return mediator
 }
 
@@ -84,7 +86,9 @@ func (mediator *Mediator) init(mmsManager *telepathy.MMSManager) {
 		case mRetrieveConf := <-mediator.NewMRetrieveConf:
 			go mediator.handleRetrieved(mRetrieveConf)
 		case mNotifyRespInd := <-mediator.NewMNotifyRespInd:
-			go mediator.sendNotifyRespInd(mNotifyRespInd)
+			go mediator.handleMNotifyRespInd(mNotifyRespInd)
+		case mNotifyRespIndFilePath := <-mediator.NewMNotifyRespIndFile:
+			go mediator.sendMNotifyRespInd(mNotifyRespIndFilePath)
 		case id := <-mediator.modem.IdentityAdded:
 			var err error
 			mediator.telepathyService, err = mmsManager.AddService(id, useDeliveryReports)
@@ -199,25 +203,27 @@ func (mediator *Mediator) handleRetrieved(mRetrieveConf *mms.MRetrieveConf) {
 	mediator.NewMNotifyRespInd <- mNotifyRespInd
 }
 
-func (mediator *Mediator) sendNotifyRespInd(mNotifyRespInd *mms.MNotifyRespInd) {
-	var mNotifyRespIndFile string
-	func() {
-		f, err := storage.CreateResponseFile(mNotifyRespInd.UUID)
-		if err != nil {
-			log.Print("Unable to create m-notifyresp.ind file for ", mNotifyRespInd.UUID)
-			return
-		}
-		defer f.Close()
-		enc := mms.NewEncoder(f)
-		if err := enc.Encode(mNotifyRespInd); err != nil {
-			log.Print("Unable to encode m-notifyresp.ind for ", mNotifyRespInd.UUID)
-			return
-		}
-		mNotifyRespIndFile = f.Name()
-	}()
+func (mediator *Mediator) handleMNotifyRespInd(mNotifyRespInd *mms.MNotifyRespInd) {
+	f, err := storage.CreateResponseFile(mNotifyRespInd.UUID)
+	if err != nil {
+		log.Print("Unable to create m-notifyresp.ind file for ", mNotifyRespInd.UUID)
+		return
+	}
+	defer f.Close()
+	enc := mms.NewEncoder(f)
+	if err := enc.Encode(mNotifyRespInd); err != nil {
+		log.Print("Unable to encode m-notifyresp.ind for ", mNotifyRespInd.UUID)
+		return
+	}
+	filePath := f.Name()
+	log.Printf("Created %s to handle m-notifyresp.ind for %s", filePath, mNotifyRespInd.UUID)
+	mediator.NewMNotifyRespIndFile <- filePath
+}
+
+func (mediator *Mediator) sendMNotifyRespInd(mNotifyRespIndFile string) {
 	defer os.Remove(mNotifyRespIndFile)
 	if err := mediator.uploadFile(mNotifyRespIndFile); err != nil {
-		log.Printf("Cannot upload m-notifyresp.ind to message center for ", mNotifyRespInd.UUID)
+		log.Printf("Cannot upload m-notifyresp.ind encoded file %s to message center", mNotifyRespIndFile)
 	}
 }
 
