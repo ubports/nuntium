@@ -27,7 +27,7 @@ import (
 	"os"
 	"path"
 
-	"launchpad.net/go-xdg"
+	"launchpad.net/go-xdg/v0"
 )
 
 const SUBPATH = "nuntium/store"
