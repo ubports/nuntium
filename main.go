@@ -40,29 +40,37 @@ func main() {
 	if connSession, err = dbus.Connect(dbus.SessionBus); err != nil {
 		log.Fatal("Connection error: ", err)
 	}
+	log.Print("Using session bus on ", connSession.UniqueName)
+
 	mmsManager, err := telepathy.NewMMSManager(connSession)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Print("Using session bus on ", connSession.UniqueName)
 
 	if conn, err = dbus.Connect(dbus.SystemBus); err != nil {
 		log.Fatal("Connection error: ", err)
 	}
 	log.Print("Using system bus on ", conn.UniqueName)
-	modems, err := ofono.NewModems(conn)
-	if err != nil {
-		log.Fatal("Could not add modems")
-	}
-	log.Print("Amount of modems found: ", len(modems))
 
-	//TODO refactor with new ofono work
-	for i, _ := range modems {
-		mediator := NewMediator(modems[i])
-		go mediator.init(mmsManager)
-		if err := mediator.kickstart(); err != nil {
-			log.Fatal(err)
+	modemManager := ofono.NewModemManager(conn)
+	mediators := make(map[dbus.ObjectPath]*Mediator)
+	go func() {
+		for {
+			select {
+			case modem := <-modemManager.ModemAdded:
+				mediators[modem.Modem] = NewMediator(modem)
+				go mediators[modem.Modem].init(mmsManager)
+				if err := modem.Init(); err != nil {
+					log.Printf("Cannot initialize modem %s", modem.Modem)
+				}
+			case modem := <-modemManager.ModemRemoved:
+				mediators[modem.Modem].Delete()
+			}
 		}
+	}()
+
+	if err := modemManager.Init(); err != nil {
+		log.Fatal(err)
 	}
 
 	m := Mainloop{

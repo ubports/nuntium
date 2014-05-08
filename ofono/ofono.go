@@ -22,7 +22,6 @@
 package ofono
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -34,43 +33,22 @@ import (
 	"launchpad.net/go-dbus/v1"
 )
 
-const (
-	AGENT_TAG                         = dbus.ObjectPath("/nuntium")
-	PUSH_NOTIFICATION_INTERFACE       = "org.ofono.PushNotification"
-	PUSH_NOTIFICATION_AGENT_INTERFACE = "org.ofono.PushNotificationAgent"
-	CONNECTION_MANAGER_INTERFACE      = "org.ofono.ConnectionManager"
-	CONNECTION_CONTEXT_INTERFACE      = "org.ofono.ConnectionContext"
-	SIM_MANAGER_INTERFACE             = "org.ofono.SimManager"
-	OFONO_SENDER                      = "org.ofono"
-	MODEM_INTERFACE                   = "org.ofono.Modem"
-)
-
-type PropertiesType map[string]dbus.Variant
-
 type OfonoContext struct {
 	ObjectPath dbus.ObjectPath
 	Properties PropertiesType
 }
 
-/*
- in = "aya{sv}", out = ""
-*/
-type OfonoPushNotification struct {
-	Data []byte
-	Info map[string]*dbus.Variant
-}
-
 type Modem struct {
-	conn            *dbus.Connection
-	modem           dbus.ObjectPath
-	agentRegistered bool
-	messageChannel  chan *dbus.Message
-	PushChannel     chan *PushPDU
-	identity        string
-	IdentityAdded   chan string
-	IdentityRemoved chan string
-	ReadySignal     chan bool
-	ready           bool
+	conn                   *dbus.Connection
+	Modem                  dbus.ObjectPath
+	PushAgent              *PushAgent
+	identity               string
+	IdentityAdded          chan string
+	IdentityRemoved        chan string
+	endWatch               chan bool
+	pushInterfaceAvailable bool
+	online                 bool
+	modemSignal, simSignal *dbus.SignalWatch
 }
 
 type ProxyInfo struct {
@@ -87,90 +65,121 @@ func (oProp OfonoContext) String() string {
 	return s
 }
 
-func NewModems(conn *dbus.Connection) ([]*Modem, error) {
-	var modems []*Modem
-	obj := conn.Object("org.ofono", "/")
-	modemsReply, err := getOfonoProps(obj, "org.ofono.Manager", "GetModems")
-	if err != nil {
-		return modems, err
+func NewModem(conn *dbus.Connection, objectPath dbus.ObjectPath) *Modem {
+	return &Modem{
+		conn:            conn,
+		Modem:           objectPath,
+		IdentityAdded:   make(chan string),
+		IdentityRemoved: make(chan string),
+		endWatch:        make(chan bool),
+		PushAgent:       NewPushAgent(conn, objectPath),
 	}
-	for _, modemReply := range modemsReply {
-		modem := new(Modem)
-		modem.conn = conn
-		modem.modem = modemReply.ObjectPath
-		modem.ReadySignal = make(chan bool)
-		modem.IdentityAdded = make(chan string)
-		modem.IdentityRemoved = make(chan string)
-		modems = append(modems, modem)
-	}
-	return modems, nil
 }
 
-func (modem *Modem) WatchPushInterface() error {
-	if v, err := modem.getProperty(MODEM_INTERFACE, "Interfaces"); err == nil {
-		availableInterfaces := reflect.ValueOf(v.Value)
-		for i := 0; i < availableInterfaces.Len(); i++ {
-			interfaceName := reflect.ValueOf(availableInterfaces.Index(i).Interface().(string)).String()
-			if interfaceName == PUSH_NOTIFICATION_INTERFACE {
-				modem.ready = true
-				modem.ReadySignal <- modem.ready
-				break
-			}
-		}
-	} else {
-		log.Print("Initial value couldn't be retrieved: ", err)
-	}
-	propModemSignal, err := connectToPropertySignal(modem.conn, modem.modem, MODEM_INTERFACE)
+func (modem *Modem) Init() (err error) {
+	log.Printf("Initializing modem %s", modem.Modem)
+	modem.modemSignal, err = connectToPropertySignal(modem.conn, modem.Modem, MODEM_INTERFACE)
 	if err != nil {
 		return err
 	}
-	go func() {
-		log.Print("Watching push interface to see if we can Register an Agent")
-		var propName string
-		var propValue dbus.Variant
-		var pushInterfaceAvailable, online bool
-		//TODO once we start tracking modems, these watches need to become members
-		for msg := range propModemSignal.C {
-			if err := msg.Args(&propName, &propValue); err != nil {
-				log.Print(err)
-				continue
-			}
-			if modem.ready {
-				continue
-			}
-			switch propName {
-			case "Interfaces":
-				availableInterfaces := reflect.ValueOf(propValue.Value)
-				pushInterfaceAvailable = false
-				for i := 0; i < availableInterfaces.Len(); i++ {
-					interfaceName := reflect.ValueOf(availableInterfaces.Index(i).Interface().(string)).String()
-					if interfaceName == PUSH_NOTIFICATION_INTERFACE {
-						pushInterfaceAvailable = true
-						break
-					}
-				}
-			case "Online":
-				online = reflect.ValueOf(propValue.Value).Bool()
-			default:
-				continue
-			}
-			if pushInterfaceAvailable && online {
-				modem.ready = true
-				modem.ReadySignal <- modem.ready
-			}
+
+	modem.simSignal, err = connectToPropertySignal(modem.conn, modem.Modem, SIM_MANAGER_INTERFACE)
+	if err != nil {
+		return err
+	}
+
+	go modem.watchModem()
+
+	if v, err := modem.getProperty(MODEM_INTERFACE, "Interfaces"); err == nil {
+		modem.updatePushInterfaceState(*v)
+	} else {
+		log.Print("Initial value couldn't be retrieved: ", err)
+	}
+	if modem.pushInterfaceAvailable {
+		if err := modem.PushAgent.Register(); err != nil {
+			return err
 		}
-	}()
+	}
+	if v, err := modem.getProperty(SIM_MANAGER_INTERFACE, "SubscriberIdentity"); err == nil {
+		modem.handleIdentity(*v)
+	}
 	return nil
 }
 
-func connectToPropertySignal(conn *dbus.Connection, path dbus.ObjectPath, inter string) (*dbus.SignalWatch, error) {
-	w, err := conn.WatchSignal(&dbus.MatchRule{
-		Type:      dbus.TypeSignal,
-		Sender:    OFONO_SENDER,
-		Interface: inter,
-		Member:    "PropertyChanged",
-		Path:      path})
-	return w, err
+func (modem *Modem) watchModem() {
+	var propName string
+	var propValue dbus.Variant
+watchloop:
+	for {
+		select {
+		case <-modem.endWatch:
+			log.Printf("Ending modem watch for %s", modem.Modem)
+			break watchloop
+		case msg, ok := <-modem.modemSignal.C:
+			if !ok {
+				modem.modemSignal.C = nil
+				continue watchloop
+			}
+			if err := msg.Args(&propName, &propValue); err != nil {
+				log.Printf("Cannot interpret Modem Property change: %s", err)
+				continue watchloop
+			}
+			switch propName {
+			case "Interfaces":
+				modem.updatePushInterfaceState(propValue)
+			case "Online":
+				modem.online = reflect.ValueOf(propValue.Value).Bool()
+			default:
+				continue watchloop
+			}
+			if modem.pushInterfaceAvailable {
+				if err := modem.PushAgent.Register(); err != nil {
+					log.Print(err)
+				}
+			} else if modem.PushAgent.Registered {
+				modem.PushAgent.Unregister()
+			}
+		case msg, ok := <-modem.simSignal.C:
+			if !ok {
+				modem.simSignal.C = nil
+				continue watchloop
+			}
+			if err := msg.Args(&propName, &propValue); err != nil {
+				log.Printf("Cannot interpret Sim Property change: %s", err)
+				continue watchloop
+			}
+			if propName != "SubscriberIdentity" {
+				continue watchloop
+			}
+			modem.handleIdentity(propValue)
+		}
+	}
+}
+
+func (modem *Modem) handleIdentity(propValue dbus.Variant) {
+	identity := reflect.ValueOf(propValue.Value).String()
+	if identity == "" && modem.identity != "" {
+		log.Printf("Identity before remove %s", modem.identity)
+
+		modem.IdentityRemoved <- identity
+		modem.identity = identity
+	}
+	log.Printf("Identity added %s", identity)
+	if identity != "" && modem.identity == "" {
+		modem.identity = identity
+		modem.IdentityAdded <- identity
+	}
+}
+
+func (modem *Modem) updatePushInterfaceState(interfaces dbus.Variant) {
+	availableInterfaces := reflect.ValueOf(interfaces.Value)
+	for i := 0; i < availableInterfaces.Len(); i++ {
+		interfaceName := reflect.ValueOf(availableInterfaces.Index(i).Interface().(string)).String()
+		if interfaceName == PUSH_NOTIFICATION_INTERFACE {
+			modem.pushInterfaceAvailable = true
+			break
+		}
+	}
 }
 
 func getOfonoProps(obj *dbus.ObjectProxy, iface, method string) (oProps []OfonoContext, err error) {
@@ -243,7 +252,7 @@ func (oContext OfonoContext) GetProxy() (proxyInfo ProxyInfo, err error) {
 //Returns either the type=internet context or the type=mms, if none is found
 //an error is returned.
 func (modem *Modem) GetMMSContext() (OfonoContext, error) {
-	rilObj := modem.conn.Object("org.ofono", modem.modem)
+	rilObj := modem.conn.Object("org.ofono", modem.Modem)
 	contexts, err := getOfonoProps(rilObj, CONNECTION_MANAGER_INTERFACE, "GetContexts")
 	if err != nil {
 		return OfonoContext{}, err
@@ -282,150 +291,26 @@ func (modem *Modem) GetMMSContext() (OfonoContext, error) {
 
 func (modem *Modem) getProperty(interfaceName, propertyName string) (*dbus.Variant, error) {
 	errorString := "Cannot retrieve %s from %s for %s: %s"
-	rilObj := modem.conn.Object(OFONO_SENDER, modem.modem)
+	rilObj := modem.conn.Object(OFONO_SENDER, modem.Modem)
 	if reply, err := rilObj.Call(interfaceName, "GetProperties"); err == nil {
 		var property PropertiesType
 		if err := reply.Args(&property); err != nil {
-			return nil, fmt.Errorf(errorString, propertyName, interfaceName, modem.modem, err)
+			return nil, fmt.Errorf(errorString, propertyName, interfaceName, modem.Modem, err)
 		}
 		if v, ok := property[propertyName]; ok {
 			return &v, nil
 		}
-		return nil, fmt.Errorf(errorString, propertyName, interfaceName, modem.modem, "property not found")
+		return nil, fmt.Errorf(errorString, propertyName, interfaceName, modem.Modem, "property not found")
 	} else {
-		return nil, fmt.Errorf(errorString, propertyName, interfaceName, modem.modem, err)
+		return nil, fmt.Errorf(errorString, propertyName, interfaceName, modem.Modem, err)
 	}
 }
 
-func (modem *Modem) GetIdentity() error {
-	if v, err := modem.getProperty(SIM_MANAGER_INTERFACE, "SubscriberIdentity"); err == nil {
-		modem.identity = reflect.ValueOf(v.Value).String()
-		if modem.identity != "" {
-			log.Print("Updating id ", modem.identity)
-			modem.IdentityAdded <- modem.identity
-		}
-	}
-	propSimSignal, err := connectToPropertySignal(modem.conn, modem.modem, SIM_MANAGER_INTERFACE)
-	if err != nil {
-		return err
-	}
-	go func() {
-		var propName string
-		var propValue dbus.Variant
-		for msg := range propSimSignal.C {
-			if err := msg.Args(&propName, &propValue); err != nil {
-				log.Print(err)
-				continue
-			}
-			if propName != "SubscriberIdentity" {
-				continue
-			}
-			identity := reflect.ValueOf(propValue.Value).String()
-			if identity == "" && modem.identity != "" {
-				fmt.Println("Identity before remove", modem.identity)
-
-				modem.IdentityRemoved <- identity
-				modem.identity = identity
-			}
-			fmt.Println("Identity before add", modem.identity)
-			if identity != "" && modem.identity == "" {
-				//wait for the push interface to be available
-				modem.identity = identity
-				modem.IdentityAdded <- identity
-			}
-		}
-	}()
-	return nil
-}
-
-func (modem *Modem) RegisterAgent() error {
-	if modem.agentRegistered {
-		log.Print("Agent already registered")
-		return nil
-	}
-	//it seems that ofono is still doing stuff after advertising the interface as available
-	//we will need to sleep a bit
-	log.Print("Registering Agent for", modem.modem, " on path ", AGENT_TAG)
-	obj := modem.conn.Object("org.ofono", modem.modem)
-	_, err := obj.Call(PUSH_NOTIFICATION_INTERFACE, "RegisterAgent", AGENT_TAG)
-	if err != nil {
-		return fmt.Errorf("Cannot register agent for %s: %s", modem.modem, err)
-	}
-	modem.agentRegistered = true
-	modem.PushChannel = make(chan *PushPDU)
-	modem.messageChannel = make(chan *dbus.Message)
-	go modem.watchDBusMethodCalls()
-	modem.conn.RegisterObjectPath(AGENT_TAG, modem.messageChannel)
-	log.Print("Agent Registered for ", modem.modem, " on path ", AGENT_TAG)
-	return nil
-}
-
-func (modem *Modem) UnregisterAgent() error {
-	log.Print("Unregistering agent on ", modem.modem)
-	obj := modem.conn.Object("org.ofono", modem.modem)
-	_, err := obj.Call(PUSH_NOTIFICATION_INTERFACE, "UnregisterAgent", AGENT_TAG)
-	if err != nil {
-		log.Print("Unregister failed ", err)
-		return err
-	}
-	modem.Reset()
-	return nil
-}
-
-func (modem *Modem) Reset() {
-	log.Print("Resetting modem")
-	modem.conn.UnregisterObjectPath(AGENT_TAG)
-	modem.agentRegistered = false
-	close(modem.PushChannel)
-	modem.PushChannel = nil
-	close(modem.messageChannel)
-	modem.messageChannel = nil
+func (modem *Modem) Delete() {
 	modem.IdentityRemoved <- modem.identity
-	modem.identity = ""
-	modem.ready = false
-}
-
-func (modem *Modem) watchDBusMethodCalls() {
-	var reply *dbus.Message
-	for msg := range modem.messageChannel {
-		switch {
-		case msg.Interface == PUSH_NOTIFICATION_AGENT_INTERFACE && msg.Member == "ReceiveNotification":
-			reply = modem.notificationReceived(msg)
-		case msg.Interface == PUSH_NOTIFICATION_AGENT_INTERFACE && msg.Member == "Release":
-			log.Print("Received Release")
-			reply = dbus.NewMethodReturnMessage(msg)
-			fmt.Println("Identity before reset", modem.identity)
-			modem.Reset()
-		default:
-			log.Print("Received unkown method call on", msg.Interface, msg.Member)
-			reply = dbus.NewErrorMessage(msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method")
-		}
-		if err := modem.conn.Send(reply); err != nil {
-			log.Print("Could not send reply: ", err)
-		}
-	}
-}
-
-func (modem *Modem) notificationReceived(msg *dbus.Message) (reply *dbus.Message) {
-	var push OfonoPushNotification
-	if err := msg.Args(&(push.Data), &(push.Info)); err != nil {
-		log.Print("Error in received ReceiveNotification() method call ", msg)
-		return dbus.NewErrorMessage(msg, "org.freedesktop.DBus.Error", "FormatError")
-	} else {
-		log.Print("Received ReceiveNotification() method call from ", push.Info["Sender"].Value)
-		log.Print("Push data\n", hex.Dump(push.Data))
-		dec := NewDecoder(push.Data)
-		pdu := new(PushPDU)
-		if err := dec.Decode(pdu); err != nil {
-			log.Print("Error ", err)
-			return dbus.NewErrorMessage(msg, "org.freedesktop.DBus.Error", "DecodeError")
-		}
-		// TODO later switch on ApplicationId and ContentType to different channels
-		if pdu.ApplicationId == 0x04 && pdu.ContentType == "application/vnd.wap.mms-message" {
-			modem.PushChannel <- pdu
-		} else {
-			log.Print("Unhandled push pdu", pdu)
-		}
-		return dbus.NewMethodReturnMessage(msg)
-	}
+	modem.modemSignal.Cancel()
+	modem.modemSignal.C = nil
+	modem.simSignal.Cancel()
+	modem.simSignal.C = nil
+	modem.endWatch <- true
 }
