@@ -3,32 +3,20 @@
 
 export DH_OPTIONS
 export DH_GOPKG := launchpad.net/nuntium
-export BUILDDIR := $(CURDIR)/obj-$(DEB_BUILD_GNU_TYPE)
 
 %:
 	dh $@ \
 		--buildsystem=golang \
 		--with=golang \
-		--fail-missing \
-		--builddirectory=$(BUILDDIR)
-
-override_dh_auto_build:
-	cd $(BUILDDIR); \
-	export GOPATH=$(BUILDDIR); \
-	go build -compiler=gccgo -v $(DH_GOPKG); \
-	go build -compiler=gccgo -v $(DH_GOPKG)/mms/decode-cli;
-
-override_dh_auto_test:
-	cd $(BUILDDIR); \
-	export GOPATH=$(BUILDDIR); \
-	go test -compiler=gccgo -v $(DH_GOPKG)/...
+		--fail-missing
 
 override_dh_auto_install:
-	mkdir -p ${CURDIR}/debian/tmp/usr/bin
-	mv $(BUILDDIR)/decode-cli \
+	dh_auto_install -O--buildsystem=golang
+	mv ${CURDIR}/debian/tmp/usr/bin/decode-cli \
 		${CURDIR}/debian/tmp/usr/bin/nuntium-decode-cli 
-	mv $(BUILDDIR)/nuntium \
-		${CURDIR}/debian/tmp/usr/bin/nuntium
-	mkdir -p ${CURDIR}/usr/share/gocode/src/launchpad.net/nuntium
-	cp -r ${CURDIR}/mms ${CURDIR}/ofono ${CURDIR}/telepathy \
-		usr/share/gocode/src/launchpad.net/nuntium/
+	rm -r \
+		${CURDIR}/debian/tmp/usr/bin/test \
+		${CURDIR}/debian/tmp/usr/share/gocode/src/$(DH_GOPKG)/udm \
+		${CURDIR}/debian/tmp/usr/share/gocode/src/$(DH_GOPKG)/test \
+		${CURDIR}/debian/tmp/usr/share/gocode/src/$(DH_GOPKG)/storage \
+		${CURDIR}/debian/tmp/usr/share/gocode/src/$(DH_GOPKG)/*.go
