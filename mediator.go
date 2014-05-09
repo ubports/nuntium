@@ -130,7 +130,6 @@ func (mediator *Mediator) handleMNotificationInd(pushMsg *ofono.PushPDU) {
 		log.Print("Received nil push")
 		return
 	}
-	log.Print(pushMsg)
 	dec := mms.NewDecoder(pushMsg.Data)
 	mNotificationInd := mms.NewMNotificationInd()
 	if err := dec.Decode(mNotificationInd); err != nil {
