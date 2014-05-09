@@ -143,8 +143,13 @@ func (dec *MMSDecoder) ReadString(reflectedPdu *reflect.Value, hdr string) (stri
 		dec.Offset++
 	}
 	begin := dec.Offset
-	//TODO protect this
-	for ; dec.Data[dec.Offset] != 0; dec.Offset++ {
+	for ; len(dec.Data) > dec.Offset; dec.Offset++ {
+		if dec.Data[dec.Offset] == 0 {
+			break
+		}
+	}
+	if len(dec.Data) == dec.Offset {
+		return "", fmt.Errorf("reached end of data while trying to read string: %s", dec.Data[begin:])
 	}
 	v := string(dec.Data[begin:dec.Offset])
 	if hdr != "" {
