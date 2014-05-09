@@ -83,20 +83,14 @@ func (enc *MMSEncoder) writeStringParam(param byte, s string) error {
 	if err := enc.setParam(param); err != nil {
 		return err
 	}
-	if err := enc.writeString(s); err != nil {
-		return err
-	}
-	return nil
+	return enc.writeString(s)
 }
 
 func (enc *MMSEncoder) writeByteParam(param byte, b byte) error {
 	if err := enc.setParam(param); err != nil {
 		return err
 	}
-	if err := enc.writeByte(b); err != nil {
-		return err
-	}
-	return nil
+	return enc.writeByte(b)
 }
 
 func (enc *MMSEncoder) writeReportAllowedParam(reportAllowed bool) error {
@@ -109,10 +103,7 @@ func (enc *MMSEncoder) writeReportAllowedParam(reportAllowed bool) error {
 	} else {
 		b = REPORT_ALLOWED_NO
 	}
-	if err := enc.writeByte(b); err != nil {
-		return err
-	}
-	return nil
+	return enc.writeByte(b)
 }
 
 func (enc *MMSEncoder) writeString(s string) error {
