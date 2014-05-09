@@ -25,6 +25,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"sync"
 
 	"launchpad.net/go-dbus/v1"
 )
@@ -43,6 +44,7 @@ type PushAgent struct {
 	Push           chan *PushPDU
 	messageChannel chan *dbus.Message
 	Registered     bool
+	m              sync.Mutex
 }
 
 func NewPushAgent(conn *dbus.Connection, modem dbus.ObjectPath) *PushAgent {
@@ -50,6 +52,8 @@ func NewPushAgent(conn *dbus.Connection, modem dbus.ObjectPath) *PushAgent {
 }
 
 func (agent *PushAgent) Register() error {
+	agent.m.Lock()
+	defer agent.m.Unlock()
 	if agent.Registered {
 		log.Printf("Agent already registered for %s", agent.modem)
 		return nil
@@ -69,7 +73,10 @@ func (agent *PushAgent) Register() error {
 }
 
 func (agent *PushAgent) Unregister() error {
+	agent.m.Lock()
+	defer agent.m.Unlock()
 	if !agent.Registered {
+		log.Print("Agent no registered for %s", agent.modem)
 		return nil
 	}
 	log.Print("Unregistering agent on ", agent.modem)
@@ -85,6 +92,8 @@ func (agent *PushAgent) Unregister() error {
 }
 
 func (agent *PushAgent) release() {
+	agent.Registered = false
+	//BUG this seems to not return, but I can't close the channel or panic
 	agent.conn.UnregisterObjectPath(AGENT_TAG)
 	close(agent.Push)
 	agent.Push = nil

@@ -63,10 +63,11 @@ func NewMediator(modem *ofono.Modem) *Mediator {
 }
 
 func (mediator *Mediator) Delete() {
-	mediator.terminate <- true
+	mediator.terminate <- mediator.telepathyService == nil
 }
 
 func (mediator *Mediator) init(mmsManager *telepathy.MMSManager) {
+mediatorLoop:
 	for {
 		select {
 		case push, ok := <-mediator.modem.PushAgent.Push:
@@ -101,7 +102,7 @@ func (mediator *Mediator) init(mmsManager *telepathy.MMSManager) {
 				log.Fatal(err)
 			}
 			mediator.telepathyService = nil
-		case <-mediator.terminate:
+		case terminate := <-mediator.terminate:
 			/*
 				close(mediator.terminate)
 				close(mediator.NewMNotificationInd)
@@ -110,7 +111,9 @@ func (mediator *Mediator) init(mmsManager *telepathy.MMSManager) {
 				close(mediator.NewMNotifyRespInd)
 				close(mediator.NewMNotifyRespIndFile)
 			*/
-			break
+			if terminate {
+				break mediatorLoop
+			}
 		}
 	}
 	log.Print("Ending mediator instance loop for modem")

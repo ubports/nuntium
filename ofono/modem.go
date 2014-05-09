@@ -95,7 +95,12 @@ func (modem *Modem) Init() (err error) {
 	} else {
 		log.Print("Initial value couldn't be retrieved: ", err)
 	}
-	if modem.pushInterfaceAvailable {
+	if v, err := modem.getProperty(MODEM_INTERFACE, "Online"); err == nil {
+		modem.handleOnlineState(*v)
+	} else {
+		log.Print("Initial value couldn't be retrieved: ", err)
+	}
+	if modem.pushInterfaceAvailable && modem.online {
 		if err := modem.PushAgent.Register(); err != nil {
 			return err
 		}
@@ -128,11 +133,11 @@ watchloop:
 			case "Interfaces":
 				modem.updatePushInterfaceState(propValue)
 			case "Online":
-				modem.online = reflect.ValueOf(propValue.Value).Bool()
+				modem.handleOnlineState(propValue)
 			default:
 				continue watchloop
 			}
-			if modem.pushInterfaceAvailable {
+			if modem.pushInterfaceAvailable && modem.online {
 				if err := modem.PushAgent.Register(); err != nil {
 					log.Print(err)
 				}
@@ -156,6 +161,14 @@ watchloop:
 	}
 }
 
+func (modem *Modem) handleOnlineState(propValue dbus.Variant) {
+	origState := modem.online
+	modem.online = reflect.ValueOf(propValue.Value).Bool()
+	if modem.online != origState {
+		log.Printf("Modem online: %t", modem.online)
+	}
+}
+
 func (modem *Modem) handleIdentity(propValue dbus.Variant) {
 	identity := reflect.ValueOf(propValue.Value).String()
 	if identity == "" && modem.identity != "" {
@@ -172,6 +185,7 @@ func (modem *Modem) handleIdentity(propValue dbus.Variant) {
 }
 
 func (modem *Modem) updatePushInterfaceState(interfaces dbus.Variant) {
+	origState := modem.pushInterfaceAvailable
 	availableInterfaces := reflect.ValueOf(interfaces.Value)
 	for i := 0; i < availableInterfaces.Len(); i++ {
 		interfaceName := reflect.ValueOf(availableInterfaces.Index(i).Interface().(string)).String()
@@ -179,6 +193,9 @@ func (modem *Modem) updatePushInterfaceState(interfaces dbus.Variant) {
 			modem.pushInterfaceAvailable = true
 			break
 		}
+	}
+	if modem.pushInterfaceAvailable != origState {
+		log.Printf("Push interface state: %t", modem.pushInterfaceAvailable)
 	}
 }
 
