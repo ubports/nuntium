@@ -47,20 +47,26 @@ type PushAgent struct {
 	m              sync.Mutex
 }
 
-func NewPushAgent(conn *dbus.Connection, modem dbus.ObjectPath) *PushAgent {
-	return &PushAgent{conn: conn, modem: modem}
+func NewPushAgent(modem dbus.ObjectPath) *PushAgent {
+	return &PushAgent{modem: modem}
 }
 
-func (agent *PushAgent) Register() error {
+func (agent *PushAgent) Register() (err error) {
 	agent.m.Lock()
 	defer agent.m.Unlock()
+	if agent.conn == nil {
+		if agent.conn, err = dbus.Connect(dbus.SystemBus); err != nil {
+			return err
+		}
+	}
 	if agent.Registered {
 		log.Printf("Agent already registered for %s", agent.modem)
 		return nil
 	}
 	agent.Registered = true
+	log.Print("Registering agent for ", agent.modem, " on path ", AGENT_TAG, " and name ", agent.conn.UniqueName)
 	obj := agent.conn.Object("org.ofono", agent.modem)
-	_, err := obj.Call(PUSH_NOTIFICATION_INTERFACE, "RegisterAgent", AGENT_TAG)
+	_, err = obj.Call(PUSH_NOTIFICATION_INTERFACE, "RegisterAgent", AGENT_TAG)
 	if err != nil {
 		return fmt.Errorf("Cannot register agent for %s: %s", agent.modem, err)
 	}

@@ -46,6 +46,7 @@ type Modem struct {
 	IdentityAdded          chan string
 	IdentityRemoved        chan string
 	endWatch               chan bool
+	PushInterfaceAvailable chan bool
 	pushInterfaceAvailable bool
 	online                 bool
 	modemSignal, simSignal *dbus.SignalWatch
@@ -67,12 +68,13 @@ func (oProp OfonoContext) String() string {
 
 func NewModem(conn *dbus.Connection, objectPath dbus.ObjectPath) *Modem {
 	return &Modem{
-		conn:            conn,
-		Modem:           objectPath,
-		IdentityAdded:   make(chan string),
-		IdentityRemoved: make(chan string),
-		endWatch:        make(chan bool),
-		PushAgent:       NewPushAgent(conn, objectPath),
+		conn:                   conn,
+		Modem:                  objectPath,
+		IdentityAdded:          make(chan string),
+		IdentityRemoved:        make(chan string),
+		PushInterfaceAvailable: make(chan bool),
+		endWatch:               make(chan bool),
+		PushAgent:              NewPushAgent(objectPath),
 	}
 }
 
@@ -99,11 +101,6 @@ func (modem *Modem) Init() (err error) {
 		modem.handleOnlineState(*v)
 	} else {
 		log.Print("Initial value couldn't be retrieved: ", err)
-	}
-	if modem.pushInterfaceAvailable && modem.online {
-		if err := modem.PushAgent.Register(); err != nil {
-			return err
-		}
 	}
 	if v, err := modem.getProperty(SIM_MANAGER_INTERFACE, "SubscriberIdentity"); err == nil {
 		modem.handleIdentity(*v)
@@ -136,13 +133,6 @@ watchloop:
 				modem.handleOnlineState(propValue)
 			default:
 				continue watchloop
-			}
-			if modem.pushInterfaceAvailable && modem.online {
-				if err := modem.PushAgent.Register(); err != nil {
-					log.Print(err)
-				}
-			} else if modem.PushAgent.Registered {
-				modem.PushAgent.Unregister()
 			}
 		case msg, ok := <-modem.simSignal.C:
 			if !ok {
@@ -196,6 +186,11 @@ func (modem *Modem) updatePushInterfaceState(interfaces dbus.Variant) {
 	}
 	if modem.pushInterfaceAvailable != origState {
 		log.Printf("Push interface state: %t", modem.pushInterfaceAvailable)
+		if modem.pushInterfaceAvailable {
+			modem.PushInterfaceAvailable <- true
+		} else if modem.PushAgent.Registered {
+			modem.PushInterfaceAvailable <- false
+		}
 	}
 }
 

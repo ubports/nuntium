@@ -102,6 +102,16 @@ mediatorLoop:
 				log.Fatal(err)
 			}
 			mediator.telepathyService = nil
+		case ok := <-mediator.modem.PushInterfaceAvailable:
+			if ok {
+				if err := mediator.modem.PushAgent.Register(); err != nil {
+					log.Fatal(err)
+				}
+			} else {
+				if err := mediator.modem.PushAgent.Unregister(); err != nil {
+					log.Fatal(err)
+				}
+			}
 		case terminate := <-mediator.terminate:
 			/*
 				close(mediator.terminate)
