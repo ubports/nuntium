@@ -90,8 +90,18 @@ func (modem *Modem) Init() (err error) {
 		return err
 	}
 
-	go modem.watchModem()
+	// the calling order here avoids race conditions
+	go modem.watchStatus()
+	modem.fetchExistingStatus()
 
+	return nil
+}
+
+// fetchExistingStatus fetches key required for the modem to be considered operational
+// from a push notification point of view
+//
+// status updates are fetched through dbus method calls
+func (modem *Modem) fetchExistingStatus() {
 	if v, err := modem.getProperty(MODEM_INTERFACE, "Interfaces"); err == nil {
 		modem.updatePushInterfaceState(*v)
 	} else {
@@ -105,10 +115,13 @@ func (modem *Modem) Init() (err error) {
 	if v, err := modem.getProperty(SIM_MANAGER_INTERFACE, "SubscriberIdentity"); err == nil {
 		modem.handleIdentity(*v)
 	}
-	return nil
 }
 
-func (modem *Modem) watchModem() {
+// watchStatus monitors key states required for the modem to be considered operational
+// from a push notification point of view
+//
+// status updates are monitered by hooking up to dbus signals
+func (modem *Modem) watchStatus() {
 	var propName string
 	var propValue dbus.Variant
 watchloop:
