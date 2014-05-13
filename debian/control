@@ -34,7 +34,8 @@ Description: Decode m-retrieve.conf messages
 
 Package: golang-nuntium-mms-dev
 Architecture: all
-Depends: ${misc:Built-Using}, ${misc:Depends}
+Depends: ${misc:Depends}
+Built-Using: ${misc:Built-Using}
 Description: Go library for manipulating MMS
  This package handles MMS PDUs and has hooks for related actions in the MMS
  workflow

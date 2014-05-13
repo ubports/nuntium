@@ -1,3 +1,9 @@
+nuntium (0.1-0ubuntu2) utopic; urgency=medium
+
+  * Moving stray Built-Using from Depends into Built-Using.
+
+ -- Sergio Schvezov <sergio.schvezov@canonical.com>  Mon, 12 May 2014 10:04:25 -0300
+
 nuntium (0.1-0ubuntu1) utopic; urgency=low
 
   * Initial packaging. 
