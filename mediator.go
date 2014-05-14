@@ -40,6 +40,7 @@ type Mediator struct {
 	NewMRetrieveConf      chan *mms.MRetrieveConf
 	NewMRetrieveConfFile  chan string
 	NewMNotifyRespIndFile chan string
+	terminate             chan bool
 }
 
 //TODO these vars need a configuration location managed by system settings or
@@ -57,19 +58,19 @@ func NewMediator(modem *ofono.Modem) *Mediator {
 	mediator.NewMRetrieveConfFile = make(chan string)
 	mediator.NewMNotifyRespInd = make(chan *mms.MNotifyRespInd)
 	mediator.NewMNotifyRespIndFile = make(chan string)
+	mediator.terminate = make(chan bool)
 	return mediator
 }
 
 func (mediator *Mediator) Delete() {
-	close(mediator.NewMNotificationInd)
-	close(mediator.NewMRetrieveConf)
-	close(mediator.NewMRetrieveConfFile)
+	mediator.terminate <- mediator.telepathyService == nil
 }
 
 func (mediator *Mediator) init(mmsManager *telepathy.MMSManager) {
+mediatorLoop:
 	for {
 		select {
-		case push, ok := <-mediator.modem.PushChannel:
+		case push, ok := <-mediator.modem.PushAgent.Push:
 			if !ok {
 				log.Print("PushChannel is closed")
 				continue
@@ -101,28 +102,31 @@ func (mediator *Mediator) init(mmsManager *telepathy.MMSManager) {
 				log.Fatal(err)
 			}
 			mediator.telepathyService = nil
-		case <-mediator.modem.ReadySignal:
-			if err := mediator.modem.RegisterAgent(); err != nil {
-				log.Fatal("Error while registering agent: ", err)
+		case ok := <-mediator.modem.PushInterfaceAvailable:
+			if ok {
+				if err := mediator.modem.PushAgent.Register(); err != nil {
+					log.Fatal(err)
+				}
+			} else {
+				if err := mediator.modem.PushAgent.Unregister(); err != nil {
+					log.Fatal(err)
+				}
+			}
+		case terminate := <-mediator.terminate:
+			/*
+				close(mediator.terminate)
+				close(mediator.NewMNotificationInd)
+				close(mediator.NewMRetrieveConf)
+				close(mediator.NewMRetrieveConfFile)
+				close(mediator.NewMNotifyRespInd)
+				close(mediator.NewMNotifyRespIndFile)
+			*/
+			if terminate {
+				break mediatorLoop
 			}
 		}
 	}
-}
-
-func (mediator *Mediator) handleModemReady() {
-	if err := mediator.modem.RegisterAgent(); err != nil {
-		log.Fatal("Error while registering agent: ", err)
-	}
-}
-
-func (mediator *Mediator) kickstart() error {
-	if err := mediator.modem.WatchPushInterface(); err != nil {
-		return err
-	}
-	if err := mediator.modem.GetIdentity(); err != nil {
-		return err
-	}
-	return nil
+	log.Print("Ending mediator instance loop for modem")
 }
 
 func (mediator *Mediator) handleMNotificationInd(pushMsg *ofono.PushPDU) {
