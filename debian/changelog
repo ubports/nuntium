@@ -1,3 +1,15 @@
+nuntium (0.1+14.10.20140514.1-0ubuntu1) utopic; urgency=low
+
+  [ Sergio Schvezov ]
+  * Fixing a string decode bounds issue
+  * Removing redundant log line
+  * Adding one more condition to the upstart start stanza since the
+    first event can be missed
+  * Splitting up ofono package to smaller logical bits
+  * Encoder improvements
+
+ -- Ubuntu daily release <ps-jenkins@lists.canonical.com>  Wed, 14 May 2014 14:21:59 +0000
+
 nuntium (0.1-0ubuntu2) utopic; urgency=medium
 
   * Moving stray Built-Using from Depends into Built-Using.
