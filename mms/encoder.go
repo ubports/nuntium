@@ -24,6 +24,7 @@ package mms
 import (
 	"fmt"
 	"io"
+	"log"
 	"reflect"
 )
 
@@ -35,76 +36,64 @@ func NewEncoder(w io.Writer) *MMSEncoder {
 	return &MMSEncoder{w}
 }
 
-func (enc *MMSEncoder) WriteString(s string) error {
-	bytes := []byte(s)
-	bytes = append(bytes, 0)
-	_, err := enc.w.Write(bytes)
-	return err
-}
+func (enc *MMSEncoder) Encode(pdu MMSWriter) error {
+	rPdu := reflect.ValueOf(pdu).Elem()
 
-func (enc *MMSEncoder) WriteByte(b byte) error {
-	bytes := []byte{b}
-	if n, err := enc.w.Write(bytes); n != 1 {
-		return fmt.Errorf("expected to write 1 byte but wrote %d", n)
-	} else if err != nil {
-		return err
+	//The order of the following fields doens't matter much
+	typeOfPdu := rPdu.Type()
+	var err error
+	for i := 0; i < rPdu.NumField(); i++ {
+		fieldName := typeOfPdu.Field(i).Name
+		encodeTag := typeOfPdu.Field(i).Tag.Get("encode")
+		f := rPdu.Field(i)
+
+		if encodeTag == "no" {
+			continue
+		}
+		switch fieldName {
+		case "Type":
+			err = enc.writeByteParam(X_MMS_MESSAGE_TYPE, byte(f.Uint()))
+		case "Version":
+			err = enc.writeByteParam(X_MMS_MMS_VERSION, byte(f.Uint()))
+		case "TransactionId":
+			err = enc.writeStringParam(X_MMS_TRANSACTION_ID, f.String())
+		case "Status":
+			err = enc.writeByteParam(X_MMS_STATUS, byte(f.Uint()))
+		case "ReportAllowed":
+			err = enc.writeReportAllowedParam(f.Bool())
+		default:
+			if encodeTag == "optional" {
+				log.Printf("Unhandled optional field %s", fieldName)
+			} else {
+				panic(fmt.Sprintf("missing encoding for mandatory field %s", fieldName))
+			}
+		}
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func (enc *MMSEncoder) setParam(param byte) error {
-	return enc.WriteByte(param | 0x80)
+	return enc.writeByte(param | 0x80)
 }
 
-func (enc *MMSEncoder) Encode(pdu MMSWriter) error {
-	rPdu := reflect.ValueOf(pdu).Elem()
-
-	//Message Type
-	msgType := byte(rPdu.FieldByName("Type").Uint())
-	if err := enc.setParam(X_MMS_MESSAGE_TYPE); err != nil {
+func (enc *MMSEncoder) writeStringParam(param byte, s string) error {
+	if err := enc.setParam(param); err != nil {
 		return err
 	}
-	if err := enc.WriteByte(msgType); err != nil {
-		return err
-	}
-
-	//TransactionId
-	transactionId := rPdu.FieldByName("TransactionId").String()
-	if err := enc.setParam(X_MMS_TRANSACTION_ID); err != nil {
-		return err
-	}
-	if err := enc.WriteString(transactionId); err != nil {
-		return err
-	}
-
-	//Version
-	version := byte(rPdu.FieldByName("Version").Uint())
-	if err := enc.setParam(X_MMS_MMS_VERSION); err != nil {
-		return err
-	}
-	if err := enc.WriteByte(version); err != nil {
-		return err
-	}
-
-	//Status
-	if f := rPdu.FieldByName("Status"); f.IsValid() {
-		status := byte(f.Uint())
-		if err := enc.setParam(X_MMS_STATUS); err != nil {
-			return err
-		}
-		if err := enc.WriteByte(status); err != nil {
-			return err
-		}
-	}
-	//ReportAllowed
-	if f := rPdu.FieldByName("ReportAllowed"); f.IsValid() {
-		reportAllowed := f.Bool()
-		enc.setReportAllowed(reportAllowed)
-	}
-	return nil
+	return enc.writeString(s)
 }
 
-func (enc *MMSEncoder) setReportAllowed(reportAllowed bool) error {
+func (enc *MMSEncoder) writeByteParam(param byte, b byte) error {
+	if err := enc.setParam(param); err != nil {
+		return err
+	}
+	return enc.writeByte(b)
+}
+
+func (enc *MMSEncoder) writeReportAllowedParam(reportAllowed bool) error {
 	if err := enc.setParam(X_MMS_REPORT_ALLOWED); err != nil {
 		return err
 	}
@@ -114,7 +103,21 @@ func (enc *MMSEncoder) setReportAllowed(reportAllowed bool) error {
 	} else {
 		b = REPORT_ALLOWED_NO
 	}
-	if err := enc.WriteByte(b); err != nil {
+	return enc.writeByte(b)
+}
+
+func (enc *MMSEncoder) writeString(s string) error {
+	bytes := []byte(s)
+	bytes = append(bytes, 0)
+	_, err := enc.w.Write(bytes)
+	return err
+}
+
+func (enc *MMSEncoder) writeByte(b byte) error {
+	bytes := []byte{b}
+	if n, err := enc.w.Write(bytes); n != 1 {
+		return fmt.Errorf("expected to write 1 byte but wrote %d", n)
+	} else if err != nil {
 		return err
 	}
 	return nil

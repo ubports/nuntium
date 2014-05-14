@@ -144,11 +144,12 @@ type MNotificationInd struct {
 // MNotificationInd holds a m-notifyresp.ind message defined in
 // OMA-WAP-MMS-ENC-v1.1 section 6.2
 type MNotifyRespInd struct {
-	MMSWriter
-	UUID                  string
-	Type, Version, Status byte
-	TransactionId         string
-	ReportAllowed         bool
+	UUID          string `encode:"no"`
+	Type          byte
+	TransactionId string
+	Version       byte
+	Status        byte
+	ReportAllowed bool
 }
 
 // MRetrieveConf holds a m-retrieve.conf message defined in
