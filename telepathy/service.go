@@ -79,8 +79,13 @@ func (service *MMSService) watchDBusMethodCalls() {
 	var reply *dbus.Message
 
 	for msg := range service.msgChan {
-		switch {
-		case msg.Interface == MMS_SERVICE_DBUS_IFACE && msg.Member == "GetMessages":
+		if msg.Interface != MMS_SERVICE_DBUS_IFACE {
+			log.Println("Received unkown method call on", msg.Interface, msg.Member)
+			reply = dbus.NewErrorMessage(msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method")
+			continue
+		}
+		switch msg.Member {
+		case "GetMessages":
 			reply = dbus.NewMethodReturnMessage(msg)
 			//TODO implement store and forward
 			var payload []ServicePayload
@@ -88,7 +93,7 @@ func (service *MMSService) watchDBusMethodCalls() {
 				log.Print("Cannot parse payload data from services")
 				reply = dbus.NewErrorMessage(msg, "Error.InvalidArguments", "Cannot parse services")
 			}
-		case msg.Interface == MMS_SERVICE_DBUS_IFACE && msg.Member == "GetProperties":
+		case "GetProperties":
 			reply = dbus.NewMethodReturnMessage(msg)
 			if err := reply.AppendArgs(service.Properties); err != nil {
 				log.Print("Cannot parse payload data from services")
