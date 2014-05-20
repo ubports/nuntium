@@ -92,13 +92,13 @@ func (manager *MMSManager) serviceAdded(payload *ServicePayload) error {
 	return nil
 }
 
-func (manager *MMSManager) AddService(identity string, useDeliveryReports bool) (*MMSService, error) {
+func (manager *MMSManager) AddService(identity string, outgoingChannel chan *OutgoingMessage, useDeliveryReports bool) (*MMSService, error) {
 	for i := range manager.services {
 		if manager.services[i].isService(identity) {
 			return manager.services[i], nil
 		}
 	}
-	service := NewMMSService(manager.conn, identity, useDeliveryReports)
+	service := NewMMSService(manager.conn, identity, outgoingChannel, useDeliveryReports)
 	if err := manager.serviceAdded(&service.Payload); err != nil {
 		return &MMSService{}, err
 	}

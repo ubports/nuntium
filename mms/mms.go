@@ -24,6 +24,7 @@ package mms
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 // MMS Field names from OMA-WAP-MMS section 7.3
@@ -128,6 +129,31 @@ const (
 	STATUS_UNRECOGNIZED = 132
 )
 
+// MSendReq holds a m-send.req message defined in
+// OMA-WAP-MMS-ENC-v1.1 section 6.1.1
+type MSendReq struct {
+	UUID                                 string `encode:"no"`
+	Type                                 byte
+	TransactionId                        string
+	Version                              byte
+	Date                                 uint64 `encode:"optional"`
+	From                                 string
+	To                                   string
+	Cc                                   string `encode:"no"`
+	Bcc                                  string `encode:"no"`
+	Subject                              string `encode:"optional"`
+	Class                                byte   `encode:"optional"`
+	Expiry                               uint64 `encode:"optional"`
+	DeliveryTime                         uint64 `encode:"optional"`
+	ReplyCharging, ReplyChargingDeadline byte
+	Priority                             byte
+	SenderVisibility                     byte `encode:"optional"`
+	DeliveryReport                       byte
+	ReadReply                            byte `encode:"optional"`
+	ContentType                          string
+	DataParts                            []ContentType
+}
+
 // MNotificationInd holds a m-notification.ind message defined in
 // OMA-WAP-MMS-ENC section 6.2
 type MNotificationInd struct {
@@ -172,6 +198,13 @@ type MRetrieveConf struct {
 
 type MMSReader interface{}
 type MMSWriter interface{}
+
+func NewMSendReq(recipients []string) *MSendReq {
+	for i := range recipients {
+		recipients[i] += "/TYPE=PLMN"
+	}
+	return &MSendReq{Type: TYPE_SEND_REQ, To: strings.Join(recipients, ","), UUID: genUUID()}
+}
 
 func NewMNotificationInd() *MNotificationInd {
 	return &MNotificationInd{Type: TYPE_NOTIFICATION_IND, UUID: genUUID()}

@@ -44,6 +44,7 @@ type MMSService struct {
 	conn       *dbus.Connection
 	msgChan    chan *dbus.Message
 	identity   string
+	outMessage chan *OutgoingMessage
 }
 
 type Attachment struct {
@@ -54,7 +55,19 @@ type Attachment struct {
 	Length    uint64
 }
 
-func NewMMSService(conn *dbus.Connection, identity string, useDeliveryReports bool) *MMSService {
+type DataPart struct {
+	Id          string
+	ContentType string
+	Filename    string
+}
+
+type OutgoingMessage struct {
+	Recipients []string
+	Smil       string
+	DataParts  []DataPart
+}
+
+func NewMMSService(conn *dbus.Connection, identity string, outgoingChannel chan *OutgoingMessage, useDeliveryReports bool) *MMSService {
 	properties := make(map[string]dbus.Variant)
 	properties[IDENTITY] = dbus.Variant{identity}
 	serviceProperties := make(map[string]dbus.Variant)
@@ -68,6 +81,7 @@ func NewMMSService(conn *dbus.Connection, identity string, useDeliveryReports bo
 		Properties: serviceProperties,
 		conn:       conn,
 		msgChan:    make(chan *dbus.Message),
+		outMessage: outgoingChannel,
 		identity:   identity,
 	}
 	go service.watchDBusMethodCalls()
@@ -98,6 +112,15 @@ func (service *MMSService) watchDBusMethodCalls() {
 			if err := reply.AppendArgs(service.Properties); err != nil {
 				log.Print("Cannot parse payload data from services")
 				reply = dbus.NewErrorMessage(msg, "Error.InvalidArguments", "Cannot parse services")
+			}
+		case "SendMessage":
+			reply = dbus.NewMethodReturnMessage(msg)
+			var outMessage OutgoingMessage
+			if err := reply.AppendArgs(outMessage.Recipients, &outMessage.Smil, outMessage.DataParts); err != nil {
+				log.Print("Cannot parse payload data from services")
+				reply = dbus.NewErrorMessage(msg, "Error.InvalidArguments", "Cannot parse services")
+			} else {
+				service.outMessage <- &outMessage
 			}
 		default:
 			log.Println("Received unkown method call on", msg.Interface, msg.Member)

@@ -39,6 +39,10 @@ type ContentType struct {
 	Data                                                                              []byte
 }
 
+func NewSmilContentType(smil string) (*ContentType, error) {
+	return nil, nil
+}
+
 //GetSmil returns the text corresponding to the ContentType that holds the SMIL
 func (pdu *MRetrieveConf) GetSmil() (string, error) {
 	for i := range pdu.DataParts {

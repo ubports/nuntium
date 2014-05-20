@@ -40,6 +40,7 @@ type Mediator struct {
 	NewMRetrieveConf      chan *mms.MRetrieveConf
 	NewMRetrieveConfFile  chan string
 	NewMNotifyRespIndFile chan string
+	outMessage            chan *telepathy.OutgoingMessage
 	terminate             chan bool
 }
 
@@ -58,6 +59,7 @@ func NewMediator(modem *ofono.Modem) *Mediator {
 	mediator.NewMRetrieveConfFile = make(chan string)
 	mediator.NewMNotifyRespInd = make(chan *mms.MNotifyRespInd)
 	mediator.NewMNotifyRespIndFile = make(chan string)
+	mediator.outMessage = make(chan *telepathy.OutgoingMessage)
 	mediator.terminate = make(chan bool)
 	return mediator
 }
@@ -92,7 +94,7 @@ mediatorLoop:
 			go mediator.sendMNotifyRespInd(mNotifyRespIndFilePath)
 		case id := <-mediator.modem.IdentityAdded:
 			var err error
-			mediator.telepathyService, err = mmsManager.AddService(id, useDeliveryReports)
+			mediator.telepathyService, err = mmsManager.AddService(id, mediator.outMessage, useDeliveryReports)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -112,9 +114,12 @@ mediatorLoop:
 					log.Fatal(err)
 				}
 			}
+		case msg := <-mediator.outMessage:
+			go mediator.handleOutgoingMessage(msg)
 		case terminate := <-mediator.terminate:
 			/*
 				close(mediator.terminate)
+				close(mediator.outMessage)
 				close(mediator.NewMNotificationInd)
 				close(mediator.NewMRetrieveConf)
 				close(mediator.NewMRetrieveConfFile)
@@ -228,6 +233,10 @@ func (mediator *Mediator) sendMNotifyRespInd(mNotifyRespIndFile string) {
 	if err := mediator.uploadFile(mNotifyRespIndFile); err != nil {
 		log.Printf("Cannot upload m-notifyresp.ind encoded file %s to message center", mNotifyRespIndFile)
 	}
+}
+
+func (mediator *Mediator) handleOutgoingMessage(msg *telepathy.OutgoingMessage) {
+
 }
 
 func (mediator *Mediator) uploadFile(filePath string) error {
