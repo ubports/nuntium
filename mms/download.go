@@ -26,7 +26,7 @@ import (
 	"log"
 	"time"
 
-	"launchpad.net/nuntium/udm"
+	"launchpad.net/udm"
 )
 
 func (pdu *MNotificationInd) DownloadContent(proxyHostname string, proxyPort int32) (string, error) {
