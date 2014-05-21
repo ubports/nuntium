@@ -226,23 +226,28 @@ func (mediator *Mediator) handleMNotifyRespInd(mNotifyRespInd *mms.MNotifyRespIn
 func (mediator *Mediator) sendMNotifyRespInd(mNotifyRespIndFile string) {
 	defer os.Remove(mNotifyRespIndFile)
 	if err := mediator.uploadFile(mNotifyRespIndFile); err != nil {
-		log.Printf("Cannot upload m-notifyresp.ind encoded file %s to message center", mNotifyRespIndFile)
+		log.Printf("Cannot upload m-notifyresp.ind encoded file %s to message center: %s", mNotifyRespIndFile, err)
 	}
 }
 
 func (mediator *Mediator) uploadFile(filePath string) error {
-	// TODO Upload file part
-	/*
-		mmsContext, err := mediator.modem.ActivateMMSContext()
-		if err != nil {
-			log.Print("Cannot activate ofono context: ", err)
-			return
-		}
-		proxy, err := mmsContext.GetProxy()
-		if err != nil {
-			log.Print("Error retrieving proxy: ", err)
-			return
-		}
-	*/
+	mmsContext, err := mediator.modem.ActivateMMSContext()
+	if err != nil {
+		log.Print("Cannot activate ofono context: ", err)
+		return err
+	}
+	proxy, err := mmsContext.GetProxy()
+	if err != nil {
+		log.Print("Error retrieving proxy: ", err)
+		return err
+	}
+	msc, err := mmsContext.GetMessageCenter()
+	if err != nil {
+		log.Print("Error retrieving Message Center: ", err)
+		return err
+	}
+	if err := mms.Upload(filePath, msc, proxy.Host, int32(proxy.Port)); err != nil {
+		log.Printf("Cannot upload %s: %s", filePath, err)
+	}
 	return nil
 }

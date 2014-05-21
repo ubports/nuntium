@@ -244,6 +244,14 @@ func (oContext OfonoContext) isActive() bool {
 	return reflect.ValueOf(oContext.Properties["Active"].Value).Bool()
 }
 
+func (oContext OfonoContext) GetMessageCenter() (string, error) {
+	if msc := reflect.ValueOf(oContext.Properties["MessageCenter"].Value).String(); msc != "" {
+		return msc, nil
+	} else {
+		return "", errors.New("context setting for the Message Center value is empty")
+	}
+}
+
 func (oContext OfonoContext) GetProxy() (proxyInfo ProxyInfo, err error) {
 	proxy := reflect.ValueOf(oContext.Properties["MessageProxy"].Value).String()
 	if strings.HasPrefix(proxy, "http://") {
@@ -254,7 +262,6 @@ func (oContext OfonoContext) GetProxy() (proxyInfo ProxyInfo, err error) {
 	if err != nil {
 		proxyInfo.Host = proxy
 		proxyInfo.Port = 80
-		fmt.Println("Setting proxy to:", proxyInfo)
 		return proxyInfo, nil
 	}
 	proxyInfo.Port, err = strconv.ParseUint(portString, 0, 64)

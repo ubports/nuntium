@@ -22,6 +22,7 @@
 package mms
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -29,19 +30,19 @@ import (
 	"launchpad.net/udm"
 )
 
-func (pdu *MNotificationInd) DownloadContent(proxyHostname string, proxyPort int32) (string, error) {
+func (pdu *MNotificationInd) DownloadContent(proxyHost string, proxyPort int32) (string, error) {
 	downloadManager, err := udm.NewDownloadManager()
 	if err != nil {
 		return "", err
 	}
-	download, err := downloadManager.CreateMmsDownload(pdu.ContentLocation, proxyHostname, proxyPort)
+	download, err := downloadManager.CreateMmsDownload(pdu.ContentLocation, proxyHost, proxyPort)
 	if err != nil {
 		return "", err
 	}
 	f := download.Finished()
 	p := download.DownloadProgress()
 	e := download.Error()
-	log.Print("Starting download")
+	log.Print("Starting download of ", pdu.ContentLocation, " with proxy ", proxyHost, ":", proxyPort)
 	download.Start()
 	for {
 		select {
@@ -54,6 +55,35 @@ func (pdu *MNotificationInd) DownloadContent(proxyHostname string, proxyPort int
 			return "", fmt.Errorf("Download timeout exceeded while fetching %s", pdu.ContentLocation)
 		case err := <-e:
 			return "", err
+		}
+	}
+}
+
+func Upload(file, msc, proxyHost string, proxyPort int32) error {
+	udm, err := udm.NewUploadManager()
+	if err != nil {
+		return err
+	}
+	upload, err := udm.CreateMmsUpload(msc, file, proxyHost, proxyPort)
+	if err != nil {
+		return err
+	}
+	f := upload.Finished()
+	p := upload.UploadProgress()
+	e := upload.Error()
+	log.Print("Starting upload of ", file, " to ", msc, " with proxy ", proxyHost, ":", proxyPort)
+	upload.Start()
+	for {
+		select {
+		case progress := <-p:
+			log.Print("Progress:", progress.Total, progress.Received)
+		case f := <-f:
+			log.Print("File ", f, " uploaded")
+			return nil
+		case <-time.After(10 * time.Minute):
+			return errors.New("upload timeout")
+		case err := <-e:
+			return err
 		}
 	}
 }
