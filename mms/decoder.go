@@ -114,7 +114,6 @@ func (dec *MMSDecoder) ReadCharset(reflectedPdu *reflect.Value, hdr string) (str
 		reflectedPdu.FieldByName("Charset").SetString(charset)
 	}
 	return charset, nil
-
 }
 
 func (dec *MMSDecoder) ReadMediaType(reflectedPdu *reflect.Value) (err error) {
@@ -343,7 +342,7 @@ func (dec *MMSDecoder) Decode(pdu MMSReader) (err error) {
 		case X_MMS_TRANSACTION_ID:
 			_, err = dec.ReadString(&reflectedPdu, "TransactionId")
 		case CONTENT_TYPE:
-			ctMember := reflectedPdu.FieldByName("ContentType")
+			ctMember := reflectedPdu.FieldByName("Content")
 			if err = dec.ReadContentType(&ctMember); err != nil {
 				return err
 			}

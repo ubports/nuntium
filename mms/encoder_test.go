@@ -23,6 +23,8 @@ package mms
 
 import (
 	"bytes"
+	"io/ioutil"
+	"os"
 	"testing"
 
 	. "launchpad.net/gocheck"
@@ -114,4 +116,29 @@ func (s *EncoderTestSuite) TestEncodeMNotifyRespIndRetrievedWithoutReports(c *C)
 	enc := NewEncoder(&outBytes)
 	c.Assert(enc.Encode(mNotifyRespInd), IsNil)
 	c.Assert(outBytes.Bytes(), DeepEquals, expectedBytes)
+}
+
+func (s *EncoderTestSuite) TestEncodeMSendReq(c *C) {
+	tmp, err := ioutil.TempFile("", "")
+	c.Assert(err, IsNil)
+	tmp.Close()
+	defer os.Remove(tmp.Name())
+	err = ioutil.WriteFile(tmp.Name(), []byte{1, 2, 3, 4, 5, 6}, 0644)
+	c.Assert(err, IsNil)
+
+	att, err := NewAttachment("text0", "text0.txt", tmp.Name())
+	c.Assert(err, IsNil)
+
+	attachments := []*Attachment{att}
+
+	recipients := []string{"+12345"}
+	mSendReq := NewMSendReq(recipients, attachments)
+
+	var outBytes bytes.Buffer
+	enc := NewEncoder(&outBytes)
+	err = enc.Encode(mSendReq)
+	c.Assert(err, IsNil)
+
+	err = ioutil.WriteFile("/home/sergiusens/test-m-send.req", outBytes.Bytes(), 0644)
+	c.Assert(err, IsNil)
 }

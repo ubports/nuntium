@@ -22,6 +22,7 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -38,8 +39,10 @@ type Mediator struct {
 	NewMNotificationInd   chan *mms.MNotificationInd
 	NewMNotifyRespInd     chan *mms.MNotifyRespInd
 	NewMRetrieveConf      chan *mms.MRetrieveConf
+	NewMSendReq           chan *mms.MSendReq
 	NewMRetrieveConfFile  chan string
 	NewMNotifyRespIndFile chan string
+	NewMSendReqFile       chan string
 	outMessage            chan *telepathy.OutgoingMessage
 	terminate             chan bool
 }
@@ -59,6 +62,8 @@ func NewMediator(modem *ofono.Modem) *Mediator {
 	mediator.NewMRetrieveConfFile = make(chan string)
 	mediator.NewMNotifyRespInd = make(chan *mms.MNotifyRespInd)
 	mediator.NewMNotifyRespIndFile = make(chan string)
+	mediator.NewMSendReq = make(chan *mms.MSendReq)
+	mediator.NewMSendReqFile = make(chan string)
 	mediator.outMessage = make(chan *telepathy.OutgoingMessage)
 	mediator.terminate = make(chan bool)
 	return mediator
@@ -92,6 +97,12 @@ mediatorLoop:
 			go mediator.handleMNotifyRespInd(mNotifyRespInd)
 		case mNotifyRespIndFilePath := <-mediator.NewMNotifyRespIndFile:
 			go mediator.sendMNotifyRespInd(mNotifyRespIndFilePath)
+		case msg := <-mediator.outMessage:
+			go mediator.handleOutgoingMessage(msg)
+		case mSendReq := <-mediator.NewMSendReq:
+			go mediator.handleMSendReq(mSendReq)
+		case mSendReqFilePath := <-mediator.NewMSendReqFile:
+			go mediator.sendMSendReq(mSendReqFilePath)
 		case id := <-mediator.modem.IdentityAdded:
 			var err error
 			mediator.telepathyService, err = mmsManager.AddService(id, mediator.outMessage, useDeliveryReports)
@@ -114,8 +125,6 @@ mediatorLoop:
 					log.Fatal(err)
 				}
 			}
-		case msg := <-mediator.outMessage:
-			go mediator.handleOutgoingMessage(msg)
 		case terminate := <-mediator.terminate:
 			/*
 				close(mediator.terminate)
@@ -236,7 +245,48 @@ func (mediator *Mediator) sendMNotifyRespInd(mNotifyRespIndFile string) {
 }
 
 func (mediator *Mediator) handleOutgoingMessage(msg *telepathy.OutgoingMessage) {
+	var cts []*mms.Attachment
+	for _, att := range msg.Attachments {
+		ct, err := mms.NewAttachment(att.Id, att.ContentType, att.FilePath)
+		if err != nil {
+			log.Print(err)
+			//TODO reply to telepathy ofono with an error
+			return
+		}
+		cts = append(cts, ct)
+	}
+	mSendReq := mms.NewMSendReq(msg.Recipients, cts)
+	//TODO
+	mediator.telepathyService.ReplySendMessage(msg.Reply, mSendReq.UUID)
+	mediator.NewMSendReq <- mSendReq
+}
 
+func (mediator *Mediator) handleMSendReq(mSendReq *mms.MSendReq) {
+	log.Print("Encoding M-Send.Req")
+	f, err := storage.CreateSendFile(mSendReq.UUID)
+	if err != nil {
+		log.Print("Unable to create m-send.req file for ", mSendReq.UUID)
+		return
+	}
+	defer f.Close()
+	enc := mms.NewEncoder(f)
+	if err := enc.Encode(mSendReq); err != nil {
+		log.Print("Unable to encode m-send.req for ", mSendReq.UUID)
+		return
+	}
+	filePath := f.Name()
+	log.Printf("Created %s to handle m-send.req for %s", filePath, mSendReq.UUID)
+	mediator.NewMSendReqFile <- filePath
+}
+
+func (mediator *Mediator) sendMSendReq(mSendReqFile string) {
+	fmt.Println("TODO: upload", mSendReqFile)
+	/*
+		defer os.Remove(mNotifyRespIndFile)
+		if err := mediator.uploadFile(mNotifyRespIndFile); err != nil {
+			log.Printf("Cannot upload m-notifyresp.ind encoded file %s to message center: %s", mNotifyRespIndFile, err)
+		}
+	*/
 }
 
 func (mediator *Mediator) uploadFile(filePath string) error {

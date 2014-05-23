@@ -24,43 +24,99 @@ package mms
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"path/filepath"
 	"reflect"
 	"strings"
 )
 
-type ContentType struct {
-	Name, Type, FileName, Charset, Start, StartInfo, Domain, Path, Comment, MediaType string
-	ContentLocation, ContentId                                                        string
-	Level                                                                             byte
-	Length, Size, CreationDate, ModificationDate, ReadDate                            uint64
-	Offset                                                                            int
-	Secure                                                                            bool
-	Q                                                                                 float64
-	Data                                                                              []byte
+type Attachment struct {
+	MediaType        string
+	Type             string `encode:"no"`
+	Name             string
+	FileName         string `encode:"no"`
+	Charset          string `encode:"no"`
+	Start            string
+	StartInfo        string `encode:"no"`
+	Domain           string `encode:"no"`
+	Path             string `encode:"no"`
+	Comment          string `encode:"no"`
+	ContentLocation  string
+	ContentId        string
+	Level            byte    `encode:"no"`
+	Length           uint64  `encode:"no"`
+	Size             uint64  `encode:"no"`
+	CreationDate     uint64  `encode:"no"`
+	ModificationDate uint64  `encode:"no"`
+	ReadDate         uint64  `encode:"no"`
+	Offset           int     `encode:"no"`
+	Secure           bool    `encode:"no"`
+	Q                float64 `encode:"no"`
+	Data             []byte  `encode:"no"`
 }
 
-func NewSmilContentType(smil string) (*ContentType, error) {
-	return nil, nil
+func NewAttachment(id, contentType, filePath string) (*Attachment, error) {
+	data, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create new ContentType for %s of content type %s on %s: %s", id, contentType, filePath, err)
+	}
+
+	ct := &Attachment{
+		ContentId: id,
+		Data:      data,
+	}
+
+	if parts := strings.Split(contentType, ","); len(parts) > 1 {
+		ct.MediaType = parts[0]
+		ct.Charset = parts[1]
+	} else {
+		ct.MediaType = contentType
+	}
+
+	file := filepath.Base(filePath)
+	ct.ContentLocation = file
+	//ct.ContentId = "<" + file[0:len(file)-len(filepath.Ext(file))] + ">"
+
+	if contentType == "application/smil" {
+		start, err := getSmilStart(data)
+		if err != nil {
+			return nil, err
+		}
+		ct.Start = start
+	}
+	return ct, nil
+}
+
+func getSmilStart(smilData []byte) (string, error) {
+	smilStart := string(smilData)
+
+	i := strings.Index(smilStart, ">")
+	if i == -1 {
+		return "", errors.New("cannot find the SMIL Start tag")
+	} else if i+1 > len(smilData) {
+		return "", errors.New("buffer overrun while searching for the SMIL Start tag")
+	}
+	return smilStart[:i+1], nil
 }
 
 //GetSmil returns the text corresponding to the ContentType that holds the SMIL
 func (pdu *MRetrieveConf) GetSmil() (string, error) {
-	for i := range pdu.DataParts {
-		if pdu.DataParts[i].MediaType == "application/smil" {
-			return string(pdu.DataParts[i].Data), nil
+	for i := range pdu.Attachments {
+		if pdu.Attachments[i].MediaType == "application/smil" {
+			return string(pdu.Attachments[i].Data), nil
 		}
 	}
 	return "", errors.New("Cannot find SMIL data part")
 }
 
 //GetDataParts returns the non SMIL ContentType data parts
-func (pdu *MRetrieveConf) GetDataParts() []ContentType {
-	var dataParts []ContentType
-	for i := range pdu.DataParts {
-		if pdu.DataParts[i].MediaType == "application/smil" {
+func (pdu *MRetrieveConf) GetDataParts() []Attachment {
+	var dataParts []Attachment
+	for i := range pdu.Attachments {
+		if pdu.Attachments[i].MediaType == "application/smil" {
 			continue
 		}
-		dataParts = append(dataParts, pdu.DataParts[i])
+		dataParts = append(dataParts, pdu.Attachments[i])
 	}
 	return dataParts
 }
@@ -71,7 +127,7 @@ func (dec *MMSDecoder) ReadContentTypeParts(reflectedPdu *reflect.Value) error {
 	if parts, err = dec.ReadUintVar(nil, ""); err != nil {
 		return err
 	}
-	var dataParts []ContentType
+	var dataParts []Attachment
 	fmt.Println("Number of parts", parts)
 	for i := uint64(0); i < parts; i++ {
 		fmt.Println("\nPart", i, "\n")
@@ -85,7 +141,7 @@ func (dec *MMSDecoder) ReadContentTypeParts(reflectedPdu *reflect.Value) error {
 		}
 		headerEnd := dec.Offset + int(headerLen)
 		fmt.Println("header len:", headerLen, "dataLen:", dataLen, "headerEnd:", headerEnd)
-		var ct ContentType
+		var ct Attachment
 		ct.Offset = headerEnd + 1
 		ctReflected := reflect.ValueOf(&ct).Elem()
 		if err := dec.ReadContentType(&ctReflected); err == nil {
@@ -108,7 +164,7 @@ func (dec *MMSDecoder) ReadContentTypeParts(reflectedPdu *reflect.Value) error {
 		dataParts = append(dataParts, ct)
 	}
 	dataPartsR := reflect.ValueOf(dataParts)
-	reflectedPdu.FieldByName("DataParts").Set(dataPartsR)
+	reflectedPdu.FieldByName("Attachments").Set(dataPartsR)
 
 	return nil
 }
@@ -154,7 +210,7 @@ func (dec *MMSDecoder) ReadContentType(ctMember *reflect.Value) error {
 
 	for dec.Offset < len(dec.Data) && dec.Offset < endOffset {
 		param, _ := dec.ReadInteger(nil, "")
-		//fmt.Printf("offset %d, value: %#x, param %#x\n", dec.Offset, dec.Data[dec.Offset], param)
+		fmt.Printf("offset %d, value: %#x, param %#x\n", dec.Offset, dec.Data[dec.Offset], param)
 		switch param {
 		case WSP_PARAMETER_TYPE_Q:
 			err = dec.ReadQ(ctMember)

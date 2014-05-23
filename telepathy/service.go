@@ -55,16 +55,16 @@ type Attachment struct {
 	Length    uint64
 }
 
-type DataPart struct {
+type OutAttachment struct {
 	Id          string
 	ContentType string
-	Filename    string
+	FilePath    string
 }
 
 type OutgoingMessage struct {
-	Recipients []string
-	Smil       string
-	DataParts  []DataPart
+	Recipients  []string
+	Attachments []OutAttachment
+	Reply       *dbus.Message
 }
 
 func NewMMSService(conn *dbus.Connection, identity string, outgoingChannel chan *OutgoingMessage, useDeliveryReports bool) *MMSService {
@@ -107,27 +107,33 @@ func (service *MMSService) watchDBusMethodCalls() {
 				log.Print("Cannot parse payload data from services")
 				reply = dbus.NewErrorMessage(msg, "Error.InvalidArguments", "Cannot parse services")
 			}
+			if err := service.conn.Send(reply); err != nil {
+				log.Println("Could not send reply:", err)
+			}
 		case "GetProperties":
 			reply = dbus.NewMethodReturnMessage(msg)
 			if err := reply.AppendArgs(service.Properties); err != nil {
 				log.Print("Cannot parse payload data from services")
 				reply = dbus.NewErrorMessage(msg, "Error.InvalidArguments", "Cannot parse services")
 			}
+			if err := service.conn.Send(reply); err != nil {
+				log.Println("Could not send reply:", err)
+			}
 		case "SendMessage":
-			reply = dbus.NewMethodReturnMessage(msg)
 			var outMessage OutgoingMessage
-			if err := reply.AppendArgs(outMessage.Recipients, &outMessage.Smil, outMessage.DataParts); err != nil {
+			outMessage.Reply = dbus.NewMethodReturnMessage(msg)
+			if err := msg.Args(&outMessage.Recipients, &outMessage.Attachments); err != nil {
 				log.Print("Cannot parse payload data from services")
-				reply = dbus.NewErrorMessage(msg, "Error.InvalidArguments", "Cannot parse services")
+				reply = dbus.NewErrorMessage(msg, "Error.InvalidArguments", "Cannot parse New Message")
 			} else {
 				service.outMessage <- &outMessage
 			}
 		default:
 			log.Println("Received unkown method call on", msg.Interface, msg.Member)
 			reply = dbus.NewErrorMessage(msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method")
-		}
-		if err := service.conn.Send(reply); err != nil {
-			log.Println("Could not send reply:", err)
+			if err := service.conn.Send(reply); err != nil {
+				log.Println("Could not send reply:", err)
+			}
 		}
 	}
 }
@@ -219,6 +225,11 @@ func parseRecipients(to string) []string {
 		}
 	}
 	return recipients
+}
+
+func (service *MMSService) ReplySendMessage(reply *dbus.Message, uuid string) error {
+	reply.AppendArgs(service.genMessagePath(uuid))
+	return service.conn.Send(reply)
 }
 
 //TODO randomly creating a uuid until the download manager does this for us
