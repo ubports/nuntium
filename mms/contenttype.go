@@ -130,6 +130,9 @@ func (dec *MMSDecoder) ReadMMSHeaders(ctMember *reflect.Value, headerEnd int) er
 }
 
 func (dec *MMSDecoder) ReadContentType(ctMember *reflect.Value) error {
+	if dec.Offset+1 >= len(dec.Data) {
+		return fmt.Errorf("message ended prematurely, offset: %d and payload length is %d", dec.Offset, len(dec.Data))
+	}
 	// These call the same function
 	if next := dec.Data[dec.Offset+1]; next&SHORT_FILTER != 0 {
 		return dec.ReadMediaType(ctMember)
