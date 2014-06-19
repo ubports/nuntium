@@ -2,7 +2,7 @@
  * Copyright 2014 Canonical Ltd.
  *
  * Authors:
- * Sergio Schvezov: sergio.schvezov@cannical.com
+ * Sergio Schvezov: sergio.schvezov@canonical.com
  *
  * This file is part of mms.
  *
@@ -115,7 +115,7 @@ func (s *PushDecodeTestSuite) TestDecodeATTUSA(c *C) {
 	c.Check(len(s.pdu.Data), Equals, 130)
 }
 
-func (s *PushDecodeTestSuite) TestDecodeSonaraFinland(c *C) {
+func (s *PushDecodeTestSuite) TestDecodeSoneraFinland(c *C) {
 	inputBytes := []byte{
 		0x00, 0x06, 0x07, 0xbe, 0xaf, 0x84, 0x8d, 0xf2, 0xb4, 0x81, 0x8c, 0x82, 0x98,
 		0x41, 0x42, 0x73, 0x54, 0x4c, 0x4e, 0x41, 0x4c, 0x41, 0x6d, 0x6d, 0x4e, 0x33,
