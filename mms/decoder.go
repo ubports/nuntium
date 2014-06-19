@@ -120,18 +120,14 @@ func (dec *MMSDecoder) ReadCharset(reflectedPdu *reflect.Value, hdr string) (str
 func (dec *MMSDecoder) ReadMediaType(reflectedPdu *reflect.Value, hdr string) (err error) {
 	var mediaType string
 	origOffset := dec.Offset
-
-	if dec.Data[dec.Offset] >= TEXT_MIN && dec.Data[dec.Offset] <= TEXT_MAX {
-		err = nil
-		dec.Offset = origOffset
-		mediaType, err = dec.ReadString(nil, "")
-		if err != nil {
+	if dec.Data[dec.Offset+1] >= TEXT_MIN && dec.Data[dec.Offset+1] <= TEXT_MAX {
+		if mediaType, err = dec.ReadString(nil, ""); err != nil {
 			return err
 		}
 	} else if mt, err := dec.ReadInteger(nil, ""); err == nil && len(CONTENT_TYPES) > int(mt) {
 		mediaType = CONTENT_TYPES[mt]
 	} else {
-		return fmt.Errorf("cannot decode media type for field beginning with %x", dec.Data[dec.Offset])
+		return fmt.Errorf("cannot decode media type for field beginning with %#x@%d", dec.Data[origOffset], origOffset)
 	}
 
 	reflectedPdu.FieldByName(hdr).SetString(mediaType)
