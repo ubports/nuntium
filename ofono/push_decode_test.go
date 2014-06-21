@@ -130,9 +130,6 @@ func (s *PushDecodeTestSuite) TestDecodeSoneraFinland(c *C) {
 	}
 	dec := NewDecoder(inputBytes)
 	c.Assert(dec.Decode(s.pdu), IsNil)
-	err := dec.Decode(s.pdu)
-
-	c.Assert(err, IsNil)
 
 	c.Check(int(s.pdu.HeaderLength), Equals, 7)
 	c.Check(int(s.pdu.ApplicationId), Equals, mms.PUSH_APPLICATION_ID)
