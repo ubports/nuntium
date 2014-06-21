@@ -135,9 +135,9 @@ func (dec *MMSDecoder) ReadContentType(ctMember *reflect.Value) error {
 	}
 	// These call the same function
 	if next := dec.Data[dec.Offset+1]; next&SHORT_FILTER != 0 {
-		return dec.ReadMediaType(ctMember)
+		return dec.ReadMediaType(ctMember, "MediaType")
 	} else if next >= TEXT_MIN && next <= TEXT_MAX {
-		return dec.ReadMediaType(ctMember)
+		return dec.ReadMediaType(ctMember, "MediaType")
 	}
 
 	var err error
@@ -148,7 +148,7 @@ func (dec *MMSDecoder) ReadContentType(ctMember *reflect.Value) error {
 	fmt.Println("Content Type Length:", length)
 	endOffset := int(length) + dec.Offset
 
-	if err := dec.ReadMediaType(ctMember); err != nil {
+	if err := dec.ReadMediaType(ctMember, "MediaType"); err != nil {
 		return err
 	}
 

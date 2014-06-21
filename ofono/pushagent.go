@@ -28,6 +28,7 @@ import (
 	"sync"
 
 	"launchpad.net/go-dbus/v1"
+	"launchpad.net/nuntium/mms"
 )
 
 /*
@@ -142,7 +143,7 @@ func (agent *PushAgent) notificationReceived(msg *dbus.Message) (reply *dbus.Mes
 			return dbus.NewErrorMessage(msg, "org.freedesktop.DBus.Error", "DecodeError")
 		}
 		// TODO later switch on ApplicationId and ContentType to different channels
-		if pdu.ApplicationId == 0x04 && pdu.ContentType == "application/vnd.wap.mms-message" {
+		if pdu.ApplicationId == mms.PUSH_APPLICATION_ID && pdu.ContentType == mms.VND_WAP_MMS_MESSAGE {
 			agent.Push <- pdu
 		} else {
 			log.Print("Unhandled push pdu", pdu)
