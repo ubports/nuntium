@@ -180,19 +180,33 @@ func (enc *MMSEncoder) writeCharset(charset string) error {
 	return enc.writeIntegerParam(WSP_PARAMETER_TYPE_CHARSET, charsetCode)
 }
 
+func (enc *MMSEncoder) writeLength(length uint64) error {
+	if length < SHORT_LENGTH_MAX {
+		return enc.writeShortInteger(length)
+	} else {
+		if err := enc.writeByte(LENGTH_QUOTE); err != nil {
+			return err
+		}
+		return enc.writeUintVar(length)
+	}
+}
+
 func (enc *MMSEncoder) writeMediaType(media string) error {
-	if err := enc.setParam(CONTENT_TYPE); err != nil {
+	if err := enc.setParam(WSP_PARAMETER_TYPE_CONTENT_TYPE); err != nil {
 		return err
 	}
 	var mt int
 	for mt = range CONTENT_TYPES {
 		if CONTENT_TYPES[mt] == media {
-			break
+			fmt.Println("Media Type is ", media, "in", mt, "which is the same as", CONTENT_TYPES[mt])
+			return enc.writeInteger(uint64(mt))
 		}
 	}
-	return enc.writeInteger(uint64(mt))
-	//TODO general form
-	return nil
+
+	if err := enc.writeLength(uint64(len(media))); err != nil {
+		return err
+	}
+	return enc.writeString(media)
 }
 
 func (enc *MMSEncoder) writeIntegerParam(param byte, i uint64) error {
@@ -236,7 +250,7 @@ func (enc *MMSEncoder) writeFrom() error {
 	if err := enc.setParam(FROM); err != nil {
 		return err
 	}
-	if err := enc.writeByte(1); err != nil {
+	if err := enc.writeLength(1); err != nil {
 		return err
 	}
 	return enc.writeByte(TOKEN_INSERT_ADDRESS)
