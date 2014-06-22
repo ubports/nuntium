@@ -211,7 +211,6 @@ func (mediator *Mediator) handleMRetrieveConf(uuid string) {
 }
 
 func (mediator *Mediator) handleRetrieved(mRetrieveConf *mms.MRetrieveConf) {
-	//TODO chann for send m-notifyresp.ind
 	mNotifyRespInd := mRetrieveConf.NewMNotifyRespInd(useDeliveryReports)
 	if err := storage.UpdateRetrieved(mNotifyRespInd.UUID); err != nil {
 		log.Print("Can't update mms status: ", err)
@@ -281,12 +280,10 @@ func (mediator *Mediator) handleMSendReq(mSendReq *mms.MSendReq) {
 
 func (mediator *Mediator) sendMSendReq(mSendReqFile string) {
 	fmt.Println("TODO: upload", mSendReqFile)
-	/*
-		defer os.Remove(mNotifyRespIndFile)
-		if err := mediator.uploadFile(mNotifyRespIndFile); err != nil {
-			log.Printf("Cannot upload m-notifyresp.ind encoded file %s to message center: %s", mNotifyRespIndFile, err)
-		}
-	*/
+	defer os.Remove(mSendReqFile)
+	if err := mediator.uploadFile(mSendReqFile); err != nil {
+		log.Printf("Cannot upload m-send.req encoded file %s to message center: %s", mSendReqFile, err)
+	}
 }
 
 func (mediator *Mediator) uploadFile(filePath string) error {
