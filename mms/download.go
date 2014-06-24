@@ -72,7 +72,10 @@ func Upload(file, msc, proxyHost string, proxyPort int32) error {
 	p := upload.UploadProgress()
 	e := upload.Error()
 	log.Print("Starting upload of ", file, " to ", msc, " with proxy ", proxyHost, ":", proxyPort)
-	upload.Start()
+	if err := upload.Start(); err != nil {
+		return err
+	}
+
 	for {
 		select {
 		case progress := <-p:
