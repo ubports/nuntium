@@ -4,12 +4,20 @@
 export DH_OPTIONS
 export DH_GOPKG := launchpad.net/nuntium
 
+DEB_HOST_ARCH := $(shell dpkg-architecture -qDEB_HOST_ARCH)
+
 %:
 	dh $@ \
 		--buildsystem=golang \
 		--with=golang \
 		--fail-missing
 
+override_dh_auto_test:
+# The test runners panic when running on powerpc64.
+ifneq ($(DEB_HOST_ARCH),powerpc)
+	dh_auto_test
+endif
+	
 override_dh_auto_install:
 	dh_auto_install -O--buildsystem=golang
 	mv ${CURDIR}/debian/tmp/usr/bin/decode-cli \

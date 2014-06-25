@@ -27,7 +27,7 @@ import (
 	"strings"
 )
 
-// MMS Field names from OMA-WAP-MMS section 7.3
+// MMS Field names from OMA-WAP-MMS section 7.3 Table 12
 const (
 	BCC                           = 0x01
 	CC                            = 0x02
@@ -62,6 +62,12 @@ const (
 	X_MMS_REPLY_CHARGING_SIZE     = 0x1F
 	X_MMS_PREVIOUSLY_SENT_BY      = 0x20
 	X_MMS_PREVIOUSLY_SENT_DATE    = 0x21
+)
+
+// MMS Content Type Assignments OMA-WAP-MMS section 7.3 Table 13
+const (
+	PUSH_APPLICATION_ID = 4
+	VND_WAP_MMS_MESSAGE = "application/vnd.wap.mms-message"
 )
 
 const (
