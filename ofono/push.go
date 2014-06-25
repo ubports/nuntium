@@ -66,11 +66,12 @@ func (dec *PushPDUDecoder) Decode(pdu *PushPDU) (err error) {
 	if _, err = dec.ReadUintVar(&rValue, "HeaderLength"); err != nil {
 		return err
 	}
-	if _, err = dec.ReadString(&rValue, "ContentType"); err != nil {
+	if err = dec.ReadMediaType(&rValue, "ContentType"); err != nil {
 		return err
 	}
 	dec.Offset++
-	if err = dec.decodeHeaders(pdu, int(pdu.HeaderLength)-(len(pdu.ContentType)+1)); err != nil {
+	remainHeaders := int(pdu.HeaderLength) - dec.Offset + 3
+	if err = dec.decodeHeaders(pdu, remainHeaders); err != nil {
 		return err
 	}
 	pdu.Data = dec.Data[(pdu.HeaderLength + 3):]
