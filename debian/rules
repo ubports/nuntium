@@ -24,7 +24,6 @@ override_dh_auto_install:
 		${CURDIR}/debian/tmp/usr/bin/nuntium-decode-cli 
 	rm -r \
 		${CURDIR}/debian/tmp/usr/bin/test \
-		${CURDIR}/debian/tmp/usr/share/gocode/src/$(DH_GOPKG)/udm \
 		${CURDIR}/debian/tmp/usr/share/gocode/src/$(DH_GOPKG)/test \
 		${CURDIR}/debian/tmp/usr/share/gocode/src/$(DH_GOPKG)/storage \
 		${CURDIR}/debian/tmp/usr/share/gocode/src/$(DH_GOPKG)/*.go
