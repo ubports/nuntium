@@ -54,7 +54,7 @@ func (manager *MMSManager) watchDBusMethodCalls() {
 
 	for msg := range manager.msgChan {
 		switch {
-		case msg.Interface == MMS_SERVICE_DBUS_IFACE && msg.Member == "GetServices":
+		case msg.Interface == MMS_MANAGER_DBUS_IFACE && msg.Member == "GetServices":
 			log.Print("Received GetServices()")
 			reply = manager.getServices(msg)
 		default:
