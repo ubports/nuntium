@@ -138,7 +138,4 @@ func (s *EncoderTestSuite) TestEncodeMSendReq(c *C) {
 	enc := NewEncoder(&outBytes)
 	err = enc.Encode(mSendReq)
 	c.Assert(err, IsNil)
-
-	err = ioutil.WriteFile("/home/sergiusens/test-m-send.req", outBytes.Bytes(), 0644)
-	c.Assert(err, IsNil)
 }
