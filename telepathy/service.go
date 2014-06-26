@@ -22,7 +22,9 @@
 package telepathy
 
 import (
+	"fmt"
 	"log"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -39,12 +41,14 @@ type ServicePayload struct {
 }
 
 type MMSService struct {
-	Payload    ServicePayload
-	Properties map[string]dbus.Variant
-	conn       *dbus.Connection
-	msgChan    chan *dbus.Message
-	identity   string
-	outMessage chan *OutgoingMessage
+	Payload         ServicePayload
+	Properties      map[string]dbus.Variant
+	conn            *dbus.Connection
+	msgChan         chan *dbus.Message
+	messageHandlers map[dbus.ObjectPath]*MessageInterface
+	msgDeleteChan   chan dbus.ObjectPath
+	identity        string
+	outMessage      chan *OutgoingMessage
 }
 
 type Attachment struct {
@@ -77,16 +81,27 @@ func NewMMSService(conn *dbus.Connection, identity string, outgoingChannel chan 
 		Properties: properties,
 	}
 	service := MMSService{
-		Payload:    payload,
-		Properties: serviceProperties,
-		conn:       conn,
-		msgChan:    make(chan *dbus.Message),
-		outMessage: outgoingChannel,
-		identity:   identity,
+		Payload:         payload,
+		Properties:      serviceProperties,
+		conn:            conn,
+		msgChan:         make(chan *dbus.Message),
+		msgDeleteChan:   make(chan dbus.ObjectPath),
+		messageHandlers: make(map[dbus.ObjectPath]*MessageInterface),
+		outMessage:      outgoingChannel,
+		identity:        identity,
 	}
 	go service.watchDBusMethodCalls()
+	go service.watchMessageDeleteCalls()
 	conn.RegisterObjectPath(payload.Path, service.msgChan)
 	return &service
+}
+
+func (service *MMSService) watchMessageDeleteCalls() {
+	for msgObjectPath := range service.msgDeleteChan {
+		if err := service.MessageRemoved(msgObjectPath); err != nil {
+			log.Print("Failed to delete ", msgObjectPath, ": ", err)
+		}
+	}
 }
 
 func (service *MMSService) watchDBusMethodCalls() {
@@ -138,6 +153,44 @@ func (service *MMSService) watchDBusMethodCalls() {
 	}
 }
 
+func getUUIDFromObjectPath(objectPath dbus.ObjectPath) (string, error) {
+	str := string(objectPath)
+	defaultError := fmt.Errorf("%s is not a proper object path for a Message", str)
+	if str == "" {
+		return "", defaultError
+	}
+	uuid := filepath.Base(str)
+	if uuid == "" || uuid == ".." || uuid == "." {
+		return "", defaultError
+	}
+	return uuid, nil
+}
+
+//MessageRemoved emits the MessageRemoved signal with the path of the removed
+//message.
+//It also actually removes the message from storage.
+func (service *MMSService) MessageRemoved(objectPath dbus.ObjectPath) error {
+	service.messageHandlers[objectPath].Close()
+	delete(service.messageHandlers, objectPath)
+
+	uuid, err := getUUIDFromObjectPath(objectPath)
+	if err != nil {
+		return err
+	}
+	if err := storage.Destroy(uuid); err != nil {
+		return err
+	}
+
+	signal := dbus.NewSignalMessage(service.Payload.Path, MMS_SERVICE_DBUS_IFACE, MESSAGE_REMOVED)
+	if err := signal.AppendArgs(objectPath); err != nil {
+		return err
+	}
+	if err := service.conn.Send(signal); err != nil {
+		return err
+	}
+	return nil
+}
+
 //MessageAdded emits a MessageAdded with the path to the added message which
 //is taken as a parameter
 func (service *MMSService) MessageAdded(mRetConf *mms.MRetrieveConf) error {
@@ -145,6 +198,7 @@ func (service *MMSService) MessageAdded(mRetConf *mms.MRetrieveConf) error {
 	if err != nil {
 		return err
 	}
+	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan)
 	signal := dbus.NewSignalMessage(service.Payload.Path, MMS_SERVICE_DBUS_IFACE, MESSAGE_ADDED)
 	if err := signal.AppendArgs(payload.Path, payload.Properties); err != nil {
 		return err
@@ -166,6 +220,7 @@ func (service *MMSService) isService(identity string) bool {
 func (service *MMSService) Close() {
 	service.conn.UnregisterObjectPath(service.Payload.Path)
 	close(service.msgChan)
+	close(service.msgDeleteChan)
 }
 
 func (service *MMSService) parseMessage(mRetConf *mms.MRetrieveConf) (ServicePayload, error) {

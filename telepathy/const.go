@@ -24,6 +24,7 @@ package telepathy
 const (
 	MMS_DBUS_NAME          = "org.ofono.mms"
 	MMS_DBUS_PATH          = "/org/ofono/mms"
+	MMS_MESSAGE_DBUS_IFACE = "org.ofono.mms.Message"
 	MMS_SERVICE_DBUS_IFACE = "org.ofono.mms.Service"
 	MMS_MANAGER_DBUS_IFACE = "org.ofono.mms.Manager"
 )
@@ -32,6 +33,7 @@ const (
 	IDENTITY             = "Identity"
 	USE_DELIVERY_REPORTS = "UseDeliveryReports"
 	MESSAGE_ADDED        = "MessageAdded"
+	MESSAGE_REMOVED      = "MessageRemoved"
 	SERVICE_ADDED        = "ServiceAdded"
 	SERVICE_REMOVED      = "ServiceRemoved"
 )
