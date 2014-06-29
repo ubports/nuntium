@@ -31,11 +31,12 @@ import (
 )
 
 type MMSEncoder struct {
-	w io.Writer
+	w   io.Writer
+	log string
 }
 
 func NewEncoder(w io.Writer) *MMSEncoder {
-	return &MMSEncoder{w}
+	return &MMSEncoder{w: w}
 }
 
 func (enc *MMSEncoder) Encode(pdu MMSWriter) error {
@@ -55,11 +56,11 @@ func (enc *MMSEncoder) Encode(pdu MMSWriter) error {
 		switch f.Kind() {
 		case reflect.Uint:
 		case reflect.Uint8:
-			fmt.Printf("%s: %d %#x\n", fieldName, f.Uint(), f.Uint())
+			enc.log = enc.log + fmt.Sprintf("%s: %d %#x\n", fieldName, f.Uint(), f.Uint())
 		case reflect.Bool:
-			fmt.Println(fieldName, f.Bool())
+			enc.log = enc.log + fmt.Sprintf(fieldName, f.Bool())
 		default:
-			fmt.Println(fieldName, f)
+			enc.log = enc.log + fmt.Sprintf(fieldName, f)
 		}
 
 		switch fieldName {
@@ -110,7 +111,7 @@ func (enc *MMSEncoder) Encode(pdu MMSWriter) error {
 			}
 		}
 		if err != nil {
-			return fmt.Errorf("cannot encode field %s with value %s: %s", fieldName, f, err)
+			return fmt.Errorf("cannot encode field %s with value %s: %s ... encoded so far: %s", fieldName, f, err, enc.log)
 		}
 	}
 	return nil
@@ -198,7 +199,6 @@ func (enc *MMSEncoder) writeMediaType(media string) error {
 	var mt int
 	for mt = range CONTENT_TYPES {
 		if CONTENT_TYPES[mt] == media {
-			fmt.Println("Media Type is ", media, "in", mt, "which is the same as", CONTENT_TYPES[mt])
 			return enc.writeInteger(uint64(mt))
 		}
 	}
@@ -218,7 +218,7 @@ func (enc *MMSEncoder) writeIntegerParam(param byte, i uint64) error {
 
 func (enc *MMSEncoder) writeStringParam(param byte, s string) error {
 	if s == "" {
-		log.Print("Skipping empty string")
+		enc.log = enc.log + "Skipping empty string\n"
 	}
 	if err := enc.setParam(param); err != nil {
 		return err
@@ -303,6 +303,7 @@ func (enc *MMSEncoder) writeInteger(i uint64) error {
 	if i&0x80 < 0x80 {
 		return enc.writeShortInteger(i)
 	} else {
+		fmt.Sprintf("Writing long int %d\n", i)
 		return enc.writeLongInteger(i)
 	}
 	return nil
