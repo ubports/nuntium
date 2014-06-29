@@ -33,6 +33,7 @@ func NewDecoder(data []byte) *MMSDecoder {
 type MMSDecoder struct {
 	Data   []byte
 	Offset int
+	log    string
 }
 
 func (dec *MMSDecoder) ReadEncodedString(reflectedPdu *reflect.Value, hdr string) (string, error) {
@@ -55,7 +56,7 @@ func (dec *MMSDecoder) ReadEncodedString(reflectedPdu *reflect.Value, hdr string
 		if err != nil {
 			return "", err
 		}
-		fmt.Println("Next string encoded with:", charset)
+		dec.log = dec.log + fmt.Sprintf("Next string encoded with: %s\n", charset)
 	}
 	var str string
 	if str, err = dec.ReadString(reflectedPdu, hdr); err != nil {
@@ -130,7 +131,7 @@ func (dec *MMSDecoder) ReadMediaType(reflectedPdu *reflect.Value, hdr string) (e
 	}
 
 	reflectedPdu.FieldByName(hdr).SetString(mediaType)
-	fmt.Print(hdr, ": ", mediaType, "\n")
+	dec.log = dec.log + fmt.Sprintf("%s: %s\n", hdr, mediaType)
 	return nil
 }
 
@@ -164,7 +165,7 @@ func (dec *MMSDecoder) ReadString(reflectedPdu *reflect.Value, hdr string) (stri
 	v := string(dec.Data[begin:dec.Offset])
 	if hdr != "" {
 		reflectedPdu.FieldByName(hdr).SetString(v)
-		fmt.Printf("Setting %s to %s\n", hdr, v)
+		dec.log = dec.log + fmt.Sprintf("Setting %s to %s\n", hdr, v)
 	}
 	return v, nil
 }
@@ -180,7 +181,7 @@ func (dec *MMSDecoder) ReadShortInteger(reflectedPdu *reflect.Value, hdr string)
 	v := dec.Data[dec.Offset] & 0x7F
 	if hdr != "" {
 		reflectedPdu.FieldByName(hdr).SetUint(uint64(v))
-		fmt.Printf("Setting %s to %#x == %d\n", hdr, v, v)
+		dec.log = dec.log + fmt.Sprintf("Setting %s to %#x == %d\n", hdr, v, v)
 	}
 	return v, nil
 }
@@ -190,7 +191,7 @@ func (dec *MMSDecoder) ReadByte(reflectedPdu *reflect.Value, hdr string) (byte, 
 	v := dec.Data[dec.Offset]
 	if hdr != "" {
 		reflectedPdu.FieldByName(hdr).SetUint(uint64(v))
-		fmt.Printf("Setting %s to %#x == %d\n", hdr, v, v)
+		dec.log = dec.log + fmt.Sprintf("Setting %s to %#x == %d\n", hdr, v, v)
 	}
 	return v, nil
 }
@@ -200,7 +201,7 @@ func (dec *MMSDecoder) ReadBytes(reflectedPdu *reflect.Value, hdr string) ([]byt
 	v := []byte(dec.Data[dec.Offset:])
 	if hdr != "" {
 		reflectedPdu.FieldByName(hdr).SetBytes(v)
-		fmt.Printf("Setting %s to %#x == %d\n", hdr, v, v)
+		dec.log = dec.log + fmt.Sprintf("Setting %s to %#x == %d\n", hdr, v, v)
 	}
 	return v, nil
 }
@@ -229,7 +230,7 @@ func (dec *MMSDecoder) ReadUintVar(reflectedPdu *reflect.Value, hdr string) (val
 	value |= uint64(dec.Data[dec.Offset] & 0x7F)
 	if hdr != "" {
 		reflectedPdu.FieldByName(hdr).SetUint(value)
-		fmt.Printf("Setting %s to %d\n", hdr, value)
+		dec.log = dec.log + fmt.Sprintf("Setting %s to %d\n", hdr, value)
 	}
 	return value, nil
 }
@@ -248,7 +249,7 @@ func (dec *MMSDecoder) ReadInteger(reflectedPdu *reflect.Value, hdr string) (uin
 	}
 	if hdr != "" {
 		reflectedPdu.FieldByName(hdr).SetUint(v)
-		fmt.Printf("Setting %s to %d\n", hdr, v)
+		dec.log = dec.log + fmt.Sprintf("Setting %s to %d\n", hdr, v)
 	}
 	return v, err
 }
@@ -266,7 +267,7 @@ func (dec *MMSDecoder) ReadLongInteger(reflectedPdu *reflect.Value, hdr string) 
 	}
 	if hdr != "" {
 		reflectedPdu.FieldByName(hdr).SetUint(uint64(v))
-		fmt.Printf("Setting %s to %d\n", hdr, v)
+		dec.log = dec.log + fmt.Sprintf("Setting %s to %d\n", hdr, v)
 	}
 	return v, nil
 }
@@ -289,7 +290,7 @@ func (dec *MMSDecoder) getParam() (byte, bool, error) {
 		if value, err = dec.ReadString(nil, ""); err != nil {
 			return 0, false, err
 		}
-		fmt.Println("Ignoring application header:", param, ":", value)
+		dec.log = dec.log + fmt.Sprintf("Ignoring application header: %#x: %s", param, value)
 		return 0, false, nil
 	}
 }
@@ -347,9 +348,9 @@ func (dec *MMSDecoder) Decode(pdu MMSReader) (err error) {
 				val = (val << 8) | uint(dec.Data[dec.Offset])
 			}
 			// TODO add switch case for token
-			fmt.Printf("Expiry token: %x\n", token)
+			dec.log = dec.log + fmt.Sprintf("Expiry token: %x\n", token)
 			reflectedPdu.FieldByName("Expiry").SetUint(uint64(val))
-			fmt.Printf("Message Expiry %d, %x\n", val, dec.Data[dec.Offset])
+			dec.log = dec.log + fmt.Sprintf("Message Expiry %d, %x\n", val, dec.Data[dec.Offset])
 		case X_MMS_TRANSACTION_ID:
 			_, err = dec.ReadString(&reflectedPdu, "TransactionId")
 		case CONTENT_TYPE:
@@ -402,8 +403,7 @@ func (dec *MMSDecoder) Decode(pdu MMSReader) (err error) {
 		case DATE:
 			_, err = dec.ReadLongInteger(&reflectedPdu, "Date")
 		default:
-			fmt.Printf("Unhandled byte: %#0x\tdec: %d\tdec.Offset: %d\n", param, param, dec.Offset)
-			return fmt.Errorf("Unhandled byte: %#0x\tdec: %d\tdec.Offset: %d\n", param, param, dec.Offset)
+			return fmt.Errorf("Unhandled byte: %#0x\tdec: %d\tdec.Offset: %d ... decoded so far: %s", param, param, dec.Offset, dec.log)
 		}
 		if err != nil {
 			return err
