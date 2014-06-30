@@ -22,7 +22,6 @@
 package main
 
 import (
-	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -281,7 +280,6 @@ func (mediator *Mediator) handleMSendReq(mSendReq *mms.MSendReq) {
 }
 
 func (mediator *Mediator) sendMSendReq(mSendReqFile string) {
-	fmt.Println("TODO: upload", mSendReqFile)
 	defer os.Remove(mSendReqFile)
 	if err := mediator.uploadFile(mSendReqFile); err != nil {
 		log.Printf("Cannot upload m-send.req encoded file %s to message center: %s", mSendReqFile, err)
