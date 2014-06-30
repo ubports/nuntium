@@ -81,7 +81,6 @@ func (s *EncodeDecodeTestSuite) TestInteger(c *C) {
 }
 
 func (s *EncodeDecodeTestSuite) TestUintVar(c *C) {
-	// 128 bounds short and long integers
 	testInts := []uint64{127, 512, 255, 256, 3000}
 	for i := range testInts {
 		c.Assert(s.enc.writeUintVar(testInts[i]), IsNil)
@@ -92,5 +91,20 @@ func (s *EncodeDecodeTestSuite) TestUintVar(c *C) {
 		integer, err := s.dec.ReadUintVar(nil, "")
 		c.Assert(err, IsNil)
 		c.Check(integer, Equals, testInts[i], Commentf("%d != %d with encoded bytes starting at %d: %d", integer, testInts[i], i, bytes))
+	}
+}
+
+func (s *EncodeDecodeTestSuite) TestLength(c *C) {
+	// >= 30 requires encoding with length quote
+	testLengths := []uint64{10, 1, 29, 30, 500}
+	for i := range testLengths {
+		c.Assert(s.enc.writeLength(testLengths[i]), IsNil)
+	}
+	bytes := s.bytes.Bytes()
+	s.dec = NewDecoder(bytes)
+	for i := range testLengths {
+		integer, err := s.dec.ReadLength(nil)
+		c.Assert(err, IsNil, Commentf("%d != %d with encoded bytes starting at %d: %d", integer, testLengths[i], i, bytes))
+		c.Check(integer, Equals, testLengths[i], Commentf("%d != %d with encoded bytes starting at %d: %d", integer, testLengths[i], i, bytes))
 	}
 }

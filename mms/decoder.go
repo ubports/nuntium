@@ -82,15 +82,20 @@ func (dec *MMSDecoder) ReadQ(reflectedPdu *reflect.Value) error {
 
 func (dec *MMSDecoder) ReadLength(reflectedPdu *reflect.Value) (length uint64, err error) {
 	switch {
-	case dec.Data[dec.Offset+1] < SHORT_LENGTH_MAX:
+	case dec.Data[dec.Offset+1]&0x7f < SHORT_LENGTH_MAX:
 		l, err := dec.ReadShortInteger(nil, "")
 		v := uint64(l)
-		reflectedPdu.FieldByName("Length").SetUint(v)
+		if reflectedPdu != nil {
+			reflectedPdu.FieldByName("Length").SetUint(v)
+		}
 		return v, err
 	case dec.Data[dec.Offset+1] == LENGTH_QUOTE:
 		dec.Offset++
-		l, err := dec.ReadUintVar(reflectedPdu, "Length")
-		return l, err
+		var hdr string
+		if reflectedPdu != nil {
+			hdr = "Length"
+		}
+		return dec.ReadUintVar(reflectedPdu, hdr)
 	}
 	return 0, fmt.Errorf("Unhandled length %#x @%d", dec.Data[dec.Offset+1], dec.Offset)
 }
