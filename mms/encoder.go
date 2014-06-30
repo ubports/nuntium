@@ -308,12 +308,11 @@ func (enc *MMSEncoder) writeInteger(i uint64) error {
 }
 
 func (enc *MMSEncoder) writeUintVar(v uint64) error {
-	b := byte(v)
-	uintVar := []byte{b & 0x7f}
-	b = b >> 7
-	for b > 0 {
-		uintVar = append([]byte{b & 0x7f}, uintVar...)
-		b = b >> 7
+	uintVar := []byte{byte(v & 0x7f)}
+	v = v >> 7
+	for v > 0 {
+		uintVar = append([]byte{byte(0x80 | (v & 0x7f))}, uintVar...)
+		v = v >> 7
 	}
 	return enc.writeBytes(uintVar, len(uintVar))
 }
