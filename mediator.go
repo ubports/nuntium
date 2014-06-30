@@ -284,7 +284,6 @@ func (mediator *Mediator) handleMSendReq(mSendReq *mms.MSendReq) {
 }
 
 func (mediator *Mediator) sendMSendReq(mSendReqFile, uuid string) {
-	fmt.Println("TODO: upload", mSendReqFile)
 	defer os.Remove(mSendReqFile)
 	defer mediator.telepathyService.MessageDestroy(uuid)
 	if err := mediator.uploadFile(mSendReqFile); err != nil {
