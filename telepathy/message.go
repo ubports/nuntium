@@ -22,6 +22,7 @@
 package telepathy
 
 import (
+	"fmt"
 	"log"
 
 	"launchpad.net/go-dbus/v1"
@@ -32,6 +33,7 @@ type MessageInterface struct {
 	objectPath dbus.ObjectPath
 	msgChan    chan *dbus.Message
 	deleteChan chan dbus.ObjectPath
+	status     string
 }
 
 func NewMessageInterface(conn *dbus.Connection, objectPath dbus.ObjectPath, deleteChan chan dbus.ObjectPath) *MessageInterface {
@@ -77,4 +79,26 @@ func (msgInterface *MessageInterface) watchDBusMethodCalls() {
 			}
 		}
 	}
+}
+
+func (msgInterface *MessageInterface) PropertyChanged(status string) error {
+	var found bool
+	for _, validStatus := range []string{SENT, DRAFT, ERROR} {
+		if status == validStatus {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("status %s is not a valid status", status)
+	}
+	msgInterface.status = status
+	signal := dbus.NewSignalMessage(msgInterface.objectPath, MMS_MESSAGE_DBUS_IFACE, PROPERTY_CHANGED)
+	if err := signal.AppendArgs(STATUS, dbus.Variant{status}); err != nil {
+		return err
+	}
+	if err := msgInterface.conn.Send(signal); err != nil {
+		return err
+	}
+	return nil
 }
