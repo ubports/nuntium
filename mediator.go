@@ -235,22 +235,15 @@ func (mediator *Mediator) sendMNotifyRespInd(mNotifyRespIndFile string) {
 func (mediator *Mediator) uploadFile(filePath string) error {
 	mmsContext, err := mediator.modem.ActivateMMSContext()
 	if err != nil {
-		log.Print("Cannot activate ofono context: ", err)
 		return err
 	}
 	proxy, err := mmsContext.GetProxy()
 	if err != nil {
-		log.Print("Error retrieving proxy: ", err)
 		return err
 	}
 	msc, err := mmsContext.GetMessageCenter()
 	if err != nil {
-		log.Print("Error retrieving Message Center: ", err)
 		return err
 	}
-	if err := mms.Upload(filePath, msc, proxy.Host, int32(proxy.Port)); err != nil {
-		log.Printf("Cannot upload %s: %s", filePath, err)
-		return err
-	}
-	return nil
+	return mms.Upload(filePath, msc, proxy.Host, int32(proxy.Port))
 }
