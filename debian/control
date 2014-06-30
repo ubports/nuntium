@@ -18,7 +18,7 @@ Vcs-Bzr: lp:nuntium
 
 Package: nuntium
 Architecture: any
-Depends: ofono, ubuntu-download-manager, ${misc:Depends}, ${shlibs:Depends}
+Depends: ofono, ubuntu-download-manager, ubuntu-upload-manager, ${misc:Depends}, ${shlibs:Depends}
 Built-Using: ${misc:Built-Using}
 Recommends: telepathy-ofono
 Conflicts: mmsd
