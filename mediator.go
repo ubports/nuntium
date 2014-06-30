@@ -204,7 +204,9 @@ func (mediator *Mediator) handleMRetrieveConf(uuid string) {
 	}
 	mediator.NewMRetrieveConf <- mRetrieveConf
 	if mediator.telepathyService != nil {
-		mediator.telepathyService.MessageAdded(mRetrieveConf)
+		if err := mediator.telepathyService.MessageAdded(mRetrieveConf); err != nil {
+			log.Println("Cannot notify telepathy-ofono about new message", err)
+		}
 	} else {
 		log.Print("Not sending recently retrieved message")
 	}
@@ -304,6 +306,7 @@ func (mediator *Mediator) uploadFile(filePath string) error {
 	}
 	if err := mms.Upload(filePath, msc, proxy.Host, int32(proxy.Port)); err != nil {
 		log.Printf("Cannot upload %s: %s", filePath, err)
+		return err
 	}
 	return nil
 }
