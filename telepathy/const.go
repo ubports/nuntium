@@ -36,6 +36,14 @@ const (
 	MESSAGE_REMOVED      = "MessageRemoved"
 	SERVICE_ADDED        = "ServiceAdded"
 	SERVICE_REMOVED      = "ServiceRemoved"
+	PROPERTY_CHANGED     = "PropertyChanged"
+	STATUS               = "Status"
+)
+
+const (
+	DRAFT = "draft"
+	SENT  = "sent"
+	ERROR = "error"
 )
 
 const (
