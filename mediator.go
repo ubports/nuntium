@@ -275,7 +275,9 @@ func (mediator *Mediator) handleMSendReq(mSendReq *mms.MSendReq) {
 	enc := mms.NewEncoder(f)
 	if err := enc.Encode(mSendReq); err != nil {
 		log.Print("Unable to encode m-send.req for ", mSendReq.UUID)
-		mediator.telepathyService.MessageStatusChanged(mSendReq.UUID, telepathy.PERMANENT_ERROR)
+		if err := mediator.telepathyService.MessageStatusChanged(mSendReq.UUID, telepathy.PERMANENT_ERROR); err != nil {
+			log.Println(err)
+		}
 		return
 	}
 	filePath := f.Name()
@@ -287,11 +289,15 @@ func (mediator *Mediator) sendMSendReq(mSendReqFile, uuid string) {
 	defer os.Remove(mSendReqFile)
 	defer mediator.telepathyService.MessageDestroy(uuid)
 	if err := mediator.uploadFile(mSendReqFile); err != nil {
-		mediator.telepathyService.MessageStatusChanged(uuid, telepathy.TRANSIENT_ERROR)
+		if err := mediator.telepathyService.MessageStatusChanged(uuid, telepathy.TRANSIENT_ERROR); err != nil {
+			log.Println(err)
+		}
 		log.Printf("Cannot upload m-send.req encoded file %s to message center: %s", mSendReqFile, err)
 		return
 	}
-	mediator.telepathyService.MessageStatusChanged(uuid, telepathy.SENT)
+	if err := mediator.telepathyService.MessageStatusChanged(uuid, telepathy.SENT); err != nil {
+		log.Println(err)
+	}
 }
 
 func (mediator *Mediator) uploadFile(filePath string) error {
