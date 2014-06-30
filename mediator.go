@@ -284,6 +284,7 @@ func (mediator *Mediator) handleMSendReq(mSendReq *mms.MSendReq) {
 func (mediator *Mediator) sendMSendReq(mSendReqFile, uuid string) {
 	fmt.Println("TODO: upload", mSendReqFile)
 	defer os.Remove(mSendReqFile)
+	defer mediator.telepathyService.MessageDestroy(uuid)
 	if err := mediator.uploadFile(mSendReqFile); err != nil {
 		mediator.telepathyService.MessageStatusChanged(uuid, telepathy.TRANSIENT_ERROR)
 		log.Printf("Cannot upload m-send.req encoded file %s to message center: %s", mSendReqFile, err)

@@ -290,6 +290,15 @@ func parseRecipients(to string) []string {
 	return recipients
 }
 
+func (service *MMSService) MessageDestroy(uuid string) error {
+	msgObjectPath := service.genMessagePath(uuid)
+	if msgInterface, ok := service.messageHandlers[msgObjectPath]; ok {
+		msgInterface.Close()
+		delete(service.messageHandlers, msgObjectPath)
+	}
+	return fmt.Errorf("no message interface handler for object path %s", msgObjectPath)
+}
+
 func (service *MMSService) MessageStatusChanged(uuid, status string) error {
 	msgObjectPath := service.genMessagePath(uuid)
 	if msgInterface, ok := service.messageHandlers[msgObjectPath]; ok {
