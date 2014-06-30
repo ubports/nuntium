@@ -281,29 +281,27 @@ func (enc *MMSEncoder) writeShortInteger(i uint64) error {
 }
 
 func (enc *MMSEncoder) writeLongInteger(i uint64) error {
-	long := i
 	var encodedLong []byte
-	for long > 0 {
-		b := byte(0xff & long)
-		encodedLong = append(encodedLong, b)
-		long = long >> 8
+	for i > 0 {
+		b := byte(0xff & i)
+		encodedLong = append([]byte{b}, encodedLong...)
+		i = i >> 8
 	}
 
 	encLength := uint64(len(encodedLong))
 	if encLength > SHORT_LENGTH_MAX {
 		return fmt.Errorf("cannot encode long integer, lenght was %d but expected %d", encLength, SHORT_LENGTH_MAX)
 	}
-	if err := enc.writeShortInteger(encLength); err != nil {
+	if err := enc.writeByte(byte(encLength)); err != nil {
 		return err
 	}
 	return enc.writeBytes(encodedLong, len(encodedLong))
 }
 
 func (enc *MMSEncoder) writeInteger(i uint64) error {
-	if i&0x80 < 0x80 {
+	if i < 0x80 {
 		return enc.writeShortInteger(i)
 	} else {
-		fmt.Sprintf("Writing long int %d\n", i)
 		return enc.writeLongInteger(i)
 	}
 	return nil

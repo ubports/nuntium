@@ -257,14 +257,17 @@ func (dec *MMSDecoder) ReadInteger(reflectedPdu *reflect.Value, hdr string) (uin
 func (dec *MMSDecoder) ReadLongInteger(reflectedPdu *reflect.Value, hdr string) (uint64, error) {
 	dec.Offset++
 	size := int(dec.Data[dec.Offset])
-	dec.Offset++
-	var v uint64
-	endOffset := dec.Offset + size - 1
-	v = v << 8
-	for ; dec.Offset < endOffset; dec.Offset++ {
-		v |= uint64(dec.Data[dec.Offset])
-		v = v << 8
+	if size > SHORT_LENGTH_MAX {
+		return 0, fmt.Errorf("cannot encode long integer, lenght was %d but expected %d", size, SHORT_LENGTH_MAX)
 	}
+	dec.Offset++
+	end := dec.Offset + size
+	var v uint64
+	for ; dec.Offset < end; dec.Offset++ {
+		v = v << 8
+		v |= uint64(dec.Data[dec.Offset])
+	}
+	dec.Offset--
 	if hdr != "" {
 		reflectedPdu.FieldByName(hdr).SetUint(uint64(v))
 		dec.log = dec.log + fmt.Sprintf("Setting %s to %d\n", hdr, v)

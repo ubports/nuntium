@@ -67,7 +67,7 @@ func (s *EncodeDecodeTestSuite) TestByte(c *C) {
 
 func (s *EncodeDecodeTestSuite) TestInteger(c *C) {
 	// 128 bounds short and long integers
-	testInts := []uint64{0, 100, 127, 128, 129}
+	testInts := []uint64{512, 100, 127, 128, 129, 255, 256, 511, 3000}
 	for i := range testInts {
 		c.Assert(s.enc.writeInteger(testInts[i]), IsNil)
 	}
@@ -76,6 +76,6 @@ func (s *EncodeDecodeTestSuite) TestInteger(c *C) {
 	for i := range testInts {
 		integer, err := s.dec.ReadInteger(nil, "")
 		c.Assert(err, IsNil)
-		c.Assert(integer, Equals, testInts[i], Commentf("From testInts[%d] and encoded bytes: %#x", i, bytes))
+		c.Check(integer, Equals, testInts[i], Commentf("%d != %d with encoded bytes starting at %d: %d", integer, testInts[i], i, bytes))
 	}
 }
