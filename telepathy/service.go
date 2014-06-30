@@ -290,9 +290,22 @@ func parseRecipients(to string) []string {
 	return recipients
 }
 
-func (service *MMSService) ReplySendMessage(reply *dbus.Message, uuid string) error {
-	reply.AppendArgs(service.genMessagePath(uuid))
-	return service.conn.Send(reply)
+func (service *MMSService) MessageStatusChanged(uuid, status string) error {
+	msgObjectPath := service.genMessagePath(uuid)
+	if msgInterface, ok := service.messageHandlers[msgObjectPath]; ok {
+		return msgInterface.StatusChanged(status)
+	}
+	return fmt.Errorf("no message interface handler for object path %s", msgObjectPath)
+}
+
+func (service *MMSService) ReplySendMessage(reply *dbus.Message, uuid string) (dbus.ObjectPath, error) {
+	msgObjectPath := service.genMessagePath(uuid)
+	reply.AppendArgs(msgObjectPath)
+	if err := service.conn.Send(reply); err != nil {
+		return "", err
+	}
+	service.messageHandlers[msgObjectPath] = NewMessageInterface(service.conn, msgObjectPath, service.msgDeleteChan)
+	return msgObjectPath, nil
 }
 
 //TODO randomly creating a uuid until the download manager does this for us

@@ -41,9 +41,9 @@ const (
 )
 
 const (
-	DRAFT = "draft"
-	SENT  = "sent"
-	ERROR = "error"
+	PERMANENT_ERROR = "PermanentError"
+	SENT            = "Sent"
+	TRANSIENT_ERROR = "TransientError"
 )
 
 const (

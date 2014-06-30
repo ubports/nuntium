@@ -81,9 +81,9 @@ func (msgInterface *MessageInterface) watchDBusMethodCalls() {
 	}
 }
 
-func (msgInterface *MessageInterface) PropertyChanged(status string) error {
+func (msgInterface *MessageInterface) StatusChanged(status string) error {
 	var found bool
-	for _, validStatus := range []string{SENT, DRAFT, ERROR} {
+	for _, validStatus := range []string{SENT, PERMANENT_ERROR, TRANSIENT_ERROR} {
 		if status == validStatus {
 			found = true
 			break
