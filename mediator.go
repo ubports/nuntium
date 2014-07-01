@@ -150,7 +150,7 @@ func (mediator *Mediator) handleMNotificationInd(pushMsg *ofono.PushPDU) {
 	dec := mms.NewDecoder(pushMsg.Data)
 	mNotificationInd := mms.NewMNotificationInd()
 	if err := dec.Decode(mNotificationInd); err != nil {
-		log.Print("Unable to decode m-notification.ind: ", err)
+		log.Println("Unable to decode m-notification.ind: ", err, "with log", dec.GetLog())
 		return
 	}
 	storage.Create(mNotificationInd.UUID, mNotificationInd.ContentLocation)
@@ -198,7 +198,7 @@ func (mediator *Mediator) handleMRetrieveConf(uuid string) {
 	mRetrieveConf := mms.NewMRetrieveConf(uuid)
 	dec := mms.NewDecoder(mmsData)
 	if err := dec.Decode(mRetrieveConf); err != nil {
-		log.Print("Unable to decode m-retrieve.conf: ", err)
+		log.Println("Unable to decode m-retrieve.conf: ", err, "with log", dec.GetLog())
 		return
 	}
 	mediator.NewMRetrieveConf <- mRetrieveConf
