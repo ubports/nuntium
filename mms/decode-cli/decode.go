@@ -42,6 +42,8 @@ func main() {
 		fmt.Println("Saving to", targetPath)
 		writeParts(targetPath, retConfHdr.Attachments)
 	}
+
+	fmt.Println(dec.GetLog())
 }
 
 func usage() {

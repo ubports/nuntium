@@ -403,11 +403,15 @@ func (dec *MMSDecoder) Decode(pdu MMSReader) (err error) {
 		case DATE:
 			_, err = dec.ReadLongInteger(&reflectedPdu, "Date")
 		default:
-			return fmt.Errorf("Unhandled byte: %#0x\tdec: %d\tdec.Offset: %d ... decoded so far: %s", param, param, dec.Offset, dec.log)
+			return fmt.Errorf("Unhandled byte: %#0x\tdec: %d\tdec.Offset: %d ... decoded so far: %s", param, param, dec.Offset)
 		}
 		if err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (dec *MMSDecoder) GetLog() string {
+	return dec.log
 }
