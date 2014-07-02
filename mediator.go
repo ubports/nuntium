@@ -133,6 +133,8 @@ mediatorLoop:
 				close(mediator.NewMRetrieveConfFile)
 				close(mediator.NewMNotifyRespInd)
 				close(mediator.NewMNotifyRespIndFile)
+				close(mediator.NewMSendReq)
+				close(mediator.NewMSendReqFile)
 			*/
 			if terminate {
 				break mediatorLoop
