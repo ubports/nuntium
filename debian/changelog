@@ -1,3 +1,24 @@
+nuntium (0.1+14.10.20140702.2-0ubuntu1) utopic; urgency=low
+
+  [ CI bot ]
+  * Upload support while moving udm to it's new package namespace
+  * SendMessage telepathy service support with necessary encoder fixes.
+
+  [ Sergio Schvezov ]
+  * Improving incoming dbus method call handling for the mms service
+    interface
+  * Waiting for calls to GetServices on the proper interface
+  * Adding a minimal telepathy message interface
+  * Fixing recv for multiple recipients.
+  * Making decoding less verbose and logging information on errors only
+  * Adding encode -> decode tests for the cases where decoding is the
+    inverse function of encoding.
+  * Relaxing matching for smil media type
+  * Length bound checks fix (LP: #1336146)
+  * Sending MessageAdded with draft Status for new outgoing messages
+
+ -- Ubuntu daily release <ps-jenkins@lists.canonical.com>  Wed, 02 Jul 2014 21:15:22 +0000
+
 nuntium (0.1+14.10.20140621-0ubuntu1) utopic; urgency=low
 
   [ Sergio Schvezov ]
