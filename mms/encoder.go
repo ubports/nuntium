@@ -182,7 +182,7 @@ func (enc *MMSEncoder) writeCharset(charset string) error {
 }
 
 func (enc *MMSEncoder) writeLength(length uint64) error {
-	if length < SHORT_LENGTH_MAX {
+	if length <= SHORT_LENGTH_MAX {
 		return enc.writeShortInteger(length)
 	} else {
 		if err := enc.writeByte(LENGTH_QUOTE); err != nil {
