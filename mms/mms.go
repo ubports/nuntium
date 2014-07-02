@@ -193,7 +193,8 @@ type MRetrieveConf struct {
 	ReplyChargingId                            string
 	ReadReport, RetrieveStatus, DeliveryReport byte
 	TransactionId, MessageId, RetrieveText     string
-	From, To, Cc, Subject                      string
+	From, Cc, Subject                          string
+	To                                         string
 	ReportAllowed                              bool
 	Date                                       uint64
 	Content                                    Attachment

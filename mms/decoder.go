@@ -134,6 +134,19 @@ func (dec *MMSDecoder) ReadMediaType(reflectedPdu *reflect.Value, hdr string) (e
 	return nil
 }
 
+func (dec *MMSDecoder) ReadTo(reflectedPdu *reflect.Value) error {
+	toField, err := dec.ReadEncodedString(reflectedPdu, "")
+	if err != nil {
+		return err
+	}
+	to := reflectedPdu.FieldByName("To").String()
+	if to != "" {
+		toField = toField + "," + to
+	}
+	reflectedPdu.FieldByName("To").SetString(toField)
+	return err
+}
+
 func (dec *MMSDecoder) ReadString(reflectedPdu *reflect.Value, hdr string) (string, error) {
 	dec.Offset++
 	if dec.Data[dec.Offset] == 34 { // Skip the quote char(34) == "
@@ -360,7 +373,7 @@ func (dec *MMSDecoder) Decode(pdu MMSReader) (err error) {
 		case SUBJECT:
 			_, err = dec.ReadEncodedString(&reflectedPdu, "Subject")
 		case TO:
-			_, err = dec.ReadEncodedString(&reflectedPdu, "To")
+			err = dec.ReadTo(&reflectedPdu)
 		case CC:
 			_, err = dec.ReadEncodedString(&reflectedPdu, "Cc")
 		case X_MMS_REPLY_CHARGING_ID:
