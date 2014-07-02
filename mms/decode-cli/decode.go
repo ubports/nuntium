@@ -40,7 +40,7 @@ func main() {
 
 	if targetPath != "" {
 		fmt.Println("Saving to", targetPath)
-		writeParts(targetPath, retConfHdr.DataParts)
+		writeParts(targetPath, retConfHdr.Attachments)
 	}
 }
 
@@ -49,7 +49,7 @@ func usage() {
 	os.Exit(1)
 }
 
-func writeParts(targetPath string, parts []mms.ContentType) {
+func writeParts(targetPath string, parts []mms.Attachment) {
 	if fi, err := os.Stat(targetPath); err != nil {
 		if err := os.MkdirAll(targetPath, 0755); err != nil {
 			fmt.Println(err)

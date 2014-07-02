@@ -10,6 +10,7 @@ Build-Depends:
  golang-go-dbus-dev,
  golang-go-xdg-dev,
  golang-gocheck-dev,
+ golang-udm-dev,
 Standards-Version: 3.9.5
 Homepage: https://launchpad.net/nuntium
 Vcs-Browser: http://bazaar.launchpad.net/~phablet-team/nuntium/trunk/files
@@ -17,7 +18,7 @@ Vcs-Bzr: lp:nuntium
 
 Package: nuntium
 Architecture: any
-Depends: ofono, ubuntu-download-manager, ${misc:Depends}, ${shlibs:Depends}
+Depends: ofono, ubuntu-download-manager, ubuntu-upload-manager, ${misc:Depends}, ${shlibs:Depends}
 Built-Using: ${misc:Built-Using}
 Recommends: telepathy-ofono
 Conflicts: mmsd

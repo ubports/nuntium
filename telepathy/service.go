@@ -22,6 +22,7 @@
 package telepathy
 
 import (
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -44,6 +45,7 @@ type MMSService struct {
 	conn       *dbus.Connection
 	msgChan    chan *dbus.Message
 	identity   string
+	outMessage chan *OutgoingMessage
 }
 
 type Attachment struct {
@@ -54,7 +56,19 @@ type Attachment struct {
 	Length    uint64
 }
 
-func NewMMSService(conn *dbus.Connection, identity string, useDeliveryReports bool) *MMSService {
+type OutAttachment struct {
+	Id          string
+	ContentType string
+	FilePath    string
+}
+
+type OutgoingMessage struct {
+	Recipients  []string
+	Attachments []OutAttachment
+	Reply       *dbus.Message
+}
+
+func NewMMSService(conn *dbus.Connection, identity string, outgoingChannel chan *OutgoingMessage, useDeliveryReports bool) *MMSService {
 	properties := make(map[string]dbus.Variant)
 	properties[IDENTITY] = dbus.Variant{identity}
 	serviceProperties := make(map[string]dbus.Variant)
@@ -68,6 +82,7 @@ func NewMMSService(conn *dbus.Connection, identity string, useDeliveryReports bo
 		Properties: serviceProperties,
 		conn:       conn,
 		msgChan:    make(chan *dbus.Message),
+		outMessage: outgoingChannel,
 		identity:   identity,
 	}
 	go service.watchDBusMethodCalls()
@@ -76,12 +91,14 @@ func NewMMSService(conn *dbus.Connection, identity string, useDeliveryReports bo
 }
 
 func (service *MMSService) watchDBusMethodCalls() {
-	var reply *dbus.Message
-
 	for msg := range service.msgChan {
+		var reply *dbus.Message
 		if msg.Interface != MMS_SERVICE_DBUS_IFACE {
 			log.Println("Received unkown method call on", msg.Interface, msg.Member)
-			reply = dbus.NewErrorMessage(msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method")
+			reply = dbus.NewErrorMessage(
+				msg,
+				"org.freedesktop.DBus.Error.UnknownInterface",
+				fmt.Sprintf("No such interface '%s' at object path '%s'", msg.Interface, msg.Path))
 			continue
 		}
 		switch msg.Member {
@@ -93,18 +110,39 @@ func (service *MMSService) watchDBusMethodCalls() {
 				log.Print("Cannot parse payload data from services")
 				reply = dbus.NewErrorMessage(msg, "Error.InvalidArguments", "Cannot parse services")
 			}
+			if err := service.conn.Send(reply); err != nil {
+				log.Println("Could not send reply:", err)
+			}
 		case "GetProperties":
 			reply = dbus.NewMethodReturnMessage(msg)
 			if err := reply.AppendArgs(service.Properties); err != nil {
 				log.Print("Cannot parse payload data from services")
 				reply = dbus.NewErrorMessage(msg, "Error.InvalidArguments", "Cannot parse services")
 			}
+			if err := service.conn.Send(reply); err != nil {
+				log.Println("Could not send reply:", err)
+			}
+		case "SendMessage":
+			var outMessage OutgoingMessage
+			outMessage.Reply = dbus.NewMethodReturnMessage(msg)
+			if err := msg.Args(&outMessage.Recipients, &outMessage.Attachments); err != nil {
+				log.Print("Cannot parse payload data from services")
+				reply = dbus.NewErrorMessage(msg, "Error.InvalidArguments", "Cannot parse New Message")
+				if err := service.conn.Send(reply); err != nil {
+					log.Println("Could not send reply:", err)
+				}
+			} else {
+				service.outMessage <- &outMessage
+			}
 		default:
 			log.Println("Received unkown method call on", msg.Interface, msg.Member)
-			reply = dbus.NewErrorMessage(msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method")
-		}
-		if err := service.conn.Send(reply); err != nil {
-			log.Println("Could not send reply:", err)
+			reply = dbus.NewErrorMessage(
+				msg,
+				"org.freedesktop.DBus.Error.UnknownMethod",
+				fmt.Sprintf("No such method '%s' at object path '%s'", msg.Member, msg.Path))
+			if err := service.conn.Send(reply); err != nil {
+				log.Println("Could not send reply:", err)
+			}
 		}
 	}
 }
@@ -196,6 +234,11 @@ func parseRecipients(to string) []string {
 		}
 	}
 	return recipients
+}
+
+func (service *MMSService) ReplySendMessage(reply *dbus.Message, uuid string) error {
+	reply.AppendArgs(service.genMessagePath(uuid))
+	return service.conn.Send(reply)
 }
 
 //TODO randomly creating a uuid until the download manager does this for us

@@ -82,6 +82,25 @@ func UpdateRetrieved(uuid string) error {
 	return writeState(state, storePath)
 }
 
+func CreateSendFile(uuid string) (*os.File, error) {
+	state := MMSState{
+		State: DRAFT,
+	}
+	storePath, err := xdg.Data.Ensure(path.Join(SUBPATH, uuid+".db"))
+	if err != nil {
+		return nil, err
+	}
+	if err := writeState(state, storePath); err != nil {
+		os.Remove(storePath)
+		return nil, err
+	}
+	filePath, err := xdg.Cache.Ensure(path.Join(SUBPATH, uuid+".m-send.req"))
+	if err != nil {
+		return nil, err
+	}
+	return os.Create(filePath)
+}
+
 func GetMMS(uuid string) (string, error) {
 	return xdg.Data.Find(path.Join(SUBPATH, uuid+".mms"))
 }
