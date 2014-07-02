@@ -76,7 +76,6 @@ func NewAttachment(id, contentType, filePath string) (*Attachment, error) {
 
 	file := filepath.Base(filePath)
 	ct.ContentLocation = file
-	//ct.ContentId = "<" + file[0:len(file)-len(filepath.Ext(file))] + ">"
 
 	if contentType == "application/smil" {
 		start, err := getSmilStart(data)
@@ -173,7 +172,6 @@ func (dec *MMSDecoder) ReadMMSHeaders(ctMember *reflect.Value, headerEnd int) er
 	for dec.Offset < headerEnd {
 		var err error
 		param, _ := dec.ReadInteger(nil, "")
-		//fmt.Printf("offset %d, value: %#x, param %#x\n", dec.Offset, dec.Data[dec.Offset], param)
 		switch param {
 		case MMS_PART_CONTENT_LOCATION:
 			_, err = dec.ReadString(ctMember, "ContentLocation")
@@ -214,7 +212,6 @@ func (dec *MMSDecoder) ReadContentType(ctMember *reflect.Value) error {
 
 	for dec.Offset < len(dec.Data) && dec.Offset < endOffset {
 		param, _ := dec.ReadInteger(nil, "")
-		//fmt.Printf("offset %d, value: %#x, param %#x\n", dec.Offset, dec.Data[dec.Offset], param)
 		switch param {
 		case WSP_PARAMETER_TYPE_Q:
 			err = dec.ReadQ(ctMember)
