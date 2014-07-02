@@ -80,17 +80,30 @@ func (dec *MMSDecoder) ReadQ(reflectedPdu *reflect.Value) error {
 	return nil
 }
 
+// ReadLength reads the length from the next position according to section
+// 8.4.2.2 of WAP-230-WSP-20010705-a.
+//
+// Value-length = Short-length | (Length-quote Length)
+// ; Value length is used to indicate the length of the value to follow
+// Short-length = <Any octet 0-30> (0x7f to check for short)
+// Length-quote = <Octet 31>
+// Length = Uintvar-integer
 func (dec *MMSDecoder) ReadLength(reflectedPdu *reflect.Value) (length uint64, err error) {
 	switch {
-	case dec.Data[dec.Offset+1] < SHORT_LENGTH_MAX:
+	case dec.Data[dec.Offset+1]&0x7f < SHORT_LENGTH_MAX:
 		l, err := dec.ReadShortInteger(nil, "")
 		v := uint64(l)
-		reflectedPdu.FieldByName("Length").SetUint(v)
+		if reflectedPdu != nil {
+			reflectedPdu.FieldByName("Length").SetUint(v)
+		}
 		return v, err
 	case dec.Data[dec.Offset+1] == LENGTH_QUOTE:
 		dec.Offset++
-		l, err := dec.ReadUintVar(reflectedPdu, "Length")
-		return l, err
+		var hdr string
+		if reflectedPdu != nil {
+			hdr = "Length"
+		}
+		return dec.ReadUintVar(reflectedPdu, hdr)
 	}
 	return 0, fmt.Errorf("Unhandled length %#x @%d", dec.Data[dec.Offset+1], dec.Offset)
 }
@@ -257,14 +270,17 @@ func (dec *MMSDecoder) ReadInteger(reflectedPdu *reflect.Value, hdr string) (uin
 func (dec *MMSDecoder) ReadLongInteger(reflectedPdu *reflect.Value, hdr string) (uint64, error) {
 	dec.Offset++
 	size := int(dec.Data[dec.Offset])
-	dec.Offset++
-	var v uint64
-	endOffset := dec.Offset + size - 1
-	v = v << 8
-	for ; dec.Offset < endOffset; dec.Offset++ {
-		v |= uint64(dec.Data[dec.Offset])
-		v = v << 8
+	if size > SHORT_LENGTH_MAX {
+		return 0, fmt.Errorf("cannot encode long integer, lenght was %d but expected %d", size, SHORT_LENGTH_MAX)
 	}
+	dec.Offset++
+	end := dec.Offset + size
+	var v uint64
+	for ; dec.Offset < end; dec.Offset++ {
+		v = v << 8
+		v |= uint64(dec.Data[dec.Offset])
+	}
+	dec.Offset--
 	if hdr != "" {
 		reflectedPdu.FieldByName(hdr).SetUint(uint64(v))
 		dec.log = dec.log + fmt.Sprintf("Setting %s to %d\n", hdr, v)

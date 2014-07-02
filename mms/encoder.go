@@ -276,46 +276,76 @@ func (enc *MMSEncoder) writeByte(b byte) error {
 	return enc.writeBytes([]byte{b}, 1)
 }
 
+// writeShort encodes i according to the Basic Rules described in section
+// 8.4.2.2 of WAP-230-WSP-20010705-a.
+//
+// Integers in range 0-127 (< 0x80) shall be encoded as a one octet value
+// with the most significant bit set to one (1xxx xxxx == |0x80) and with
+// the value in the remaining least significant bits.
 func (enc *MMSEncoder) writeShortInteger(i uint64) error {
 	return enc.writeByte(byte(i | 0x80))
 }
 
+// writeLongInteger encodes i according to the Basic Rules described in section
+// 8.4.2.2 of WAP-230-WSP-20010705-a.
+//
+// Long-integer = Short-length Multi-octet-integer
+// The Short-length indicates the length of the Multi-octet-integer
+//
+// Multi-octet-integer = 1*30 OCTET
+// The content octets shall be an unsigned integer value
+// with the most significant octet encoded first (big-endian representation).
+// The minimum number of octets must be used to encode the value.
 func (enc *MMSEncoder) writeLongInteger(i uint64) error {
-	long := i
 	var encodedLong []byte
-	for long > 0 {
-		b := byte(0xff & long)
-		encodedLong = append(encodedLong, b)
-		long = long >> 8
+	for i > 0 {
+		b := byte(0xff & i)
+		encodedLong = append([]byte{b}, encodedLong...)
+		i = i >> 8
 	}
 
 	encLength := uint64(len(encodedLong))
 	if encLength > SHORT_LENGTH_MAX {
 		return fmt.Errorf("cannot encode long integer, lenght was %d but expected %d", encLength, SHORT_LENGTH_MAX)
 	}
-	if err := enc.writeShortInteger(encLength); err != nil {
+	if err := enc.writeByte(byte(encLength)); err != nil {
 		return err
 	}
 	return enc.writeBytes(encodedLong, len(encodedLong))
 }
 
+// writeInteger encodes i according to the Basic Rules described in section
+// 8.4.2.2 of WAP-230-WSP-20010705-a.
+//
+// It encodes as a Short-integer when i < 128 (=0x80) or as a Long-Integer
+// otherwise
 func (enc *MMSEncoder) writeInteger(i uint64) error {
-	if i&0x80 < 0x80 {
+	if i < 0x80 {
 		return enc.writeShortInteger(i)
 	} else {
-		fmt.Sprintf("Writing long int %d\n", i)
 		return enc.writeLongInteger(i)
 	}
 	return nil
 }
 
+// writeUintVar encodes v according to section 8.1.2 and the Basic Rules
+// described in section 8.4.2.2 of WAP-230-WSP-20010705-a.
+//
+// To encode a large unsigned integer, split it into 7-bit (0x7f) fragments
+// and place them in the payloads of multiple octets. The most significant
+// bits are placed in the first octets with the least significant bits ending
+// up in the last octet. All octets MUST set the Continue bit to 1 (|0x80)
+// except the last octet, which MUST set the Continue bit to 0.
+//
+// The unsigned integer MUST be encoded in the smallest encoding possible.
+// In other words, the encoded value MUST NOT start with an octet with the
+// value 0x80.
 func (enc *MMSEncoder) writeUintVar(v uint64) error {
-	b := byte(v)
-	uintVar := []byte{b & 0x7f}
-	b = b >> 7
-	for b > 0 {
-		uintVar = append([]byte{b & 0x7f}, uintVar...)
-		b = b >> 7
+	uintVar := []byte{byte(v & 0x7f)}
+	v = v >> 7
+	for v > 0 {
+		uintVar = append([]byte{byte(0x80 | (v & 0x7f))}, uintVar...)
+		v = v >> 7
 	}
 	return enc.writeBytes(uintVar, len(uintVar))
 }
