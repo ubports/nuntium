@@ -101,7 +101,7 @@ func (msgInterface *MessageInterface) StatusChanged(status string) error {
 			return err
 		}
 		log.Print("Status changed for ", msgInterface.objectPath, " to ", status)
-
+		return nil
 	}
 	return fmt.Errorf("status %s is not a valid status", status)
 }
