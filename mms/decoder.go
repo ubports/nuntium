@@ -82,7 +82,7 @@ func (dec *MMSDecoder) ReadQ(reflectedPdu *reflect.Value) error {
 
 func (dec *MMSDecoder) ReadLength(reflectedPdu *reflect.Value) (length uint64, err error) {
 	switch {
-	case dec.Data[dec.Offset+1]&0x7f < SHORT_LENGTH_MAX:
+	case dec.Data[dec.Offset+1]&0x7f <= SHORT_LENGTH_MAX:
 		l, err := dec.ReadShortInteger(nil, "")
 		v := uint64(l)
 		if reflectedPdu != nil {
