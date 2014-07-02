@@ -24,9 +24,17 @@ package telepathy
 import (
 	"fmt"
 	"log"
+	"sort"
 
 	"launchpad.net/go-dbus/v1"
 )
+
+var validStatus sort.StringSlice
+
+func init() {
+	validStatus = sort.StringSlice{SENT, PERMANENT_ERROR, TRANSIENT_ERROR}
+	sort.Strings(validStatus)
+}
 
 type MessageInterface struct {
 	conn       *dbus.Connection
@@ -82,23 +90,18 @@ func (msgInterface *MessageInterface) watchDBusMethodCalls() {
 }
 
 func (msgInterface *MessageInterface) StatusChanged(status string) error {
-	var found bool
-	for _, validStatus := range []string{SENT, PERMANENT_ERROR, TRANSIENT_ERROR} {
-		if status == validStatus {
-			found = true
-			break
+	i := validStatus.Search(status)
+	if i < validStatus.Len() && validStatus[i] == status {
+		msgInterface.status = status
+		signal := dbus.NewSignalMessage(msgInterface.objectPath, MMS_MESSAGE_DBUS_IFACE, PROPERTY_CHANGED)
+		if err := signal.AppendArgs(STATUS, dbus.Variant{status}); err != nil {
+			return err
 		}
+		if err := msgInterface.conn.Send(signal); err != nil {
+			return err
+		}
+		log.Print("Status changed for ", msgInterface.objectPath, " to ", status)
+
 	}
-	if !found {
-		return fmt.Errorf("status %s is not a valid status", status)
-	}
-	msgInterface.status = status
-	signal := dbus.NewSignalMessage(msgInterface.objectPath, MMS_MESSAGE_DBUS_IFACE, PROPERTY_CHANGED)
-	if err := signal.AppendArgs(STATUS, dbus.Variant{status}); err != nil {
-		return err
-	}
-	if err := msgInterface.conn.Send(signal); err != nil {
-		return err
-	}
-	return nil
+	return fmt.Errorf("status %s is not a valid status", status)
 }
