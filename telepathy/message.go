@@ -50,6 +50,7 @@ func NewMessageInterface(conn *dbus.Connection, objectPath dbus.ObjectPath, dele
 		objectPath: objectPath,
 		deleteChan: deleteChan,
 		msgChan:    make(chan *dbus.Message),
+		status:     "draft",
 	}
 	go msgInterface.watchDBusMethodCalls()
 	conn.RegisterObjectPath(msgInterface.objectPath, msgInterface.msgChan)
@@ -104,4 +105,13 @@ func (msgInterface *MessageInterface) StatusChanged(status string) error {
 
 	}
 	return fmt.Errorf("status %s is not a valid status", status)
+}
+
+func (msgInterface *MessageInterface) GetPayload() *Payload {
+	properties := make(map[string]dbus.Variant)
+	properties["Status"] = dbus.Variant{msgInterface.status}
+	return &Payload{
+		Path:       msgInterface.objectPath,
+		Properties: properties,
+	}
 }

@@ -33,15 +33,15 @@ import (
 	"launchpad.net/nuntium/storage"
 )
 
-//ServicePayload is used to build the dbus messages; this is a workaround as v1 of go-dbus
+//Payload is used to build the dbus messages; this is a workaround as v1 of go-dbus
 //tries to encode and decode private fields.
-type ServicePayload struct {
+type Payload struct {
 	Path       dbus.ObjectPath
 	Properties map[string]dbus.Variant
 }
 
 type MMSService struct {
-	Payload         ServicePayload
+	payload         Payload
 	Properties      map[string]dbus.Variant
 	conn            *dbus.Connection
 	msgChan         chan *dbus.Message
@@ -76,12 +76,12 @@ func NewMMSService(conn *dbus.Connection, identity string, outgoingChannel chan 
 	properties[IDENTITY] = dbus.Variant{identity}
 	serviceProperties := make(map[string]dbus.Variant)
 	serviceProperties[USE_DELIVERY_REPORTS] = dbus.Variant{useDeliveryReports}
-	payload := ServicePayload{
+	payload := Payload{
 		Path:       dbus.ObjectPath(MMS_DBUS_PATH + "/" + identity),
 		Properties: properties,
 	}
 	service := MMSService{
-		Payload:         payload,
+		payload:         payload,
 		Properties:      serviceProperties,
 		conn:            conn,
 		msgChan:         make(chan *dbus.Message),
@@ -119,7 +119,7 @@ func (service *MMSService) watchDBusMethodCalls() {
 		case "GetMessages":
 			reply = dbus.NewMethodReturnMessage(msg)
 			//TODO implement store and forward
-			var payload []ServicePayload
+			var payload []Payload
 			if err := reply.AppendArgs(payload); err != nil {
 				log.Print("Cannot parse payload data from services")
 				reply = dbus.NewErrorMessage(msg, "Error.InvalidArguments", "Cannot parse services")
@@ -189,7 +189,7 @@ func (service *MMSService) MessageRemoved(objectPath dbus.ObjectPath) error {
 		return err
 	}
 
-	signal := dbus.NewSignalMessage(service.Payload.Path, MMS_SERVICE_DBUS_IFACE, MESSAGE_REMOVED)
+	signal := dbus.NewSignalMessage(service.payload.Path, MMS_SERVICE_DBUS_IFACE, MESSAGE_REMOVED)
 	if err := signal.AppendArgs(objectPath); err != nil {
 		return err
 	}
@@ -199,39 +199,42 @@ func (service *MMSService) MessageRemoved(objectPath dbus.ObjectPath) error {
 	return nil
 }
 
-//MessageAdded emits a MessageAdded with the path to the added message which
-//is taken as a parameter
-func (service *MMSService) MessageAdded(mRetConf *mms.MRetrieveConf) error {
+//IncomingMessageAdded emits a MessageAdded with the path to the added message which
+//is taken as a parameter and creates an object path on the message interface.
+func (service *MMSService) IncomingMessageAdded(mRetConf *mms.MRetrieveConf) error {
 	payload, err := service.parseMessage(mRetConf)
 	if err != nil {
 		return err
 	}
 	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan)
-	signal := dbus.NewSignalMessage(service.Payload.Path, MMS_SERVICE_DBUS_IFACE, MESSAGE_ADDED)
-	if err := signal.AppendArgs(payload.Path, payload.Properties); err != nil {
+	return service.MessageAdded(&payload)
+}
+
+//MessageAdded emits a MessageAdded with the path to the added message which
+//is taken as a parameter
+func (service *MMSService) MessageAdded(msgPayload *Payload) error {
+	signal := dbus.NewSignalMessage(service.payload.Path, MMS_SERVICE_DBUS_IFACE, MESSAGE_ADDED)
+	if err := signal.AppendArgs(msgPayload.Path, msgPayload.Properties); err != nil {
 		return err
 	}
-	if err := service.conn.Send(signal); err != nil {
-		return err
-	}
-	return nil
+	return service.conn.Send(signal)
 }
 
 func (service *MMSService) isService(identity string) bool {
 	path := dbus.ObjectPath(MMS_DBUS_PATH + "/" + identity)
-	if path == service.Payload.Path {
+	if path == service.payload.Path {
 		return true
 	}
 	return false
 }
 
 func (service *MMSService) Close() {
-	service.conn.UnregisterObjectPath(service.Payload.Path)
+	service.conn.UnregisterObjectPath(service.payload.Path)
 	close(service.msgChan)
 	close(service.msgDeleteChan)
 }
 
-func (service *MMSService) parseMessage(mRetConf *mms.MRetrieveConf) (ServicePayload, error) {
+func (service *MMSService) parseMessage(mRetConf *mms.MRetrieveConf) (Payload, error) {
 	params := make(map[string]dbus.Variant)
 	params["Status"] = dbus.Variant{"received"}
 	//TODO retrieve date correctly
@@ -249,7 +252,7 @@ func (service *MMSService) parseMessage(mRetConf *mms.MRetrieveConf) (ServicePay
 	if smil, err := mRetConf.GetSmil(); err == nil {
 		params["Smil"] = dbus.Variant{smil}
 	} else {
-		return ServicePayload{}, err
+		return Payload{}, err
 	}
 	var attachments []Attachment
 	dataParts := mRetConf.GetDataParts()
@@ -258,7 +261,7 @@ func (service *MMSService) parseMessage(mRetConf *mms.MRetrieveConf) (ServicePay
 		if f, err := storage.GetMMS(mRetConf.UUID); err == nil {
 			filePath = f
 		} else {
-			return ServicePayload{}, err
+			return Payload{}, err
 		}
 		attachment := Attachment{
 			Id:        dataParts[i].ContentId,
@@ -270,7 +273,7 @@ func (service *MMSService) parseMessage(mRetConf *mms.MRetrieveConf) (ServicePay
 		attachments = append(attachments, attachment)
 	}
 	params["Attachments"] = dbus.Variant{attachments}
-	payload := ServicePayload{Path: service.genMessagePath(mRetConf.UUID), Properties: params}
+	payload := Payload{Path: service.genMessagePath(mRetConf.UUID), Properties: params}
 	return payload, nil
 }
 
@@ -313,7 +316,9 @@ func (service *MMSService) ReplySendMessage(reply *dbus.Message, uuid string) (d
 	if err := service.conn.Send(reply); err != nil {
 		return "", err
 	}
-	service.messageHandlers[msgObjectPath] = NewMessageInterface(service.conn, msgObjectPath, service.msgDeleteChan)
+	msg := NewMessageInterface(service.conn, msgObjectPath, service.msgDeleteChan)
+	service.messageHandlers[msgObjectPath] = msg
+	service.MessageAdded(msg.GetPayload())
 	return msgObjectPath, nil
 }
 

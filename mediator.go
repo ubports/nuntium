@@ -205,7 +205,7 @@ func (mediator *Mediator) handleMRetrieveConf(uuid string) {
 	}
 	mediator.NewMRetrieveConf <- mRetrieveConf
 	if mediator.telepathyService != nil {
-		if err := mediator.telepathyService.MessageAdded(mRetrieveConf); err != nil {
+		if err := mediator.telepathyService.IncomingMessageAdded(mRetrieveConf); err != nil {
 			log.Println("Cannot notify telepathy-ofono about new message", err)
 		}
 	} else {
