@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -75,7 +76,6 @@ func NewAttachment(id, contentType, filePath string) (*Attachment, error) {
 
 	file := filepath.Base(filePath)
 	ct.ContentLocation = file
-	//ct.ContentId = "<" + file[0:len(file)-len(filepath.Ext(file))] + ">"
 
 	if contentType == "application/smil" {
 		start, err := getSmilStart(data)
@@ -128,9 +128,8 @@ func (dec *MMSDecoder) ReadContentTypeParts(reflectedPdu *reflect.Value) error {
 		return err
 	}
 	var dataParts []Attachment
-	fmt.Println("Number of parts", parts)
+	dec.log = dec.log + fmt.Sprintf("Number of parts: %d\n", parts)
 	for i := uint64(0); i < parts; i++ {
-		fmt.Println("\nPart", i, "\n")
 		headerLen, err := dec.ReadUintVar(nil, "")
 		if err != nil {
 			return err
@@ -140,7 +139,7 @@ func (dec *MMSDecoder) ReadContentTypeParts(reflectedPdu *reflect.Value) error {
 			return err
 		}
 		headerEnd := dec.Offset + int(headerLen)
-		fmt.Println("header len:", headerLen, "dataLen:", dataLen, "headerEnd:", headerEnd)
+		dec.log = dec.log + fmt.Sprintf("Attachament len(header): %d - len(data) %d\n", headerLen, dataLen)
 		var ct Attachment
 		ct.Offset = headerEnd + 1
 		ctReflected := reflect.ValueOf(&ct).Elem()
@@ -156,7 +155,7 @@ func (dec *MMSDecoder) ReadContentTypeParts(reflectedPdu *reflect.Value) error {
 			return err
 		}
 		if ct.MediaType == "application/smil" || strings.HasPrefix(ct.MediaType, "text/plain") || ct.MediaType == "" {
-			fmt.Printf("%s\n", ct.Data)
+			dec.log = dec.log + fmt.Sprintf("%s\n", ct.Data)
 		}
 		if ct.Charset != "" {
 			ct.MediaType = ct.MediaType + ";charset=" + ct.Charset
@@ -173,7 +172,6 @@ func (dec *MMSDecoder) ReadMMSHeaders(ctMember *reflect.Value, headerEnd int) er
 	for dec.Offset < headerEnd {
 		var err error
 		param, _ := dec.ReadInteger(nil, "")
-		//fmt.Printf("offset %d, value: %#x, param %#x\n", dec.Offset, dec.Data[dec.Offset], param)
 		switch param {
 		case MMS_PART_CONTENT_LOCATION:
 			_, err = dec.ReadString(ctMember, "ContentLocation")
@@ -205,7 +203,7 @@ func (dec *MMSDecoder) ReadContentType(ctMember *reflect.Value) error {
 	if length, err = dec.ReadLength(ctMember); err != nil {
 		return err
 	}
-	fmt.Println("Content Type Length:", length)
+	dec.log = dec.log + fmt.Sprintf("Content Type Length: %d\n", length)
 	endOffset := int(length) + dec.Offset
 
 	if err := dec.ReadMediaType(ctMember, "MediaType"); err != nil {
@@ -214,7 +212,6 @@ func (dec *MMSDecoder) ReadContentType(ctMember *reflect.Value) error {
 
 	for dec.Offset < len(dec.Data) && dec.Offset < endOffset {
 		param, _ := dec.ReadInteger(nil, "")
-		fmt.Printf("offset %d, value: %#x, param %#x\n", dec.Offset, dec.Data[dec.Offset], param)
 		switch param {
 		case WSP_PARAMETER_TYPE_Q:
 			err = dec.ReadQ(ctMember)
@@ -225,10 +222,10 @@ func (dec *MMSDecoder) ReadContentType(ctMember *reflect.Value) error {
 		case WSP_PARAMETER_TYPE_TYPE:
 			_, err = dec.ReadInteger(ctMember, "Type")
 		case WSP_PARAMETER_TYPE_NAME_DEFUNCT:
-			fmt.Println("Name(deprecated)")
+			log.Println("Using deprecated Name header")
 			_, err = dec.ReadString(ctMember, "Name")
 		case WSP_PARAMETER_TYPE_FILENAME_DEFUNCT:
-			fmt.Println("FileName(deprecated)")
+			log.Println("Using deprecated FileName header")
 			_, err = dec.ReadString(ctMember, "FileName")
 		case WSP_PARAMETER_TYPE_DIFFERENCES:
 			err = errors.New("Unhandled Differences")
@@ -237,27 +234,27 @@ func (dec *MMSDecoder) ReadContentType(ctMember *reflect.Value) error {
 		case WSP_PARAMETER_TYPE_CONTENT_TYPE:
 			_, err = dec.ReadString(ctMember, "Type")
 		case WSP_PARAMETER_TYPE_START_DEFUNCT:
-			fmt.Println("Start(deprecated)")
+			log.Println("Using deprecated Start header")
 			_, err = dec.ReadString(ctMember, "Start")
 		case WSP_PARAMETER_TYPE_START_INFO_DEFUNCT:
-			fmt.Println("Start Info(deprecated")
+			log.Println("Using deprecated StartInfo header")
 			_, err = dec.ReadString(ctMember, "StartInfo")
 		case WSP_PARAMETER_TYPE_COMMENT_DEFUNCT:
-			fmt.Println("Comment(deprecated")
+			log.Println("Using deprecated Comment header")
 			_, err = dec.ReadString(ctMember, "Comment")
 		case WSP_PARAMETER_TYPE_DOMAIN_DEFUNCT:
-			fmt.Println("Domain(deprecated)")
+			log.Println("Using deprecated Domain header")
 			_, err = dec.ReadString(ctMember, "Domain")
 		case WSP_PARAMETER_TYPE_MAX_AGE:
 			err = errors.New("Unhandled Max Age")
 		case WSP_PARAMETER_TYPE_PATH_DEFUNCT:
-			fmt.Println("Path(deprecated)")
+			log.Println("Using deprecated Path header")
 			_, err = dec.ReadString(ctMember, "Path")
 		case WSP_PARAMETER_TYPE_SECURE:
-			fmt.Println("Secure")
+			log.Println("Unhandled Secure header detected")
 		case WSP_PARAMETER_TYPE_SEC:
 			v, _ := dec.ReadShortInteger(nil, "")
-			fmt.Println("SEC(deprecated)", v)
+			log.Println("Using deprecated and unhandled Sec header with value", v)
 		case WSP_PARAMETER_TYPE_MAC:
 			err = errors.New("Unhandled MAC")
 		case WSP_PARAMETER_TYPE_CREATION_DATE:
@@ -282,7 +279,7 @@ func (dec *MMSDecoder) ReadContentType(ctMember *reflect.Value) error {
 			_, err = dec.ReadString(ctMember, "Path")
 		case WSP_PARAMETER_TYPE_UNTYPED:
 			v, _ := dec.ReadString(nil, "")
-			fmt.Println("Untyped", v)
+			log.Println("Unhandled Secure header detected with value", v)
 		default:
 			err = fmt.Errorf("Unhandled parameter %#x == %d at offset %d", param, param, dec.Offset)
 		}
