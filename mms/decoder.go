@@ -80,6 +80,14 @@ func (dec *MMSDecoder) ReadQ(reflectedPdu *reflect.Value) error {
 	return nil
 }
 
+// ReadLength reads the length from the next position according to section
+// 8.4.2.2 of WAP-230-WSP-20010705-a.
+//
+// Value-length = Short-length | (Length-quote Length)
+// ; Value length is used to indicate the length of the value to follow
+// Short-length = <Any octet 0-30> (0x7f to check for short)
+// Length-quote = <Octet 31>
+// Length = Uintvar-integer
 func (dec *MMSDecoder) ReadLength(reflectedPdu *reflect.Value) (length uint64, err error) {
 	switch {
 	case dec.Data[dec.Offset+1]&0x7f <= SHORT_LENGTH_MAX:
