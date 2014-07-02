@@ -44,6 +44,24 @@ func Create(uuid, contentLocation string) error {
 	return writeState(state, storePath)
 }
 
+func Destroy(uuid string) error {
+	if storePath, err := xdg.Data.Ensure(path.Join(SUBPATH, uuid+".db")); err == nil {
+		if err := os.Remove(storePath); err != nil {
+			return err
+		}
+	} else {
+		return err
+	}
+	if mmsPath, err := GetMMS(uuid); err == nil {
+		if err := os.Remove(mmsPath); err != nil {
+			return err
+		}
+	} else {
+		return err
+	}
+	return nil
+}
+
 func CreateResponseFile(uuid string) (*os.File, error) {
 	filePath, err := xdg.Cache.Ensure(path.Join(SUBPATH, uuid+".m-notifyresp.ind"))
 	if err != nil {
