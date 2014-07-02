@@ -102,11 +102,11 @@ func getSmilStart(smilData []byte) (string, error) {
 //GetSmil returns the text corresponding to the ContentType that holds the SMIL
 func (pdu *MRetrieveConf) GetSmil() (string, error) {
 	for i := range pdu.Attachments {
-		if pdu.Attachments[i].MediaType == "application/smil" {
+		if strings.HasPrefix(pdu.Attachments[i].MediaType, "application/smil") {
 			return string(pdu.Attachments[i].Data), nil
 		}
 	}
-	return "", errors.New("Cannot find SMIL data part")
+	return "", errors.New("cannot find SMIL data part")
 }
 
 //GetDataParts returns the non SMIL ContentType data parts
