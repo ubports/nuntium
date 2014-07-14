@@ -250,7 +250,7 @@ func (enc *MMSEncoder) writeFrom() error {
 	if err := enc.setParam(FROM); err != nil {
 		return err
 	}
-	if err := enc.writeLength(1); err != nil {
+	if err := enc.writeByte(1); err != nil {
 		return err
 	}
 	return enc.writeByte(TOKEN_INSERT_ADDRESS)
