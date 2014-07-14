@@ -193,7 +193,7 @@ func (enc *MMSEncoder) writeLength(length uint64) error {
 }
 
 func (enc *MMSEncoder) writeMediaType(media string) error {
-	if err := enc.setParam(WSP_PARAMETER_TYPE_CONTENT_TYPE); err != nil {
+	if err := enc.setParam(CONTENT_TYPE); err != nil {
 		return err
 	}
 	var mt int
