@@ -26,7 +26,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"path/filepath"
 	"reflect"
 	"strings"
 )
@@ -63,19 +62,17 @@ func NewAttachment(id, contentType, filePath string) (*Attachment, error) {
 	}
 
 	ct := &Attachment{
-		ContentId: id,
-		Data:      data,
+		ContentId:       id,
+		ContentLocation: id,
+		Data:            data,
 	}
 
-	if parts := strings.Split(contentType, ","); len(parts) > 1 {
+	if parts := strings.Split(contentType, ";"); len(parts) > 1 {
 		ct.MediaType = parts[0]
 		ct.Charset = parts[1]
 	} else {
 		ct.MediaType = contentType
 	}
-
-	file := filepath.Base(filePath)
-	ct.ContentLocation = file
 
 	if contentType == "application/smil" {
 		start, err := getSmilStart(data)
