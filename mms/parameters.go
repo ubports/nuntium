@@ -65,6 +65,7 @@ const (
 	TEXT_MIN         = 32
 	SHORT_LENGTH_MAX = 30
 	LENGTH_QUOTE     = 31
+	STRING_QUOTE     = 34
 	SHORT_FILTER     = 0x80
 )
 

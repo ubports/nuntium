@@ -77,14 +77,17 @@ func (enc *MMSEncoder) Encode(pdu MMSWriter) error {
 		case "From":
 			err = enc.writeFrom()
 		case "Name":
-			err = enc.writeStringParam(WSP_PARAMETER_TYPE_NAME, f.String())
+			err = enc.writeStringParam(WSP_PARAMETER_TYPE_NAME_DEFUNCT, f.String())
 		case "Start":
-			err = enc.writeStringParam(WSP_PARAMETER_TYPE_START, f.String())
+			err = enc.writeStringParam(WSP_PARAMETER_TYPE_START_DEFUNCT, f.String())
 		case "To":
 			err = enc.writeStringParam(TO, f.String())
 		case "ContentType":
 			// if there is a ContentType there has to be content
 			if mSendReq, ok := pdu.(*MSendReq); ok {
+				if err := enc.setParam(CONTENT_TYPE); err != nil {
+					return err
+				}
 				if err = enc.writeMediaType(mSendReq.ContentType); err != nil {
 					return err
 				}
@@ -102,7 +105,7 @@ func (enc *MMSEncoder) Encode(pdu MMSWriter) error {
 		case "ContentLocation":
 			err = enc.writeStringParam(MMS_PART_CONTENT_LOCATION, f.String())
 		case "ContentId":
-			err = enc.writeStringParam(MMS_PART_CONTENT_ID, f.String())
+			err = enc.writeQuotedStringParam(MMS_PART_CONTENT_ID, f.String())
 		default:
 			if encodeTag == "optional" {
 				log.Printf("Unhandled optional field %s", fieldName)
@@ -136,33 +139,29 @@ func (enc *MMSEncoder) writeAttachments(attachments []*Attachment) error {
 		return err
 	}
 
-	var attachmentHeaders [][]byte
 	for i := range attachments {
+		var attachmentHeader []byte
 		if b, err := encodeAttachment(attachments[i]); err != nil {
 			return err
 		} else {
-			attachmentHeaders = append(attachmentHeaders, b)
+			attachmentHeader = b
 		}
 
-		// attachments index matches attachmentHeaders
-		// TODO use a map
-		for i := range attachmentHeaders {
-			// headers length
-			headerLength := uint64(len(attachmentHeaders[i]))
-			if err := enc.writeUintVar(headerLength); err != nil {
-				return err
-			}
-			// data length
-			dataLength := uint64(len(attachments[i].Data))
-			if err := enc.writeUintVar(dataLength); err != nil {
-				return err
-			}
-			if err := enc.writeBytes(attachmentHeaders[i], int(headerLength)); err != nil {
-				return err
-			}
-			if err := enc.writeBytes(attachments[i].Data, int(dataLength)); err != nil {
-				return err
-			}
+		// headers length
+		headerLength := uint64(len(attachmentHeader))
+		if err := enc.writeUintVar(headerLength); err != nil {
+			return err
+		}
+		// data length
+		dataLength := uint64(len(attachments[i].Data))
+		if err := enc.writeUintVar(dataLength); err != nil {
+			return err
+		}
+		if err := enc.writeBytes(attachmentHeader, int(headerLength)); err != nil {
+			return err
+		}
+		if err := enc.writeBytes(attachments[i].Data, int(dataLength)); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -193,9 +192,6 @@ func (enc *MMSEncoder) writeLength(length uint64) error {
 }
 
 func (enc *MMSEncoder) writeMediaType(media string) error {
-	if err := enc.setParam(CONTENT_TYPE); err != nil {
-		return err
-	}
 	var mt int
 	for mt = range CONTENT_TYPES {
 		if CONTENT_TYPES[mt] == media {
@@ -203,7 +199,8 @@ func (enc *MMSEncoder) writeMediaType(media string) error {
 		}
 	}
 
-	if err := enc.writeLength(uint64(len(media))); err != nil {
+	// +1 is the byte{0}
+	if err := enc.writeByte(byte(len(media) + 1)); err != nil {
 		return err
 	}
 	return enc.writeString(media)
@@ -216,9 +213,23 @@ func (enc *MMSEncoder) writeIntegerParam(param byte, i uint64) error {
 	return enc.writeInteger(i)
 }
 
+func (enc *MMSEncoder) writeQuotedStringParam(param byte, s string) error {
+	if s == "" {
+		enc.log = enc.log + "Skipping empty string\n"
+	}
+	if err := enc.setParam(param); err != nil {
+		return err
+	}
+	if err := enc.writeByte(STRING_QUOTE); err != nil {
+		return err
+	}
+	return enc.writeString(s)
+}
+
 func (enc *MMSEncoder) writeStringParam(param byte, s string) error {
 	if s == "" {
 		enc.log = enc.log + "Skipping empty string\n"
+		return nil
 	}
 	if err := enc.setParam(param); err != nil {
 		return err
