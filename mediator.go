@@ -249,7 +249,7 @@ func (mediator *Mediator) handleMNotifyRespInd(mNotifyRespInd *mms.MNotifyRespIn
 
 func (mediator *Mediator) sendMNotifyRespInd(mNotifyRespIndFile string) {
 	defer os.Remove(mNotifyRespIndFile)
-	if err := mediator.uploadFile(mNotifyRespIndFile); err != nil {
+	if _, err := mediator.uploadFile(mNotifyRespIndFile); err != nil {
 		log.Printf("Cannot upload m-notifyresp.ind encoded file %s to message center: %s", mNotifyRespIndFile, err)
 	}
 }
@@ -306,30 +306,33 @@ func (mediator *Mediator) handleMSendReq(mSendReq *mms.MSendReq) {
 func (mediator *Mediator) sendMSendReq(mSendReqFile, uuid string) {
 	defer os.Remove(mSendReqFile)
 	defer mediator.telepathyService.MessageDestroy(uuid)
-	if err := mediator.uploadFile(mSendReqFile); err != nil {
+	if responseFile, err := mediator.uploadFile(mSendReqFile); err != nil {
 		if err := mediator.telepathyService.MessageStatusChanged(uuid, telepathy.TRANSIENT_ERROR); err != nil {
 			log.Println(err)
 		}
 		log.Printf("Cannot upload m-send.req encoded file %s to message center: %s", mSendReqFile, err)
 		return
+	} else {
+		//TODO
+		log.Println("Need to parse", responseFile, "to determine if upload was successful")
 	}
 	if err := mediator.telepathyService.MessageStatusChanged(uuid, telepathy.SENT); err != nil {
 		log.Println(err)
 	}
 }
 
-func (mediator *Mediator) uploadFile(filePath string) error {
+func (mediator *Mediator) uploadFile(filePath string) (string, error) {
 	mmsContext, err := mediator.modem.ActivateMMSContext()
 	if err != nil {
-		return err
+		return "", err
 	}
 	proxy, err := mmsContext.GetProxy()
 	if err != nil {
-		return err
+		return "", err
 	}
 	msc, err := mmsContext.GetMessageCenter()
 	if err != nil {
-		return err
+		return "", err
 	}
 	return mms.Upload(filePath, msc, proxy.Host, int32(proxy.Port))
 }
