@@ -193,7 +193,7 @@ func (enc *MMSEncoder) writeLength(length uint64) error {
 }
 
 func (enc *MMSEncoder) writeMediaType(media string) error {
-	if err := enc.setParam(WSP_PARAMETER_TYPE_CONTENT_TYPE); err != nil {
+	if err := enc.setParam(CONTENT_TYPE); err != nil {
 		return err
 	}
 	var mt int
@@ -250,7 +250,7 @@ func (enc *MMSEncoder) writeFrom() error {
 	if err := enc.setParam(FROM); err != nil {
 		return err
 	}
-	if err := enc.writeLength(1); err != nil {
+	if err := enc.writeByte(1); err != nil {
 		return err
 	}
 	return enc.writeByte(TOKEN_INSERT_ADDRESS)
