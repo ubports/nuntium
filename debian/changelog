@@ -1,3 +1,15 @@
+nuntium (0.1+14.10.20140721-0ubuntu1) utopic; urgency=low
+
+  [ Sergio Schvezov ]
+  * Calling sync and close after encoding and before uploading.
+  * Header parameter encoding corrections for content type and from
+    token insert address length.
+  * Attachment encoding fixes. (LP: #1342270)
+  * Tracking response file for uploads (remaining parts to be done when
+    telepathy-ofono integration work starts)
+
+ -- Ubuntu daily release <ps-jenkins@lists.canonical.com>  Mon, 21 Jul 2014 09:44:10 +0000
+
 nuntium (0.1+14.10.20140702.2-0ubuntu1) utopic; urgency=low
 
   [ CI bot ]
