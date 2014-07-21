@@ -228,13 +228,21 @@ func (mediator *Mediator) handleMNotifyRespInd(mNotifyRespInd *mms.MNotifyRespIn
 		log.Print("Unable to create m-notifyresp.ind file for ", mNotifyRespInd.UUID)
 		return
 	}
-	defer f.Close()
 	enc := mms.NewEncoder(f)
 	if err := enc.Encode(mNotifyRespInd); err != nil {
 		log.Print("Unable to encode m-notifyresp.ind for ", mNotifyRespInd.UUID)
+		f.Close()
 		return
 	}
 	filePath := f.Name()
+	if err := f.Sync(); err != nil {
+		log.Print("Error while syncing", f.Name(), ": ", err)
+		return
+	}
+	if err := f.Close(); err != nil {
+		log.Print("Error while closing", f.Name(), ": ", err)
+		return
+	}
 	log.Printf("Created %s to handle m-notifyresp.ind for %s", filePath, mNotifyRespInd.UUID)
 	mediator.NewMNotifyRespIndFile <- filePath
 }
@@ -279,9 +287,18 @@ func (mediator *Mediator) handleMSendReq(mSendReq *mms.MSendReq) {
 		if err := mediator.telepathyService.MessageStatusChanged(mSendReq.UUID, telepathy.PERMANENT_ERROR); err != nil {
 			log.Println(err)
 		}
+		f.Close()
 		return
 	}
 	filePath := f.Name()
+	if err := f.Sync(); err != nil {
+		log.Print("Error while syncing", f.Name(), ": ", err)
+		return
+	}
+	if err := f.Close(); err != nil {
+		log.Print("Error while closing", f.Name(), ": ", err)
+		return
+	}
 	log.Printf("Created %s to handle m-send.req for %s", filePath, mSendReq.UUID)
 	mediator.sendMSendReq(filePath, mSendReq.UUID)
 }
