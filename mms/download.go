@@ -59,34 +59,34 @@ func (pdu *MNotificationInd) DownloadContent(proxyHost string, proxyPort int32) 
 	}
 }
 
-func Upload(file, msc, proxyHost string, proxyPort int32) error {
+func Upload(file, msc, proxyHost string, proxyPort int32) (string, error) {
 	udm, err := udm.NewUploadManager()
 	if err != nil {
-		return err
+		return "", err
 	}
 	upload, err := udm.CreateMmsUpload(msc, file, proxyHost, proxyPort)
 	if err != nil {
-		return err
+		return "", err
 	}
 	f := upload.Finished()
 	p := upload.UploadProgress()
 	e := upload.Error()
 	log.Print("Starting upload of ", file, " to ", msc, " with proxy ", proxyHost, ":", proxyPort)
 	if err := upload.Start(); err != nil {
-		return err
+		return "", err
 	}
 
 	for {
 		select {
 		case progress := <-p:
 			log.Print("Progress:", progress.Total, progress.Received)
-		case f := <-f:
-			log.Print("File ", f, " uploaded")
-			return nil
+		case responseFile := <-f:
+			log.Print("File ", responseFile, " returned in upload")
+			return responseFile, nil
 		case <-time.After(10 * time.Minute):
-			return errors.New("upload timeout")
+			return "", errors.New("upload timeout")
 		case err := <-e:
-			return err
+			return "", err
 		}
 	}
 }
