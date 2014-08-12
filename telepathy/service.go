@@ -71,11 +71,12 @@ type OutgoingMessage struct {
 	Reply       *dbus.Message
 }
 
-func NewMMSService(conn *dbus.Connection, identity string, outgoingChannel chan *OutgoingMessage, useDeliveryReports bool) *MMSService {
+func NewMMSService(conn *dbus.Connection, modemObjPath dbus.ObjectPath, identity string, outgoingChannel chan *OutgoingMessage, useDeliveryReports bool) *MMSService {
 	properties := make(map[string]dbus.Variant)
 	properties[IDENTITY] = dbus.Variant{identity}
 	serviceProperties := make(map[string]dbus.Variant)
 	serviceProperties[USE_DELIVERY_REPORTS] = dbus.Variant{useDeliveryReports}
+	serviceProperties[MODEM_OBJECT_PATH] = dbus.Variant{modemObjPath}
 	payload := Payload{
 		Path:       dbus.ObjectPath(MMS_DBUS_PATH + "/" + identity),
 		Properties: properties,

@@ -32,6 +32,7 @@ const (
 const (
 	IDENTITY             = "Identity"
 	USE_DELIVERY_REPORTS = "UseDeliveryReports"
+	MODEM_OBJECT_PATH    = "ModemObjectPath"
 	MESSAGE_ADDED        = "MessageAdded"
 	MESSAGE_REMOVED      = "MessageRemoved"
 	SERVICE_ADDED        = "ServiceAdded"
