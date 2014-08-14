@@ -1,3 +1,10 @@
+nuntium (0.1+14.10.20140814-0ubuntu1) utopic; urgency=low
+
+  [ Tiago Salem Herrmann ]
+  * Add ModemObjectPath property to Service.
+
+ -- Ubuntu daily release <ps-jenkins@lists.canonical.com>  Thu, 14 Aug 2014 20:25:23 +0000
+
 nuntium (0.1+14.10.20140721-0ubuntu1) utopic; urgency=low
 
   [ Sergio Schvezov ]
