@@ -104,7 +104,7 @@ mediatorLoop:
 			go mediator.sendMSendReq(mSendReqFile.filePath, mSendReqFile.uuid)
 		case id := <-mediator.modem.IdentityAdded:
 			var err error
-			mediator.telepathyService, err = mmsManager.AddService(id, mediator.outMessage, useDeliveryReports)
+			mediator.telepathyService, err = mmsManager.AddService(id, mediator.modem.Modem, mediator.outMessage, useDeliveryReports)
 			if err != nil {
 				log.Fatal(err)
 			}
