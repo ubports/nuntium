@@ -33,7 +33,7 @@ type PDU byte
 
 type PushPDU struct {
 	HeaderLength                             uint64
-	ContentLength                            int
+	ContentLength                            uint64
 	ApplicationId, EncodingVersion, PushFlag byte
 	ContentType                              string
 	Data                                     []byte
