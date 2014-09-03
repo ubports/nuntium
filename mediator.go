@@ -306,19 +306,52 @@ func (mediator *Mediator) handleMSendReq(mSendReq *mms.MSendReq) {
 func (mediator *Mediator) sendMSendReq(mSendReqFile, uuid string) {
 	defer os.Remove(mSendReqFile)
 	defer mediator.telepathyService.MessageDestroy(uuid)
-	if responseFile, err := mediator.uploadFile(mSendReqFile); err != nil {
+	mSendConfFile, err := mediator.uploadFile(mSendReqFile)
+	if err != nil {
 		if err := mediator.telepathyService.MessageStatusChanged(uuid, telepathy.TRANSIENT_ERROR); err != nil {
 			log.Println(err)
 		}
 		log.Printf("Cannot upload m-send.req encoded file %s to message center: %s", mSendReqFile, err)
 		return
-	} else {
-		//TODO
-		log.Println("Need to parse", responseFile, "to determine if upload was successful")
 	}
-	if err := mediator.telepathyService.MessageStatusChanged(uuid, telepathy.SENT); err != nil {
+
+	defer os.Remove(mSendConfFile)
+	mSendConf, err := parseMSendConfFile(mSendConfFile)
+	if err != nil {
+		log.Println("Error while decoding m-send.conf:", err)
+		if err := mediator.telepathyService.MessageStatusChanged(uuid, telepathy.TRANSIENT_ERROR); err != nil {
+			log.Println(err)
+		}
+	}
+
+	log.Println("m-send.conf ResponseStatus for", uuid, "is", mSendConf.ResponseStatus)
+	var status string
+	switch mSendConf.Status() {
+	case nil:
+		status = telepathy.SENT
+	case mms.ErrPermanent:
+		status = telepathy.PERMANENT_ERROR
+	case mms.ErrTransient:
+		status = telepathy.TRANSIENT_ERROR
+	}
+	if err := mediator.telepathyService.MessageStatusChanged(uuid, status); err != nil {
 		log.Println(err)
 	}
+}
+
+func parseMSendConfFile(mSendConfFile string) (*mms.MSendConf, error) {
+	b, err := ioutil.ReadFile(mSendConfFile)
+	if err != nil {
+		return nil, err
+	}
+
+	mSendConf := mms.NewMSendConf()
+
+	dec := mms.NewDecoder(b)
+	if err := dec.Decode(mSendConf); err != nil {
+		return nil, err
+	}
+	return mSendConf, nil
 }
 
 func (mediator *Mediator) uploadFile(filePath string) (string, error) {
