@@ -256,7 +256,7 @@ func NewMSendReq(recipients []string, attachments []*Attachment) *MSendReq {
 		Type:          TYPE_SEND_REQ,
 		To:            strings.Join(recipients, ","),
 		TransactionId: uuid,
-		Version:       MMS_MESSAGE_VERSION_1_3,
+		Version:       MMS_MESSAGE_VERSION_1_1,
 		UUID:          uuid,
 		ContentType:   "application/vnd.wap.multipart.related",
 		Attachments:   attachments,
