@@ -1,3 +1,11 @@
+nuntium (0.1+14.10.20140904-0ubuntu1) utopic; urgency=low
+
+  [ Sergio Schvezov ]
+  * Better error handling on sending MMS and lowering the supported
+    version number for broader carrier support (LP: #1349299)
+
+ -- Ubuntu daily release <ps-jenkins@lists.canonical.com>  Thu, 04 Sep 2014 19:21:58 +0000
+
 nuntium (0.1+14.10.20140902-0ubuntu1) utopic; urgency=low
 
   [ Sergio Schvezov ]
