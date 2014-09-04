@@ -3,6 +3,7 @@
 
 export DH_OPTIONS
 export DH_GOPKG := launchpad.net/nuntium
+export DH_GOLANG_INSTALL_ALL := 1
 
 DEB_HOST_ARCH := $(shell dpkg-architecture -qDEB_HOST_ARCH)
 

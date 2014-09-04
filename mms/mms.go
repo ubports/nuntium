@@ -22,6 +22,7 @@
 package mms
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -113,17 +114,47 @@ const (
 	REPORT_ALLOWED_NO  = 129
 )
 
-// Response Status defined in OMA-WAP-MMS section 7.2.20
+// Response Status defined in OMA-WAP-MMS section 7.2.27
+//
+// An MMS Client MUST react the same to a value in range 196 to 223 as it
+// does to the value 192 (Error-transient-failure).
+//
+// An MMS Client MUST react the same to a value in range 234 to 255 as it
+// does to the value 224 (Error-permanent-failure).
+//
+// Any other values SHALL NOT be used. They are reserved for future use.
+// An MMS Client that receives such a reserved value MUST react the same
+// as it does to the value 224 (Error-permanent-failure).
 const (
-	RESPONSE_STATUS_OK                               = 128
-	RESPONSE_STATUS_ERROR_UNSPECIFIED                = 129
-	RESPONSE_STATUS_ERROR_SERVICE_DENIED             = 130
-	RESPONSE_STATUS_ERROR_MESSAGE_FORMAT_CORRUPT     = 131
-	RESPONSE_STATUS_ERROR_SENDING_ADDRESS_UNRESOLVED = 132
-	RESPONSE_STATUS_ERROR_MESSAGE_NOT_FOUND          = 133
-	RESPONSE_STATUS_ERROR_NETWORK_PROBLEM            = 134
-	RESPONSE_STATUS_ERROR_CONTENT_NOT_ACCEPTED       = 135
-	RESPONSE_STATUS_ERROR_UNSUPPORTED_MESSAGE        = 136
+	ResponseStatusOk                            byte = 128
+	ResponseStatusErrorUnspecified              byte = 129 // Obsolete
+	ResponseStatusErrorServiceDenied            byte = 130 // Obsolete
+	ResponseStatusErrorMessageFormatCorrupt     byte = 131 // Obsolete
+	ResponseStatusErrorSendingAddressUnresolved byte = 132 // Obsolete
+	ResponseStatusErrorMessageNotFound          byte = 133 // Obsolete
+	ResponseStatusErrorNetworkProblem           byte = 134 // Obsolete
+	ResponseStatusErrorContentNotAccepted       byte = 135 // Obsolete
+	ResponseStatusErrorUnsupportedMessage       byte = 136
+
+	ResponseStatusErrorTransientFailure           byte = 192
+	ResponseStatusErrorTransientAddressUnresolved byte = 193
+	ResponseStatusErrorTransientMessageNotFound   byte = 194
+	ResponseStatusErrorTransientNetworkProblem    byte = 195
+
+	ResponseStatusErrorTransientMaxReserved byte = 223
+
+	ResponseStatusErrorPermanentFailure                         byte = 224
+	ResponseStatusErrorPermanentServiceDenied                   byte = 225
+	ResponseStatusErrorPermanentMessageFormatCorrupt            byte = 226
+	ResponseStatusErrorPermanentAddressUnresolved               byte = 227
+	ResponseStatusErrorPermanentMessageNotFound                 byte = 228
+	ResponseStatusErrorPermanentContentNotAccepted              byte = 229
+	ResponseStatusErrorPermanentReplyChargingLimitationsNotMet  byte = 230
+	ResponseStatusErrorPermanentReplyChargingRequestNotAccepted byte = 231
+	ResponseStatusErrorPermanentReplyChargingForwardingDenied   byte = 232
+	ResponseStatusErrorPermanentReplyChargingNotSupported       byte = 233
+
+	ResponseStatusErrorPermamentMaxReserved byte = 255
 )
 
 // Status defined in OMA-WAP-MMS section 7.2.23
@@ -157,6 +188,17 @@ type MSendReq struct {
 	ReadReply        byte   `encode:"optional"`
 	ContentType      string
 	Attachments      []*Attachment `encode:"no"`
+}
+
+// MSendReq holds a m-send.conf message defined in
+// OMA-WAP-MMS-ENC section 6.1.2
+type MSendConf struct {
+	Type           byte
+	TransactionId  string
+	Version        byte
+	ResponseStatus byte
+	ResponseText   string
+	MessageId      string
 }
 
 // MNotificationInd holds a m-notification.ind message defined in
@@ -214,10 +256,16 @@ func NewMSendReq(recipients []string, attachments []*Attachment) *MSendReq {
 		Type:          TYPE_SEND_REQ,
 		To:            strings.Join(recipients, ","),
 		TransactionId: uuid,
-		Version:       MMS_MESSAGE_VERSION_1_3,
+		Version:       MMS_MESSAGE_VERSION_1_1,
 		UUID:          uuid,
 		ContentType:   "application/vnd.wap.multipart.related",
 		Attachments:   attachments,
+	}
+}
+
+func NewMSendConf() *MSendConf {
+	return &MSendConf{
+		Type: TYPE_SEND_CONF,
 	}
 }
 
@@ -267,4 +315,43 @@ func genUUID() string {
 		id = fmt.Sprintf("%x", b)
 	}
 	return id
+}
+
+var ErrTransient = errors.New("Error-transient-failure")
+var ErrPermanent = errors.New("Error-permament-failure")
+
+func (mSendConf *MSendConf) Status() error {
+	s := mSendConf.ResponseStatus
+	// these are case by case Response Status and we need to determine each one
+	switch s {
+	case ResponseStatusOk:
+		return nil
+	case ResponseStatusErrorUnspecified:
+		return ErrTransient
+	case ResponseStatusErrorServiceDenied:
+		return ErrTransient
+	case ResponseStatusErrorMessageFormatCorrupt:
+		return ErrPermanent
+	case ResponseStatusErrorSendingAddressUnresolved:
+		return ErrPermanent
+	case ResponseStatusErrorMessageNotFound:
+		// this could be ErrTransient or ErrPermanent
+		return ErrPermanent
+	case ResponseStatusErrorNetworkProblem:
+		return ErrTransient
+	case ResponseStatusErrorContentNotAccepted:
+		return ErrPermanent
+	case ResponseStatusErrorUnsupportedMessage:
+		return ErrPermanent
+	}
+
+	// these are the Response Status we can group
+	if s >= ResponseStatusErrorTransientFailure && s <= ResponseStatusErrorTransientMaxReserved {
+		return ErrTransient
+	} else if s >= ResponseStatusErrorPermanentFailure && s <= ResponseStatusErrorPermamentMaxReserved {
+		return ErrPermanent
+	}
+
+	// any case not handled is a permanent error
+	return ErrPermanent
 }
