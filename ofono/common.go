@@ -38,8 +38,7 @@ const (
 type PropertiesType map[string]dbus.Variant
 
 func getModems(conn *dbus.Connection) (modemPaths []dbus.ObjectPath, err error) {
-	obj := conn.Object("org.ofono", "/")
-	modemsReply, err := getOfonoProps(obj, "org.ofono.Manager", "GetModems")
+	modemsReply, err := getOfonoProps(conn, "/", OFONO_SENDER, "org.ofono.Manager", "GetModems")
 	if err != nil {
 		return nil, err
 	}
