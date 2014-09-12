@@ -1,3 +1,10 @@
+nuntium (0.1+14.10.20140912-0ubuntu1) utopic; urgency=low
+
+  [ Sergio Schvezov ]
+  * Allow proxyless contexts to be selected for MMS (LP: #1362008)
+
+ -- Ubuntu daily release <ps-jenkins@lists.canonical.com>  Fri, 12 Sep 2014 00:38:34 +0000
+
 nuntium (0.1+14.10.20140904-0ubuntu1) utopic; urgency=low
 
   [ Sergio Schvezov ]
