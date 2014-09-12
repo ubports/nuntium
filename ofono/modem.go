@@ -33,6 +33,11 @@ import (
 	"launchpad.net/go-dbus/v1"
 )
 
+const (
+	contextTypeInternet = "internet"
+	contextTypeMMS      = "mms"
+)
+
 type OfonoContext struct {
 	ObjectPath dbus.ObjectPath
 	Properties PropertiesType
@@ -55,6 +60,10 @@ type Modem struct {
 type ProxyInfo struct {
 	Host string
 	Port uint64
+}
+
+func (p ProxyInfo) String() string {
+	return fmt.Sprintf("%s:%d", p.Host, p.Port)
 }
 
 func (oProp OfonoContext) String() string {
@@ -207,7 +216,8 @@ func (modem *Modem) updatePushInterfaceState(interfaces dbus.Variant) {
 	}
 }
 
-func getOfonoProps(obj *dbus.ObjectProxy, iface, method string) (oProps []OfonoContext, err error) {
+var getOfonoProps = func(conn *dbus.Connection, objectPath dbus.ObjectPath, destination, iface, method string) (oProps []OfonoContext, err error) {
+	obj := conn.Object(destination, objectPath)
 	reply, err := obj.Call(iface, method)
 	if err != nil || reply.Type == dbus.TypeError {
 		return oProps, err
@@ -254,6 +264,10 @@ func (oContext OfonoContext) GetMessageCenter() (string, error) {
 
 func (oContext OfonoContext) GetProxy() (proxyInfo ProxyInfo, err error) {
 	proxy := reflect.ValueOf(oContext.Properties["MessageProxy"].Value).String()
+	// we need to support empty proxies
+	if proxy == "" {
+		return proxyInfo, nil
+	}
 	if strings.HasPrefix(proxy, "http://") {
 		proxy = proxy[len("http://"):]
 	}
@@ -284,8 +298,7 @@ func (oContext OfonoContext) GetProxy() (proxyInfo ProxyInfo, err error) {
 //Returns either the type=internet context or the type=mms, if none is found
 //an error is returned.
 func (modem *Modem) GetMMSContext() (OfonoContext, error) {
-	rilObj := modem.conn.Object("org.ofono", modem.Modem)
-	contexts, err := getOfonoProps(rilObj, CONNECTION_MANAGER_INTERFACE, "GetContexts")
+	contexts, err := getOfonoProps(modem.conn, modem.Modem, OFONO_SENDER, CONNECTION_MANAGER_INTERFACE, "GetContexts")
 	if err != nil {
 		return OfonoContext{}, err
 	}
@@ -312,9 +325,9 @@ func (modem *Modem) GetMMSContext() (OfonoContext, error) {
 			"MessageCenter:", msgCenter,
 			"MessageProxy:", msgProxy,
 			"Active:", active)
-		if contextType == "internet" && active && msgProxy != "" && msgCenter != "" {
+		if contextType == contextTypeInternet && active && msgCenter != "" {
 			return context, nil
-		} else if contextType == "mms" {
+		} else if contextType == contextTypeMMS {
 			return context, nil
 		}
 	}
