@@ -322,6 +322,7 @@ func (mediator *Mediator) sendMSendReq(mSendReqFile, uuid string) {
 		if err := mediator.telepathyService.MessageStatusChanged(uuid, telepathy.TRANSIENT_ERROR); err != nil {
 			log.Println(err)
 		}
+		return
 	}
 
 	log.Println("m-send.conf ResponseStatus for", uuid, "is", mSendConf.ResponseStatus)

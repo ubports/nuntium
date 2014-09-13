@@ -31,7 +31,7 @@ type PayloadDecoderTestSuite struct{}
 
 var _ = Suite(&PayloadDecoderTestSuite{})
 
-func (s *PayloadDecoderTestSuite) TestDecodeStringNoNullByteTerminator(c *C) {
+func (s *PayloadDecoderTestSuite) TestDecodeSuccessfulMSendConf(c *C) {
 	inputBytes, err := ioutil.ReadFile("test_payloads/m-send.conf_success")
 	c.Assert(err, IsNil)
 
@@ -41,4 +41,16 @@ func (s *PayloadDecoderTestSuite) TestDecodeStringNoNullByteTerminator(c *C) {
 	c.Assert(err, IsNil)
 	c.Check(mSendConf.ResponseStatus, Equals, ResponseStatusOk)
 	c.Check(mSendConf.TransactionId, Equals, "ad6babe2628710c443cdeb3ff39679ac")
+}
+
+func (s *PayloadDecoderTestSuite) TestDecodeInvalidMSendConf(c *C) {
+	inputBytes := []byte(`<html><head><title>719</title><meta http-equiv="Cache-Control" content="max-age=0" /><meta http-equiv="Cache-control" content="no-cache" /></head><body><h3 align="center">Disculpe,ha ocurrido un error: Failure to Query from Radius Server</h3><br/><p>Por favor, regrese al menu anterior o acceda al siguiente link.<br/></p><ul><li><a href="http://wap.personal.com.ar/"><strong>Home Personal</strong></a></li></ul></body></html>^M`)
+
+	mSendConf := NewMSendConf()
+	dec := NewDecoder(inputBytes)
+	err := dec.Decode(mSendConf)
+	c.Check(err, NotNil)
+	c.Check(mSendConf.ResponseStatus, Equals, byte(0x0))
+	c.Check(mSendConf.TransactionId, Equals, "")
+	mSendConf.Status()
 }
