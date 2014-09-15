@@ -1,3 +1,14 @@
+nuntium (0.1+14.10.20140915.1-0ubuntu1) 14.09; urgency=low
+
+  [ Ubuntu daily release ]
+  * New rebuild forced
+
+  [ Sergio Schvezov ]
+  * Add a missing return statement when decoding fails with an
+    additional decoding test. (LP: #1369143)
+
+ -- Ubuntu daily release <ps-jenkins@lists.canonical.com>  Mon, 15 Sep 2014 14:59:46 +0000
+
 nuntium (0.1+14.10.20140912-0ubuntu1) utopic; urgency=low
 
   [ Sergio Schvezov ]
