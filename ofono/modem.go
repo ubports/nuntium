@@ -48,6 +48,7 @@ type Modem struct {
 	Modem                  dbus.ObjectPath
 	PushAgent              *PushAgent
 	identity               string
+	preferredContext       dbus.ObjectPath
 	IdentityAdded          chan string
 	IdentityRemoved        chan string
 	endWatch               chan bool
@@ -235,19 +236,24 @@ var getOfonoProps = func(conn *dbus.Connection, objectPath dbus.ObjectPath, dest
 //Returns either the type=internet context or the type=mms, if none is found
 //an error is returned.
 func (modem *Modem) ActivateMMSContext() (OfonoContext, error) {
-	context, err := modem.GetMMSContext()
+	contexts, err := modem.GetMMSContexts()
 	if err != nil {
 		return OfonoContext{}, err
 	}
-	if context.isActive() {
-		return context, nil
+	for _, context := range contexts {
+		if context.isActive() {
+			return context, nil
+		}
+		obj := modem.conn.Object("org.ofono", context.ObjectPath)
+		_, err = obj.Call(CONNECTION_CONTEXT_INTERFACE, "SetProperty", "Active", dbus.Variant{true})
+		if err != nil {
+			log.Println("Cannot Activate interface on %s: %s", context.ObjectPath, err)
+		} else {
+			modem.preferredContext = context.ObjectPath
+			return context, nil
+		}
 	}
-	obj := modem.conn.Object("org.ofono", context.ObjectPath)
-	_, err = obj.Call(CONNECTION_CONTEXT_INTERFACE, "SetProperty", "Active", dbus.Variant{true})
-	if err != nil {
-		return OfonoContext{}, fmt.Errorf("Cannot Activate interface on %s: %s", context.ObjectPath, err)
-	}
-	return context, nil
+	return OfonoContext{}, errors.New("no context available to activate")
 }
 
 func (oContext OfonoContext) isActive() bool {
@@ -297,13 +303,13 @@ func (oContext OfonoContext) GetProxy() (proxyInfo ProxyInfo, err error) {
 //
 //Returns either the type=internet context or the type=mms, if none is found
 //an error is returned.
-func (modem *Modem) GetMMSContext() (OfonoContext, error) {
+func (modem *Modem) GetMMSContexts() (mmsContexts []OfonoContext, err error) {
 	contexts, err := getOfonoProps(modem.conn, modem.Modem, OFONO_SENDER, CONNECTION_MANAGER_INTERFACE, "GetContexts")
 	if err != nil {
-		return OfonoContext{}, err
+		return mmsContexts, err
 	}
 	for _, context := range contexts {
-		var contextType, msgCenter, msgProxy string
+		var name, contextType, msgCenter, msgProxy string
 		var active bool
 		for k, v := range context.Properties {
 			if reflect.ValueOf(k).Kind() != reflect.String {
@@ -311,6 +317,8 @@ func (modem *Modem) GetMMSContext() (OfonoContext, error) {
 			}
 			k = reflect.ValueOf(k).String()
 			switch k {
+			case "Name":
+				name = reflect.ValueOf(v.Value).String()
 			case "Type":
 				contextType = reflect.ValueOf(v.Value).String()
 			case "MessageCenter":
@@ -321,17 +329,23 @@ func (modem *Modem) GetMMSContext() (OfonoContext, error) {
 				active = reflect.ValueOf(v.Value).Bool()
 			}
 		}
-		log.Println("Context type:", contextType,
-			"MessageCenter:", msgCenter,
-			"MessageProxy:", msgProxy,
-			"Active:", active)
-		if contextType == contextTypeInternet && active && msgCenter != "" {
-			return context, nil
-		} else if contextType == contextTypeMMS {
-			return context, nil
+		log.Println("Check context valid for - Name", name,
+			"| Context type:", contextType,
+			"| MessageCenter:", msgCenter,
+			"| MessageProxy:", msgProxy,
+			"| Active:", active)
+		if (contextType == contextTypeInternet && active && msgCenter != "") || contextType == contextTypeMMS {
+			if context.ObjectPath == modem.preferredContext || active {
+				mmsContexts = append([]OfonoContext{context}, mmsContexts...)
+			} else {
+				mmsContexts = append(mmsContexts, context)
+			}
 		}
 	}
-	return OfonoContext{}, errors.New("No mms contexts found")
+	if len(mmsContexts) == 0 {
+		return mmsContexts, errors.New("No mms contexts found")
+	}
+	return mmsContexts, nil
 }
 
 func (modem *Modem) getProperty(interfaceName, propertyName string) (*dbus.Variant, error) {
