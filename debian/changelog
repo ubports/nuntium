@@ -1,3 +1,11 @@
+nuntium (0.1+14.10.20140918-0ubuntu1) 14.09; urgency=low
+
+  [ Sergio Schvezov ]
+  * Iterate over a list of possible valid MMS contexts and store the
+    preferred one (LP: #1370659)
+
+ -- Ubuntu daily release <ps-jenkins@lists.canonical.com>  Thu, 18 Sep 2014 04:37:21 +0000
+
 nuntium (0.1+14.10.20140915.1-0ubuntu1) 14.09; urgency=low
 
   [ Ubuntu daily release ]
