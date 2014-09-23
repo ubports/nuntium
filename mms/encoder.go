@@ -50,7 +50,7 @@ func (enc *MMSEncoder) Encode(pdu MMSWriter) error {
 		encodeTag := typeOfPdu.Field(i).Tag.Get("encode")
 		f := rPdu.Field(i)
 
-		if encodeTag == "no" || encodeTag == "optional" {
+		if encodeTag == "no" {
 			continue
 		}
 		switch f.Kind() {
@@ -72,8 +72,6 @@ func (enc *MMSEncoder) Encode(pdu MMSWriter) error {
 			err = enc.writeStringParam(X_MMS_TRANSACTION_ID, f.String())
 		case "Status":
 			err = enc.writeByteParam(X_MMS_STATUS, byte(f.Uint()))
-		case "ReportAllowed":
-			err = enc.writeReportAllowedParam(f.Bool())
 		case "From":
 			err = enc.writeFrom()
 		case "Name":
@@ -88,7 +86,7 @@ func (enc *MMSEncoder) Encode(pdu MMSWriter) error {
 				if err := enc.setParam(CONTENT_TYPE); err != nil {
 					return err
 				}
-				if err = enc.writeMediaType(mSendReq.ContentType); err != nil {
+				if err = enc.writeContentType(mSendReq.ContentType, mSendReq.ContentTypeStart, mSendReq.ContentTypeType, ""); err != nil {
 					return err
 				}
 				err = enc.writeAttachments(mSendReq.Attachments)
@@ -96,8 +94,14 @@ func (enc *MMSEncoder) Encode(pdu MMSWriter) error {
 				err = errors.New("unhandled content type")
 			}
 		case "MediaType":
-			if err = enc.writeMediaType(f.String()); err != nil {
-				return err
+			if a, ok := pdu.(*Attachment); ok {
+				if err = enc.writeContentType(a.MediaType, "", "", a.Name); err != nil {
+					return err
+				}
+			} else {
+				if err = enc.writeMediaType(f.String()); err != nil {
+					return err
+				}
 			}
 		case "Charset":
 			//TODO
@@ -106,6 +110,24 @@ func (enc *MMSEncoder) Encode(pdu MMSWriter) error {
 			err = enc.writeStringParam(MMS_PART_CONTENT_LOCATION, f.String())
 		case "ContentId":
 			err = enc.writeQuotedStringParam(MMS_PART_CONTENT_ID, f.String())
+		case "Date":
+			date := f.Uint()
+			if date > 0 {
+				err = enc.writeLongIntegerParam(DATE, date)
+			}
+		case "Class":
+			err = enc.writeByteParam(X_MMS_MESSAGE_CLASS, byte(f.Uint()))
+		case "ReportAllowed":
+			err = enc.writeByteParam(X_MMS_REPORT_ALLOWED, byte(f.Uint()))
+		case "DeliveryReport":
+			err = enc.writeByteParam(X_MMS_DELIVERY_REPORT, byte(f.Uint()))
+		case "ReadReport":
+			err = enc.writeByteParam(X_MMS_READ_REPORT, byte(f.Uint()))
+		case "Expiry":
+			expiry := f.Uint()
+			if expiry > 0 {
+				err = enc.writeRelativeExpiry(expiry)
+			}
 		default:
 			if encodeTag == "optional" {
 				log.Printf("Unhandled optional field %s", fieldName)
@@ -182,7 +204,7 @@ func (enc *MMSEncoder) writeCharset(charset string) error {
 
 func (enc *MMSEncoder) writeLength(length uint64) error {
 	if length <= SHORT_LENGTH_MAX {
-		return enc.writeShortInteger(length)
+		return enc.writeByte(byte(length))
 	} else {
 		if err := enc.writeByte(LENGTH_QUOTE); err != nil {
 			return err
@@ -191,12 +213,62 @@ func (enc *MMSEncoder) writeLength(length uint64) error {
 	}
 }
 
-func (enc *MMSEncoder) writeMediaType(media string) error {
+func encodeContentType(media string) (uint64, error) {
 	var mt int
 	for mt = range CONTENT_TYPES {
 		if CONTENT_TYPES[mt] == media {
-			return enc.writeInteger(uint64(mt))
+			return uint64(mt), nil
 		}
+	}
+	return 0, errors.New("cannot binary encode media")
+}
+
+func (enc *MMSEncoder) writeContentType(media, start, ctype, name string) error {
+	if start == "" && ctype == "" && name == "" {
+		return enc.writeMediaType(media)
+	}
+
+	var contentType []byte
+	if start != "" {
+		contentType = append(contentType, WSP_PARAMETER_TYPE_START_DEFUNCT|SHORT_FILTER)
+		contentType = append(contentType, []byte(start)...)
+		contentType = append(contentType, 0)
+	}
+	if ctype != "" {
+		contentType = append(contentType, WSP_PARAMETER_TYPE_CONTENT_TYPE|SHORT_FILTER)
+		contentType = append(contentType, []byte(ctype)...)
+		contentType = append(contentType, 0)
+	}
+	if name != "" {
+		contentType = append(contentType, WSP_PARAMETER_TYPE_NAME_DEFUNCT|SHORT_FILTER)
+		contentType = append(contentType, []byte(name)...)
+		contentType = append(contentType, 0)
+	}
+
+	if mt, err := encodeContentType(media); err == nil {
+		// +1 for mt
+		length := uint64(len(contentType) + 1)
+		if err := enc.writeLength(length); err != nil {
+			return err
+		}
+		if err := enc.writeInteger(mt); err != nil {
+			return err
+		}
+	} else {
+		mediaB := []byte(media)
+		mediaB = append(mediaB, 0)
+		contentType = append(mediaB, contentType...)
+		length := uint64(len(contentType))
+		if err := enc.writeLength(length); err != nil {
+			return err
+		}
+	}
+	return enc.writeBytes(contentType, len(contentType))
+}
+
+func (enc *MMSEncoder) writeMediaType(media string) error {
+	if mt, err := encodeContentType(media); err == nil {
+		return enc.writeInteger(mt)
 	}
 
 	// +1 is the byte{0}
@@ -204,6 +276,29 @@ func (enc *MMSEncoder) writeMediaType(media string) error {
 		return err
 	}
 	return enc.writeString(media)
+}
+
+func (enc *MMSEncoder) writeRelativeExpiry(expiry uint64) error {
+	if err := enc.setParam(X_MMS_EXPIRY); err != nil {
+		return err
+	}
+	encodedLong := encodeLong(expiry)
+
+	var b []byte
+	// +1 for the token, +1 for the len of long
+	b = append(b, byte(len(encodedLong)+2))
+	b = append(b, ExpiryTokenRelative)
+	b = append(b, byte(len(encodedLong)))
+	b = append(b, encodedLong...)
+
+	return enc.writeBytes(b, len(b))
+}
+
+func (enc *MMSEncoder) writeLongIntegerParam(param byte, i uint64) error {
+	if err := enc.setParam(param); err != nil {
+		return err
+	}
+	return enc.writeLongInteger(i)
 }
 
 func (enc *MMSEncoder) writeIntegerParam(param byte, i uint64) error {
@@ -240,19 +335,6 @@ func (enc *MMSEncoder) writeStringParam(param byte, s string) error {
 func (enc *MMSEncoder) writeByteParam(param byte, b byte) error {
 	if err := enc.setParam(param); err != nil {
 		return err
-	}
-	return enc.writeByte(b)
-}
-
-func (enc *MMSEncoder) writeReportAllowedParam(reportAllowed bool) error {
-	if err := enc.setParam(X_MMS_REPORT_ALLOWED); err != nil {
-		return err
-	}
-	var b byte
-	if reportAllowed {
-		b = REPORT_ALLOWED_YES
-	} else {
-		b = REPORT_ALLOWED_NO
 	}
 	return enc.writeByte(b)
 }
@@ -308,13 +390,7 @@ func (enc *MMSEncoder) writeShortInteger(i uint64) error {
 // with the most significant octet encoded first (big-endian representation).
 // The minimum number of octets must be used to encode the value.
 func (enc *MMSEncoder) writeLongInteger(i uint64) error {
-	var encodedLong []byte
-	for i > 0 {
-		b := byte(0xff & i)
-		encodedLong = append([]byte{b}, encodedLong...)
-		i = i >> 8
-	}
-
+	encodedLong := encodeLong(i)
 	encLength := uint64(len(encodedLong))
 	if encLength > SHORT_LENGTH_MAX {
 		return fmt.Errorf("cannot encode long integer, lenght was %d but expected %d", encLength, SHORT_LENGTH_MAX)
@@ -322,7 +398,17 @@ func (enc *MMSEncoder) writeLongInteger(i uint64) error {
 	if err := enc.writeByte(byte(encLength)); err != nil {
 		return err
 	}
+
 	return enc.writeBytes(encodedLong, len(encodedLong))
+}
+
+func encodeLong(i uint64) (encodedLong []byte) {
+	for i > 0 {
+		b := byte(0xff & i)
+		encodedLong = append([]byte{b}, encodedLong...)
+		i = i >> 8
+	}
+	return encodedLong
 }
 
 // writeInteger encodes i according to the Basic Rules described in section

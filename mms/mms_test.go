@@ -30,7 +30,7 @@ var _ = Suite(&MMSTestSuite{})
 func (s *MMSTestSuite) TestNewMSendReq(c *C) {
 	recipients := []string{"+11111", "+22222", "+33333"}
 	recipientsStr := "+11111/TYPE=PLMN,+22222/TYPE=PLMN,+33333/TYPE=PLMN"
-	mSendReq := NewMSendReq(recipients, []*Attachment{})
+	mSendReq := NewMSendReq(recipients, []*Attachment{}, false)
 	c.Check(mSendReq.To, Equals, recipientsStr)
 	c.Check(mSendReq.ContentType, Equals, "application/vnd.wap.multipart.related")
 	c.Check(mSendReq.Type, Equals, byte(TYPE_SEND_REQ))

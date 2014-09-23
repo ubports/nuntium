@@ -24,8 +24,10 @@ package mms
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"strings"
+	"time"
 )
 
 // MMS Field names from OMA-WAP-MMS section 7.3 Table 12
@@ -88,10 +90,16 @@ const (
 	MMS_MESSAGE_VERSION_1_3 = 0x93
 )
 
-// Date tokens defined in OMA-WAP-MMS section 7.2.10
+// Delivery Report defined in OMA-WAP-MMS section 7.2.6
 const (
-	TOKEN_DATE_ABS = 0x80
-	TOKEN_DATE_REL = 0x81
+	DeliveryReportYes byte = 128
+	DeliveryReportNo  byte = 129
+)
+
+// Expiry tokens defined in OMA-WAP-MMS section 7.2.10
+const (
+	ExpiryTokenAbsolute byte = 128
+	ExpiryTokenRelative byte = 129
 )
 
 // From tokens defined in OMA-WAP-MMS section 7.2.11
@@ -102,16 +110,22 @@ const (
 
 // Message classes defined in OMA-WAP-MMS section 7.2.14
 const (
-	CLASS_PERSONAL      = 0x80
-	CLASS_ADVERTISEMENT = 0x81
-	CLASS_INFORMATIONAL = 0x82
-	CLASS_AUTO          = 0x83
+	ClassPersonal      byte = 128
+	ClassAdvertisement byte = 129
+	ClassInformational byte = 130
+	ClassAuto          byte = 131
 )
 
-// Report Allowed defined in OMA-WAP-MMS 7.2.19
+// Report Report defined in OMA-WAP-MMS 7.2.20
 const (
-	REPORT_ALLOWED_YES = 128
-	REPORT_ALLOWED_NO  = 129
+	ReadReportYes byte = 128
+	ReadReportNo  byte = 129
+)
+
+// Report Allowed defined in OMA-WAP-MMS section 7.2.26
+const (
+	ReportAllowedYes byte = 128
+	ReportAllowedNo  byte = 129
 )
 
 // Response Status defined in OMA-WAP-MMS section 7.2.27
@@ -185,7 +199,9 @@ type MSendReq struct {
 	Priority         byte   `encode:"optional"`
 	SenderVisibility byte   `encode:"optional"`
 	DeliveryReport   byte   `encode:"optional"`
-	ReadReply        byte   `encode:"optional"`
+	ReadReport       byte   `encode:"optional"`
+	ContentTypeStart string `encode:"no"`
+	ContentTypeType  string `encode:"no"`
 	ContentType      string
 	Attachments      []*Attachment `encode:"no"`
 }
@@ -222,7 +238,7 @@ type MNotifyRespInd struct {
 	TransactionId string
 	Version       byte
 	Status        byte
-	ReportAllowed bool
+	ReportAllowed byte `encode:"optional"`
 }
 
 // MRetrieveConf holds a m-retrieve.conf message defined in
@@ -237,7 +253,7 @@ type MRetrieveConf struct {
 	TransactionId, MessageId, RetrieveText     string
 	From, Cc, Subject                          string
 	To                                         string
-	ReportAllowed                              bool
+	ReportAllowed                              byte
 	Date                                       uint64
 	Content                                    Attachment
 	Attachments                                []Attachment
@@ -247,19 +263,31 @@ type MRetrieveConf struct {
 type MMSReader interface{}
 type MMSWriter interface{}
 
-func NewMSendReq(recipients []string, attachments []*Attachment) *MSendReq {
+// NewMSendReq creates a personal message with a normal priority and no read report
+func NewMSendReq(recipients []string, attachments []*Attachment, deliveryReport bool) *MSendReq {
 	for i := range recipients {
 		recipients[i] += "/TYPE=PLMN"
 	}
 	uuid := genUUID()
+
+	orderedAttachments, smilStart, smilType := processAttachments(attachments)
+
 	return &MSendReq{
 		Type:          TYPE_SEND_REQ,
 		To:            strings.Join(recipients, ","),
 		TransactionId: uuid,
 		Version:       MMS_MESSAGE_VERSION_1_1,
 		UUID:          uuid,
-		ContentType:   "application/vnd.wap.multipart.related",
-		Attachments:   attachments,
+		Date:          getDate(),
+		// this will expire the message in 7 days
+		Expiry:           uint64(time.Duration(time.Hour * 24 * 7).Seconds()),
+		DeliveryReport:   getDeliveryReport(deliveryReport),
+		ReadReport:       ReadReportNo,
+		Class:            ClassPersonal,
+		ContentType:      "application/vnd.wap.multipart.related",
+		ContentTypeStart: smilStart,
+		ContentTypeType:  smilType,
+		Attachments:      orderedAttachments,
 	}
 }
 
@@ -280,7 +308,7 @@ func (mNotificationInd *MNotificationInd) NewMNotifyRespInd(status byte, deliver
 		TransactionId: mNotificationInd.TransactionId,
 		Version:       mNotificationInd.Version,
 		Status:        status,
-		ReportAllowed: deliveryReport,
+		ReportAllowed: getReportAllowed(deliveryReport),
 	}
 }
 
@@ -291,7 +319,7 @@ func (mRetrieveConf *MRetrieveConf) NewMNotifyRespInd(deliveryReport bool) *MNot
 		TransactionId: mRetrieveConf.TransactionId,
 		Version:       mRetrieveConf.Version,
 		Status:        STATUS_RETRIEVED,
-		ReportAllowed: deliveryReport,
+		ReportAllowed: getReportAllowed(deliveryReport),
 	}
 }
 
@@ -354,4 +382,57 @@ func (mSendConf *MSendConf) Status() error {
 
 	// any case not handled is a permanent error
 	return ErrPermanent
+}
+
+func getReadReport(v bool) (read byte) {
+	if v {
+		read = ReadReportYes
+	} else {
+		read = ReadReportNo
+	}
+	return read
+}
+
+func getDeliveryReport(v bool) (delivery byte) {
+	if v {
+		delivery = DeliveryReportYes
+	} else {
+		delivery = DeliveryReportNo
+	}
+	return delivery
+}
+
+func getReportAllowed(v bool) (allowed byte) {
+	if v {
+		allowed = ReportAllowedYes
+	} else {
+		allowed = ReportAllowedNo
+	}
+	return allowed
+}
+
+func getDate() (date uint64) {
+	d := time.Now().Unix()
+	if d > 0 {
+		date = uint64(d)
+	}
+	return date
+}
+
+func processAttachments(a []*Attachment) (oa []*Attachment, smilStart, smilType string) {
+	oa = make([]*Attachment, 0, len(a))
+	for i := range a {
+		if strings.HasPrefix(a[i].MediaType, "application/smil") {
+			oa = append([]*Attachment{a[i]}, oa...)
+			var err error
+			smilStart, err = getSmilStart(a[i].Data)
+			if err != nil {
+				log.Println("Cannot set content type start:", err)
+			}
+			smilType = "application/smil"
+		} else {
+			oa = append(oa, a[i])
+		}
+	}
+	return oa, smilStart, smilType
 }

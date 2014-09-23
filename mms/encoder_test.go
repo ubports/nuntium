@@ -56,7 +56,7 @@ func (s *EncoderTestSuite) TestEncodeMNotifyRespIndRetrievedWithReports(c *C) {
 		TransactionId: "0123456",
 		Version:       MMS_MESSAGE_VERSION_1_3,
 		Status:        STATUS_RETRIEVED,
-		ReportAllowed: false,
+		ReportAllowed: ReportAllowedNo,
 	}
 	var outBytes bytes.Buffer
 	enc := NewEncoder(&outBytes)
@@ -83,7 +83,7 @@ func (s *EncoderTestSuite) TestEncodeMNotifyRespIndDeffered(c *C) {
 		TransactionId: "0123456",
 		Version:       MMS_MESSAGE_VERSION_1_3,
 		Status:        STATUS_DEFERRED,
-		ReportAllowed: false,
+		ReportAllowed: ReportAllowedNo,
 	}
 	var outBytes bytes.Buffer
 	enc := NewEncoder(&outBytes)
@@ -110,7 +110,7 @@ func (s *EncoderTestSuite) TestEncodeMNotifyRespIndRetrievedWithoutReports(c *C)
 		TransactionId: "0123456",
 		Version:       MMS_MESSAGE_VERSION_1_3,
 		Status:        STATUS_RETRIEVED,
-		ReportAllowed: true,
+		ReportAllowed: ReportAllowedYes,
 	}
 	var outBytes bytes.Buffer
 	enc := NewEncoder(&outBytes)
@@ -132,7 +132,7 @@ func (s *EncoderTestSuite) TestEncodeMSendReq(c *C) {
 	attachments := []*Attachment{att}
 
 	recipients := []string{"+12345"}
-	mSendReq := NewMSendReq(recipients, attachments)
+	mSendReq := NewMSendReq(recipients, attachments, false)
 
 	var outBytes bytes.Buffer
 	enc := NewEncoder(&outBytes)
