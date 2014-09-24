@@ -1,3 +1,12 @@
+nuntium (0.1+14.10.20140924-0ubuntu1) 14.09; urgency=low
+
+  [ Sergio Schvezov ]
+  * Using the same optional parameters android uses for sending, fixing
+    length encoding for lengths < 30, adding extra params to the content
+    types. (LP: #1349299)
+
+ -- Ubuntu daily release <ps-jenkins@lists.canonical.com>  Wed, 24 Sep 2014 12:39:58 +0000
+
 nuntium (0.1+14.10.20140918-0ubuntu1) 14.09; urgency=low
 
   [ Sergio Schvezov ]
