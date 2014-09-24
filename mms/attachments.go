@@ -33,10 +33,10 @@ import (
 type Attachment struct {
 	MediaType        string
 	Type             string `encode:"no"`
-	Name             string
+	Name             string `encode:"no"`
 	FileName         string `encode:"no"`
 	Charset          string `encode:"no"`
-	Start            string
+	Start            string `encode:"no"`
 	StartInfo        string `encode:"no"`
 	Domain           string `encode:"no"`
 	Path             string `encode:"no"`
@@ -64,14 +64,21 @@ func NewAttachment(id, contentType, filePath string) (*Attachment, error) {
 	ct := &Attachment{
 		ContentId:       id,
 		ContentLocation: id,
+		Name:            id,
 		Data:            data,
 	}
 
-	if parts := strings.Split(contentType, ";"); len(parts) > 1 {
-		ct.MediaType = parts[0]
-		ct.Charset = parts[1]
-	} else {
-		ct.MediaType = contentType
+	parts := strings.Split(contentType, ";")
+	ct.MediaType = strings.TrimSpace(parts[0])
+	for i := 1; i < len(parts); i++ {
+		if field := strings.Split(strings.TrimSpace(parts[i]), "="); len(field) > 1 {
+			switch strings.TrimSpace(field[0]) {
+			case "charset":
+				ct.Charset = strings.TrimSpace(field[1])
+			default:
+				log.Println("Unhandled field in attachment", field[0])
+			}
+		}
 	}
 
 	if contentType == "application/smil" {
@@ -79,7 +86,7 @@ func NewAttachment(id, contentType, filePath string) (*Attachment, error) {
 		if err != nil {
 			return nil, err
 		}
-		ct.Start = start
+		ct.ContentId = start
 	}
 	return ct, nil
 }

@@ -265,7 +265,7 @@ func (mediator *Mediator) handleOutgoingMessage(msg *telepathy.OutgoingMessage) 
 		}
 		cts = append(cts, ct)
 	}
-	mSendReq := mms.NewMSendReq(msg.Recipients, cts)
+	mSendReq := mms.NewMSendReq(msg.Recipients, cts, useDeliveryReports)
 	if _, err := mediator.telepathyService.ReplySendMessage(msg.Reply, mSendReq.UUID); err != nil {
 		log.Print(err)
 		return
