@@ -31,6 +31,7 @@ import (
 	"strings"
 
 	"launchpad.net/go-dbus/v1"
+	"launchpad.net/nuntium/storage"
 )
 
 const (
@@ -48,7 +49,6 @@ type Modem struct {
 	Modem                  dbus.ObjectPath
 	PushAgent              *PushAgent
 	identity               string
-	preferredContext       dbus.ObjectPath
 	IdentityAdded          chan string
 	IdentityRemoved        chan string
 	endWatch               chan bool
@@ -247,9 +247,11 @@ func (modem *Modem) ActivateMMSContext() (OfonoContext, error) {
 		obj := modem.conn.Object("org.ofono", context.ObjectPath)
 		_, err = obj.Call(CONNECTION_CONTEXT_INTERFACE, "SetProperty", "Active", dbus.Variant{true})
 		if err != nil {
-			log.Println("Cannot Activate interface on %s: %s", context.ObjectPath, err)
+			log.Printf("Cannot Activate interface on %s: %s", context.ObjectPath, err)
 		} else {
-			modem.preferredContext = context.ObjectPath
+			if err := storage.SetPreferredContext(modem.identity, context.ObjectPath); err != nil {
+				log.Println("Cannot set preferred context:", err)
+			}
 			return context, nil
 		}
 	}
@@ -308,6 +310,12 @@ func (modem *Modem) GetMMSContexts() (mmsContexts []OfonoContext, err error) {
 	if err != nil {
 		return mmsContexts, err
 	}
+
+	preferredContext, err := storage.GetPreferredContext(modem.identity)
+	if err != nil {
+		log.Println("Preferred context cannot be set:", err)
+	}
+
 	for _, context := range contexts {
 		var name, contextType, msgCenter, msgProxy string
 		var active bool
@@ -335,7 +343,7 @@ func (modem *Modem) GetMMSContexts() (mmsContexts []OfonoContext, err error) {
 			"| MessageProxy:", msgProxy,
 			"| Active:", active)
 		if (contextType == contextTypeInternet && active && msgCenter != "") || contextType == contextTypeMMS {
-			if context.ObjectPath == modem.preferredContext || active {
+			if context.ObjectPath == preferredContext || active {
 				mmsContexts = append([]OfonoContext{context}, mmsContexts...)
 			} else {
 				mmsContexts = append(mmsContexts, context)

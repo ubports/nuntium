@@ -82,7 +82,7 @@ func (manager *MMSManager) getServices(msg *dbus.Message) *dbus.Message {
 
 func (manager *MMSManager) serviceAdded(payload *Payload) error {
 	log.Print("Service added ", payload.Path)
-	signal := dbus.NewSignalMessage(MMS_DBUS_PATH, MMS_MANAGER_DBUS_IFACE, SERVICE_ADDED)
+	signal := dbus.NewSignalMessage(MMS_DBUS_PATH, MMS_MANAGER_DBUS_IFACE, serviceAddedSignal)
 	if err := signal.AppendArgs(payload.Path, payload.Properties); err != nil {
 		return err
 	}
@@ -108,7 +108,7 @@ func (manager *MMSManager) AddService(identity string, modemObjPath dbus.ObjectP
 
 func (manager *MMSManager) serviceRemoved(payload *Payload) error {
 	log.Print("Service removed ", payload.Path)
-	signal := dbus.NewSignalMessage(MMS_DBUS_PATH, MMS_MANAGER_DBUS_IFACE, SERVICE_REMOVED)
+	signal := dbus.NewSignalMessage(MMS_DBUS_PATH, MMS_MANAGER_DBUS_IFACE, serviceRemovedSignal)
 	if err := signal.AppendArgs(payload.Path); err != nil {
 		return err
 	}

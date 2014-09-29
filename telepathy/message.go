@@ -94,8 +94,8 @@ func (msgInterface *MessageInterface) StatusChanged(status string) error {
 	i := validStatus.Search(status)
 	if i < validStatus.Len() && validStatus[i] == status {
 		msgInterface.status = status
-		signal := dbus.NewSignalMessage(msgInterface.objectPath, MMS_MESSAGE_DBUS_IFACE, PROPERTY_CHANGED)
-		if err := signal.AppendArgs(STATUS, dbus.Variant{status}); err != nil {
+		signal := dbus.NewSignalMessage(msgInterface.objectPath, MMS_MESSAGE_DBUS_IFACE, propertyChangedSignal)
+		if err := signal.AppendArgs(statusProperty, dbus.Variant{status}); err != nil {
 			return err
 		}
 		if err := msgInterface.conn.Send(signal); err != nil {
