@@ -244,6 +244,7 @@ func (modem *Modem) ActivateMMSContext() (OfonoContext, error) {
 		if context.isActive() {
 			return context, nil
 		}
+		log.Println("Trying to activate context on", context.ObjectPath)
 		obj := modem.conn.Object("org.ofono", context.ObjectPath)
 		_, err = obj.Call(CONNECTION_CONTEXT_INTERFACE, "SetProperty", "Active", dbus.Variant{true})
 		if err != nil {
