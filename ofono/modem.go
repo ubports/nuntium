@@ -31,7 +31,6 @@ import (
 	"strings"
 
 	"launchpad.net/go-dbus/v1"
-	"launchpad.net/nuntium/storage"
 )
 
 const (
@@ -235,16 +234,13 @@ var getOfonoProps = func(conn *dbus.Connection, objectPath dbus.ObjectPath, dest
 //If the context is already active it's a nop.
 //Returns either the type=internet context or the type=mms, if none is found
 //an error is returned.
-func (modem *Modem) ActivateMMSContext() (OfonoContext, error) {
-	contexts, err := modem.GetMMSContexts()
+func (modem *Modem) ActivateMMSContext(preferredContext dbus.ObjectPath) (OfonoContext, error) {
+	contexts, err := modem.GetMMSContexts(preferredContext)
 	if err != nil {
 		return OfonoContext{}, err
 	}
 	for _, context := range contexts {
 		if context.isActive() {
-			if err := storage.SetPreferredContext(modem.identity, context.ObjectPath); err != nil {
-				log.Println("Cannot set preferred context:", err)
-			}
 			return context, nil
 		}
 		log.Println("Trying to activate context on", context.ObjectPath)
@@ -253,9 +249,6 @@ func (modem *Modem) ActivateMMSContext() (OfonoContext, error) {
 		if err != nil {
 			log.Printf("Cannot Activate interface on %s: %s", context.ObjectPath, err)
 		} else {
-			if err := storage.SetPreferredContext(modem.identity, context.ObjectPath); err != nil {
-				log.Println("Cannot set preferred context:", err)
-			}
 			return context, nil
 		}
 	}
@@ -309,15 +302,10 @@ func (oContext OfonoContext) GetProxy() (proxyInfo ProxyInfo, err error) {
 //
 //Returns either the type=internet context or the type=mms, if none is found
 //an error is returned.
-func (modem *Modem) GetMMSContexts() (mmsContexts []OfonoContext, err error) {
+func (modem *Modem) GetMMSContexts(preferredContext dbus.ObjectPath) (mmsContexts []OfonoContext, err error) {
 	contexts, err := getOfonoProps(modem.conn, modem.Modem, OFONO_SENDER, CONNECTION_MANAGER_INTERFACE, "GetContexts")
 	if err != nil {
 		return mmsContexts, err
-	}
-
-	preferredContext, err := storage.GetPreferredContext(modem.identity)
-	if err != nil {
-		log.Println("Preferred context cannot be read:", err)
 	}
 
 	for _, context := range contexts {

@@ -132,12 +132,13 @@ func (service *MMSService) watchDBusMethodCalls() {
 			}
 		case "GetProperties":
 			reply = dbus.NewMethodReturnMessage(msg)
-			if preferredContextObjectPath, err := storage.GetPreferredContext(service.identity); err == nil {
-				log.Println("Found preferred context:", preferredContextObjectPath)
-				service.Properties[preferredContextProperty] = dbus.Variant{preferredContextObjectPath}
-			} else if _, ok := service.Properties[preferredContextProperty]; ok {
-				delete(service.Properties, preferredContextProperty)
+			if pc, err := service.GetPreferredContext(); err == nil {
+				service.Properties[preferredContextProperty] = dbus.Variant{pc}
+			} else {
+				// Using "/" as an invalid 'path' even though it could be considered 'incorrect'
+				service.Properties[preferredContextProperty] = dbus.Variant{dbus.ObjectPath("/")}
 			}
+			//log.Printf("Service Properties %#v", service.Properties)
 			if err := reply.AppendArgs(service.Properties); err != nil {
 				log.Print("Cannot parse payload data from services")
 				reply = dbus.NewErrorMessage(msg, "Error.InvalidArguments", "Cannot parse services")
@@ -193,6 +194,26 @@ func getUUIDFromObjectPath(objectPath dbus.ObjectPath) (string, error) {
 	return uuid, nil
 }
 
+func (service *MMSService) SetPreferredContext(context dbus.ObjectPath) error {
+	// make set a noop if we are setting the same thing
+	if pc, err := service.GetPreferredContext(); err != nil && context == pc {
+		return nil
+	}
+
+	if err := storage.SetPreferredContext(service.identity, context); err != nil {
+		return err
+	}
+	signal := dbus.NewSignalMessage(service.payload.Path, MMS_SERVICE_DBUS_IFACE, propertyChangedSignal)
+	if err := signal.AppendArgs(preferredContextProperty, dbus.Variant{context}); err != nil {
+		return err
+	}
+	return service.conn.Send(signal)
+}
+
+func (service *MMSService) GetPreferredContext() (dbus.ObjectPath, error) {
+	return storage.GetPreferredContext(service.identity)
+}
+
 func (service *MMSService) setProperty(msg *dbus.Message) error {
 	var propertyName string
 	var propertyValue dbus.Variant
@@ -204,7 +225,7 @@ func (service *MMSService) setProperty(msg *dbus.Message) error {
 	case preferredContextProperty:
 		preferredContextObjectPath := dbus.ObjectPath(reflect.ValueOf(propertyValue.Value).String())
 		service.Properties[preferredContextProperty] = dbus.Variant{preferredContextObjectPath}
-		return storage.SetPreferredContext(service.identity, preferredContextObjectPath)
+		return service.SetPreferredContext(preferredContextObjectPath)
 	default:
 		errors.New("property cannot be set")
 	}
