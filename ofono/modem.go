@@ -242,6 +242,9 @@ func (modem *Modem) ActivateMMSContext() (OfonoContext, error) {
 	}
 	for _, context := range contexts {
 		if context.isActive() {
+			if err := storage.SetPreferredContext(modem.identity, context.ObjectPath); err != nil {
+				log.Println("Cannot set preferred context:", err)
+			}
 			return context, nil
 		}
 		log.Println("Trying to activate context on", context.ObjectPath)
@@ -314,7 +317,7 @@ func (modem *Modem) GetMMSContexts() (mmsContexts []OfonoContext, err error) {
 
 	preferredContext, err := storage.GetPreferredContext(modem.identity)
 	if err != nil {
-		log.Println("Preferred context cannot be set:", err)
+		log.Println("Preferred context cannot be read:", err)
 	}
 
 	for _, context := range contexts {

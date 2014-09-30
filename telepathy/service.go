@@ -79,10 +79,6 @@ func NewMMSService(conn *dbus.Connection, modemObjPath dbus.ObjectPath, identity
 	serviceProperties := make(map[string]dbus.Variant)
 	serviceProperties[useDeliveryReportsProperty] = dbus.Variant{useDeliveryReports}
 	serviceProperties[modemObjectPathProperty] = dbus.Variant{modemObjPath}
-	if preferredContextObjectPath, err := storage.GetPreferredContext(identity); err == nil {
-		log.Println("Found preferred context:", preferredContextObjectPath)
-		serviceProperties[preferredContextProperty] = dbus.Variant{preferredContextObjectPath}
-	}
 	payload := Payload{
 		Path:       dbus.ObjectPath(MMS_DBUS_PATH + "/" + identity),
 		Properties: properties,
@@ -136,6 +132,12 @@ func (service *MMSService) watchDBusMethodCalls() {
 			}
 		case "GetProperties":
 			reply = dbus.NewMethodReturnMessage(msg)
+			if preferredContextObjectPath, err := storage.GetPreferredContext(service.identity); err == nil {
+				log.Println("Found preferred context:", preferredContextObjectPath)
+				service.Properties[preferredContextProperty] = dbus.Variant{preferredContextObjectPath}
+			} else if _, ok := service.Properties[preferredContextProperty]; ok {
+				delete(service.Properties, preferredContextProperty)
+			}
 			if err := reply.AppendArgs(service.Properties); err != nil {
 				log.Print("Cannot parse payload data from services")
 				reply = dbus.NewErrorMessage(msg, "Error.InvalidArguments", "Cannot parse services")

@@ -85,7 +85,6 @@ func readContext(storePath string) (cs contextSettingMap, err error) {
 }
 
 func writeContext(identity string, pc dbus.ObjectPath, storePath string) error {
-	log.Println(storePath)
 	cs, readErr := readContext(storePath)
 	if readErr != nil {
 		log.Println("Cannot read previous context state")
