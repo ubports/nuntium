@@ -40,7 +40,8 @@ const (
 )
 
 const (
-	ofonoInProgressError = "org.ofono.InProgress"
+	ofonoInProgressError  = "org.ofono.InProgress"
+	ofonoNotAttachedError = "org.ofono.Error.NotAttached"
 )
 
 type OfonoContext struct {
@@ -254,7 +255,7 @@ func (modem *Modem) ActivateMMSContext(preferredContext dbus.ObjectPath) (OfonoC
 			r, err := obj.Call(CONNECTION_CONTEXT_INTERFACE, "SetProperty", "Active", dbus.Variant{true})
 			if err == nil {
 				return context, nil
-			} else if err != nil && r.ErrorName == ofonoInProgressError {
+			} else if err != nil && r.ErrorName == ofonoInProgressError || r.ErrorName == ofonoNotAttachedError {
 				log.Printf("Cannot Activate (try %d/3) interface on %s: %s", i+1, context.ObjectPath, err)
 				time.Sleep(2 * time.Second)
 			}
