@@ -255,10 +255,10 @@ func (modem *Modem) ActivateMMSContext(preferredContext dbus.ObjectPath) (OfonoC
 			if err == nil {
 				return context, nil
 			} else if err != nil && r.ErrorName == ofonoInProgressError {
-				log.Printf("Cannot Activate (%d/3) interface on %s: %s", i+1, context.ObjectPath, err)
+				log.Printf("Cannot Activate (try %d/3) interface on %s: %s", i+1, context.ObjectPath, err)
 				time.Sleep(2 * time.Second)
 			}
-			log.Println("Unhandled dbus error", r.ErrorName, "... skipping wait")
+			log.Println("Unhandled dbus error", r.ErrorName, "while activating context ...skipping wait")
 		}
 	}
 	return OfonoContext{}, errors.New("no context available to activate")
@@ -279,10 +279,10 @@ func (modem *Modem) DeactivateMMSContext(context OfonoContext) error {
 		if err == nil {
 			return nil
 		} else if err != nil && r.ErrorName == ofonoInProgressError {
-			log.Printf("Cannot Deactivate (%d/3) interface on %s: %s", i+1, context.ObjectPath, err)
+			log.Printf("Cannot Deactivate (try %d/3) interface on %s: %s", i+1, context.ObjectPath, err)
 			time.Sleep(2 * time.Second)
 		}
-		log.Println("Unhandled dbus error", r.ErrorName, "... skipping wait")
+		log.Println("Unhandled dbus error", r.ErrorName, "while deactivating context ...skipping wait")
 	}
 	return err
 }
