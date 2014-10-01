@@ -138,7 +138,6 @@ func (service *MMSService) watchDBusMethodCalls() {
 				// Using "/" as an invalid 'path' even though it could be considered 'incorrect'
 				service.Properties[preferredContextProperty] = dbus.Variant{dbus.ObjectPath("/")}
 			}
-			//log.Printf("Service Properties %#v", service.Properties)
 			if err := reply.AppendArgs(service.Properties); err != nil {
 				log.Print("Cannot parse payload data from services")
 				reply = dbus.NewErrorMessage(msg, "Error.InvalidArguments", "Cannot parse services")
