@@ -25,6 +25,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"sync"
 
 	"launchpad.net/nuntium/mms"
 	"launchpad.net/nuntium/ofono"
@@ -44,6 +45,7 @@ type Mediator struct {
 	NewMSendReqFile       chan struct{ filePath, uuid string }
 	outMessage            chan *telepathy.OutgoingMessage
 	terminate             chan bool
+	contextLock           sync.Mutex
 }
 
 //TODO these vars need a configuration location managed by system settings or
@@ -164,6 +166,9 @@ func (mediator *Mediator) handleDeferredDownload(mNotificationInd *mms.MNotifica
 }
 
 func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationInd) {
+	mediator.contextLock.Lock()
+	defer mediator.contextLock.Unlock()
+
 	preferredContext, _ := mediator.telepathyService.GetPreferredContext()
 	mmsContext, err := mediator.modem.ActivateMMSContext(preferredContext)
 	if err != nil {
@@ -184,6 +189,9 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		return
 	} else {
 		storage.UpdateDownloaded(mNotificationInd.UUID, filePath)
+	}
+	if err := mediator.modem.DeactivateMMSContext(mmsContext); err != nil {
+		log.Println("Issues while deactivating context:", err)
 	}
 	mediator.NewMRetrieveConfFile <- mNotificationInd.UUID
 }
@@ -360,6 +368,9 @@ func parseMSendConfFile(mSendConfFile string) (*mms.MSendConf, error) {
 }
 
 func (mediator *Mediator) uploadFile(filePath string) (string, error) {
+	mediator.contextLock.Lock()
+	defer mediator.contextLock.Unlock()
+
 	preferredContext, _ := mediator.telepathyService.GetPreferredContext()
 	mmsContext, err := mediator.modem.ActivateMMSContext(preferredContext)
 	if err != nil {
@@ -376,5 +387,11 @@ func (mediator *Mediator) uploadFile(filePath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return mms.Upload(filePath, msc, proxy.Host, int32(proxy.Port))
+	mSendRespFile, uploadErr := mms.Upload(filePath, msc, proxy.Host, int32(proxy.Port))
+
+	if err := mediator.modem.DeactivateMMSContext(mmsContext); err != nil {
+		log.Println("Issues while deactivating context:", err)
+	}
+
+	return mSendRespFile, uploadErr
 }
