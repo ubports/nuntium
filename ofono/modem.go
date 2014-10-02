@@ -40,6 +40,7 @@ const (
 )
 
 const (
+	ofonoAttachInProgressError = "org.ofono.AttachInProgress"
 	ofonoInProgressError  = "org.ofono.InProgress"
 	ofonoNotAttachedError = "org.ofono.Error.NotAttached"
 )
@@ -249,17 +250,10 @@ func (modem *Modem) ActivateMMSContext(preferredContext dbus.ObjectPath) (OfonoC
 		if context.isActive() {
 			return context, nil
 		}
-		log.Println("Trying to activate context on", context.ObjectPath)
-		obj := modem.conn.Object("org.ofono", context.ObjectPath)
-		for i := 0; i < 3; i++ {
-			r, err := obj.Call(CONNECTION_CONTEXT_INTERFACE, "SetProperty", "Active", dbus.Variant{true})
-			if err == nil {
-				return context, nil
-			} else if err != nil && r.ErrorName == ofonoInProgressError || r.ErrorName == ofonoNotAttachedError {
-				log.Printf("Cannot Activate (try %d/3) interface on %s: %s", i+1, context.ObjectPath, err)
-				time.Sleep(2 * time.Second)
-			}
-			log.Println("Unhandled dbus error", r.ErrorName, "while activating context ...skipping wait")
+		if err := context.toggleActive(true, modem.conn); err == nil {
+			return context, nil
+		} else {
+			log.Println("Failed to activate for", context.ObjectPath, ":", err)
 		}
 	}
 	return OfonoContext{}, errors.New("no context available to activate")
@@ -271,21 +265,31 @@ func (modem *Modem) DeactivateMMSContext(context OfonoContext) error {
 		return nil
 	}
 
-	log.Println("Trying to deactivate context on", context.ObjectPath)
-	obj := modem.conn.Object("org.ofono", context.ObjectPath)
-	var err error
-	var r *dbus.Message
-	for i := 0; i < 3; i++ {
-		r, err = obj.Call(CONNECTION_CONTEXT_INTERFACE, "SetProperty", "Active", dbus.Variant{false})
-		if err == nil {
-			return nil
-		} else if err != nil && r.ErrorName == ofonoInProgressError {
-			log.Printf("Cannot Deactivate (try %d/3) interface on %s: %s", i+1, context.ObjectPath, err)
-			time.Sleep(2 * time.Second)
-		}
-		log.Println("Unhandled dbus error", r.ErrorName, "while deactivating context ...skipping wait")
+	return context.toggleActive(false, modem.conn)
+}
+
+func activationErrorNeedsWait(err error) bool {
+	if dbusErr, ok := err.(*dbus.Error); ok {
+		return dbusErr.Name == ofonoInProgressError || dbusErr.Name == ofonoAttachInProgressError || dbusErr.Name == ofonoNotAttachedError
 	}
-	return err
+	return false
+}
+
+func (context OfonoContext) toggleActive(state bool, conn *dbus.Connection) error {
+	log.Println("Trying to set Active property to", state, "for context on", state, context.ObjectPath)
+	obj := conn.Object("org.ofono", context.ObjectPath)
+	for i := 0; i < 3; i++ {
+		_, err := obj.Call(CONNECTION_CONTEXT_INTERFACE, "SetProperty", "Active", dbus.Variant{state})
+		if err != nil {
+			log.Printf("Cannot set Activate to %t (try %d/3) interface on %s: %s", state, i+1, context.ObjectPath, err)
+			if activationErrorNeedsWait(err) {
+				time.Sleep(2 * time.Second)
+			}
+		} else {
+			return nil
+		}
+	}
+	return errors.New("failed to activate context")
 }
 
 func (oContext OfonoContext) isTypeInternet() bool {
