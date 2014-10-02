@@ -29,6 +29,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"launchpad.net/go-dbus/v1"
 )
@@ -36,6 +37,11 @@ import (
 const (
 	contextTypeInternet = "internet"
 	contextTypeMMS      = "mms"
+)
+
+const (
+	ofonoAttachInProgressError = "org.ofono.AttachInProgress"
+	ofonoInProgressError       = "org.ofono.InProgress"
 )
 
 type OfonoContext struct {
@@ -243,32 +249,101 @@ func (modem *Modem) ActivateMMSContext(preferredContext dbus.ObjectPath) (OfonoC
 		if context.isActive() {
 			return context, nil
 		}
-		log.Println("Trying to activate context on", context.ObjectPath)
-		obj := modem.conn.Object("org.ofono", context.ObjectPath)
-		_, err = obj.Call(CONNECTION_CONTEXT_INTERFACE, "SetProperty", "Active", dbus.Variant{true})
-		if err != nil {
-			log.Printf("Cannot Activate interface on %s: %s", context.ObjectPath, err)
-		} else {
+		if err := context.toggleActive(true, modem.conn); err == nil {
 			return context, nil
+		} else {
+			log.Println("Failed to activate for", context.ObjectPath, ":", err)
 		}
 	}
 	return OfonoContext{}, errors.New("no context available to activate")
+}
+
+//DeactivateMMSContext deactivates the context if it is of type mms
+func (modem *Modem) DeactivateMMSContext(context OfonoContext) error {
+	if context.isTypeInternet() {
+		return nil
+	}
+
+	return context.toggleActive(false, modem.conn)
+}
+
+func activationErrorNeedsWait(err error) bool {
+	if dbusErr, ok := err.(*dbus.Error); ok {
+		return dbusErr.Name == ofonoInProgressError || dbusErr.Name == ofonoAttachInProgressError
+	}
+	return false
+}
+
+func (context OfonoContext) toggleActive(state bool, conn *dbus.Connection) error {
+	log.Println("Trying to set Active property to", state, "for context on", state, context.ObjectPath)
+	obj := conn.Object("org.ofono", context.ObjectPath)
+	for i := 0; i < 3; i++ {
+		_, err := obj.Call(CONNECTION_CONTEXT_INTERFACE, "SetProperty", "Active", dbus.Variant{state})
+		if err != nil {
+			log.Printf("Cannot set Activate to %t (try %d/3) interface on %s: %s", state, i+1, context.ObjectPath, err)
+			if activationErrorNeedsWait(err) {
+				time.Sleep(2 * time.Second)
+			}
+		} else {
+			return nil
+		}
+	}
+	return errors.New("failed to activate context")
+}
+
+func (oContext OfonoContext) isTypeInternet() bool {
+	if v, ok := oContext.Properties["Type"]; ok {
+		return reflect.ValueOf(v.Value).String() == contextTypeInternet
+	}
+	return false
+}
+
+func (oContext OfonoContext) isTypeMMS() bool {
+	if v, ok := oContext.Properties["Type"]; ok {
+		return reflect.ValueOf(v.Value).String() == contextTypeMMS
+	}
+	return false
 }
 
 func (oContext OfonoContext) isActive() bool {
 	return reflect.ValueOf(oContext.Properties["Active"].Value).Bool()
 }
 
+func (oContext OfonoContext) hasMessageCenter() bool {
+	return oContext.messageCenter() != ""
+}
+
+func (oContext OfonoContext) messageCenter() string {
+	if v, ok := oContext.Properties["MessageCenter"]; ok {
+		return reflect.ValueOf(v.Value).String()
+	}
+	return ""
+}
+
+func (oContext OfonoContext) messageProxy() string {
+	if v, ok := oContext.Properties["MessageProxy"]; ok {
+		return reflect.ValueOf(v.Value).String()
+	}
+	return ""
+}
+
+func (oContext OfonoContext) name() string {
+	if v, ok := oContext.Properties["Name"]; ok {
+		return reflect.ValueOf(v.Value).String()
+	}
+	return ""
+}
+
 func (oContext OfonoContext) GetMessageCenter() (string, error) {
-	if msc := reflect.ValueOf(oContext.Properties["MessageCenter"].Value).String(); msc != "" {
-		return msc, nil
+	if oContext.hasMessageCenter() {
+		return oContext.messageCenter(), nil
 	} else {
 		return "", errors.New("context setting for the Message Center value is empty")
 	}
 }
 
 func (oContext OfonoContext) GetProxy() (proxyInfo ProxyInfo, err error) {
-	proxy := reflect.ValueOf(oContext.Properties["MessageProxy"].Value).String()
+	proxy := oContext.messageProxy()
 	// we need to support empty proxies
 	if proxy == "" {
 		return proxyInfo, nil
@@ -309,33 +384,8 @@ func (modem *Modem) GetMMSContexts(preferredContext dbus.ObjectPath) (mmsContext
 	}
 
 	for _, context := range contexts {
-		var name, contextType, msgCenter, msgProxy string
-		var active bool
-		for k, v := range context.Properties {
-			if reflect.ValueOf(k).Kind() != reflect.String {
-				continue
-			}
-			k = reflect.ValueOf(k).String()
-			switch k {
-			case "Name":
-				name = reflect.ValueOf(v.Value).String()
-			case "Type":
-				contextType = reflect.ValueOf(v.Value).String()
-			case "MessageCenter":
-				msgCenter = reflect.ValueOf(v.Value).String()
-			case "MessageProxy":
-				msgProxy = reflect.ValueOf(v.Value).String()
-			case "Active":
-				active = reflect.ValueOf(v.Value).Bool()
-			}
-		}
-		log.Println("Check context valid for - Name", name,
-			"| Context type:", contextType,
-			"| MessageCenter:", msgCenter,
-			"| MessageProxy:", msgProxy,
-			"| Active:", active)
-		if (contextType == contextTypeInternet && active && msgCenter != "") || contextType == contextTypeMMS {
-			if context.ObjectPath == preferredContext || active {
+		if (context.isTypeInternet() && context.isActive() && context.hasMessageCenter()) || context.isTypeMMS() {
+			if context.ObjectPath == preferredContext || context.isActive() {
 				mmsContexts = append([]OfonoContext{context}, mmsContexts...)
 			} else {
 				mmsContexts = append(mmsContexts, context)
@@ -343,6 +393,7 @@ func (modem *Modem) GetMMSContexts(preferredContext dbus.ObjectPath) (mmsContext
 		}
 	}
 	if len(mmsContexts) == 0 {
+		log.Printf("non matching contexts:\n %+v", contexts)
 		return mmsContexts, errors.New("No mms contexts found")
 	}
 	return mmsContexts, nil

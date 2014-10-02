@@ -25,6 +25,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"sync"
 
 	"launchpad.net/nuntium/mms"
 	"launchpad.net/nuntium/ofono"
@@ -44,6 +45,7 @@ type Mediator struct {
 	NewMSendReqFile       chan struct{ filePath, uuid string }
 	outMessage            chan *telepathy.OutgoingMessage
 	terminate             chan bool
+	contextLock           sync.Mutex
 }
 
 //TODO these vars need a configuration location managed by system settings or
@@ -164,12 +166,21 @@ func (mediator *Mediator) handleDeferredDownload(mNotificationInd *mms.MNotifica
 }
 
 func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationInd) {
+	mediator.contextLock.Lock()
+	defer mediator.contextLock.Unlock()
+
 	preferredContext, _ := mediator.telepathyService.GetPreferredContext()
 	mmsContext, err := mediator.modem.ActivateMMSContext(preferredContext)
 	if err != nil {
 		log.Print("Cannot activate ofono context: ", err)
 		return
 	}
+	defer func() {
+		if err := mediator.modem.DeactivateMMSContext(mmsContext); err != nil {
+			log.Println("Issues while deactivating context:", err)
+		}
+	}()
+
 	if err := mediator.telepathyService.SetPreferredContext(mmsContext.ObjectPath); err != nil {
 		log.Println("Unable to store the preferred context for MMS:", err)
 	}
@@ -185,6 +196,7 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 	} else {
 		storage.UpdateDownloaded(mNotificationInd.UUID, filePath)
 	}
+
 	mediator.NewMRetrieveConfFile <- mNotificationInd.UUID
 }
 
@@ -360,6 +372,9 @@ func parseMSendConfFile(mSendConfFile string) (*mms.MSendConf, error) {
 }
 
 func (mediator *Mediator) uploadFile(filePath string) (string, error) {
+	mediator.contextLock.Lock()
+	defer mediator.contextLock.Unlock()
+
 	preferredContext, _ := mediator.telepathyService.GetPreferredContext()
 	mmsContext, err := mediator.modem.ActivateMMSContext(preferredContext)
 	if err != nil {
@@ -368,6 +383,12 @@ func (mediator *Mediator) uploadFile(filePath string) (string, error) {
 	if err := mediator.telepathyService.SetPreferredContext(mmsContext.ObjectPath); err != nil {
 		log.Println("Unable to store the preferred context for MMS:", err)
 	}
+	defer func() {
+		if err := mediator.modem.DeactivateMMSContext(mmsContext); err != nil {
+			log.Println("Issues while deactivating context:", err)
+		}
+	}()
+
 	proxy, err := mmsContext.GetProxy()
 	if err != nil {
 		return "", err
@@ -376,5 +397,7 @@ func (mediator *Mediator) uploadFile(filePath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return mms.Upload(filePath, msc, proxy.Host, int32(proxy.Port))
+	mSendRespFile, uploadErr := mms.Upload(filePath, msc, proxy.Host, int32(proxy.Port))
+
+	return mSendRespFile, uploadErr
 }
