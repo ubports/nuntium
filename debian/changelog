@@ -1,3 +1,16 @@
+nuntium (0.1+14.10.20141002-0ubuntu1) 14.09; urgency=low
+
+  [ Sergio Schvezov ]
+  * Allow context selection over the org.ofono.mms.Service interface
+    (LP: #1370660)
+  * Syncing upload/download operations with activation/deactivation per
+    request. Moving all the ofono context property checks and reflection
+    logic to proper functions for easier reuse and readability. (LP:
+    #1376224)
+  * Retry on NotAttached ofono errors (LP: #1371032)
+
+ -- Ubuntu daily release <ps-jenkins@lists.canonical.com>  Thu, 02 Oct 2014 15:06:31 +0000
+
 nuntium (0.1+14.10.20140924-0ubuntu1) 14.09; urgency=low
 
   [ Sergio Schvezov ]
