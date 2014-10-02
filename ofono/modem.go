@@ -42,6 +42,7 @@ const (
 const (
 	ofonoAttachInProgressError = "org.ofono.AttachInProgress"
 	ofonoInProgressError       = "org.ofono.InProgress"
+	ofonoNotAttachedError      = "org.ofono.Error.NotAttached"
 )
 
 type OfonoContext struct {
@@ -269,7 +270,7 @@ func (modem *Modem) DeactivateMMSContext(context OfonoContext) error {
 
 func activationErrorNeedsWait(err error) bool {
 	if dbusErr, ok := err.(*dbus.Error); ok {
-		return dbusErr.Name == ofonoInProgressError || dbusErr.Name == ofonoAttachInProgressError
+		return dbusErr.Name == ofonoInProgressError || dbusErr.Name == ofonoAttachInProgressError || dbusErr.Name == ofonoNotAttachedError
 	}
 	return false
 }
