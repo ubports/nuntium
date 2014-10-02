@@ -41,8 +41,8 @@ const (
 
 const (
 	ofonoAttachInProgressError = "org.ofono.AttachInProgress"
-	ofonoInProgressError  = "org.ofono.InProgress"
-	ofonoNotAttachedError = "org.ofono.Error.NotAttached"
+	ofonoInProgressError       = "org.ofono.InProgress"
+	ofonoNotAttachedError      = "org.ofono.Error.NotAttached"
 )
 
 type OfonoContext struct {
