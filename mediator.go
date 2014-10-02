@@ -164,10 +164,14 @@ func (mediator *Mediator) handleDeferredDownload(mNotificationInd *mms.MNotifica
 }
 
 func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationInd) {
-	mmsContext, err := mediator.modem.ActivateMMSContext()
+	preferredContext, _ := mediator.telepathyService.GetPreferredContext()
+	mmsContext, err := mediator.modem.ActivateMMSContext(preferredContext)
 	if err != nil {
 		log.Print("Cannot activate ofono context: ", err)
 		return
+	}
+	if err := mediator.telepathyService.SetPreferredContext(mmsContext.ObjectPath); err != nil {
+		log.Println("Unable to store the preferred context for MMS:", err)
 	}
 	proxy, err := mmsContext.GetProxy()
 	if err != nil {
@@ -356,9 +360,13 @@ func parseMSendConfFile(mSendConfFile string) (*mms.MSendConf, error) {
 }
 
 func (mediator *Mediator) uploadFile(filePath string) (string, error) {
-	mmsContext, err := mediator.modem.ActivateMMSContext()
+	preferredContext, _ := mediator.telepathyService.GetPreferredContext()
+	mmsContext, err := mediator.modem.ActivateMMSContext(preferredContext)
 	if err != nil {
 		return "", err
+	}
+	if err := mediator.telepathyService.SetPreferredContext(mmsContext.ObjectPath); err != nil {
+		log.Println("Unable to store the preferred context for MMS:", err)
 	}
 	proxy, err := mmsContext.GetProxy()
 	if err != nil {

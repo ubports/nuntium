@@ -72,7 +72,7 @@ func (s *ContextTestSuite) SetUpTest(c *C) {
 }
 
 func (s *ContextTestSuite) TestNoContext(c *C) {
-	context, err := s.modem.GetMMSContexts()
+	context, err := s.modem.GetMMSContexts("")
 	c.Check(context, IsNil)
 	c.Assert(err, DeepEquals, errors.New("No mms contexts found"))
 }
@@ -84,7 +84,7 @@ func (s *ContextTestSuite) TestMMSOverInternet(c *C) {
 	}
 	s.contexts = append(s.contexts, context1)
 
-	contexts, err := s.modem.GetMMSContexts()
+	contexts, err := s.modem.GetMMSContexts("")
 	c.Assert(err, IsNil)
 	c.Assert(len(contexts), Equals, 1)
 	c.Check(contexts[0], DeepEquals, context1)
@@ -97,7 +97,7 @@ func (s *ContextTestSuite) TestMMSOverInactiveInternet(c *C) {
 	}
 	s.contexts = append(s.contexts, context1)
 
-	context, err := s.modem.GetMMSContexts()
+	context, err := s.modem.GetMMSContexts("")
 	c.Check(context, IsNil)
 	c.Assert(err, DeepEquals, errors.New("No mms contexts found"))
 }
@@ -109,7 +109,7 @@ func (s *ContextTestSuite) TestMMSOverInternetNoProxy(c *C) {
 	}
 	s.contexts = append(s.contexts, context1)
 
-	contexts, err := s.modem.GetMMSContexts()
+	contexts, err := s.modem.GetMMSContexts("")
 	c.Assert(err, IsNil)
 	c.Assert(len(contexts), Equals, 1)
 	c.Check(contexts[0], DeepEquals, context1)
@@ -128,7 +128,7 @@ func (s *ContextTestSuite) TestMMSOverMMS(c *C) {
 	}
 	s.contexts = append(s.contexts, context2)
 
-	contexts, err := s.modem.GetMMSContexts()
+	contexts, err := s.modem.GetMMSContexts("")
 	c.Assert(err, IsNil)
 	c.Assert(len(contexts), Equals, 1)
 	c.Check(contexts[0], DeepEquals, context2)
@@ -147,7 +147,7 @@ func (s *ContextTestSuite) TestMMSOverMMSNoProxy(c *C) {
 	}
 	s.contexts = append(s.contexts, context2)
 
-	contexts, err := s.modem.GetMMSContexts()
+	contexts, err := s.modem.GetMMSContexts("")
 	c.Assert(err, IsNil)
 	c.Assert(len(contexts), Equals, 1)
 	c.Check(contexts[0], DeepEquals, context2)
@@ -166,7 +166,7 @@ func (s *ContextTestSuite) TestMMSMoreThanOneValid(c *C) {
 	}
 	s.contexts = append(s.contexts, context2)
 
-	contexts, err := s.modem.GetMMSContexts()
+	contexts, err := s.modem.GetMMSContexts("")
 	c.Assert(err, IsNil)
 	c.Assert(len(contexts), Equals, 2)
 	c.Check(contexts[0], DeepEquals, context1)
@@ -192,9 +192,7 @@ func (s *ContextTestSuite) TestMMSMoreThanOneValidContextSelectPreferred(c *C) {
 	}
 	s.contexts = append(s.contexts, context3)
 
-	s.modem.preferredContext = "/ril_0/context2"
-
-	contexts, err := s.modem.GetMMSContexts()
+	contexts, err := s.modem.GetMMSContexts("/ril_0/context2")
 	c.Assert(err, IsNil)
 	c.Assert(len(contexts), Equals, 3)
 	c.Check(contexts[0], DeepEquals, context2)
@@ -221,9 +219,7 @@ func (s *ContextTestSuite) TestMMSMoreThanOneValidContextPreferredNoMatch(c *C) 
 	}
 	s.contexts = append(s.contexts, context3)
 
-	s.modem.preferredContext = "/ril_0/context25"
-
-	contexts, err := s.modem.GetMMSContexts()
+	contexts, err := s.modem.GetMMSContexts("/ril_0/context25")
 	c.Assert(err, IsNil)
 	c.Assert(len(contexts), Equals, 3)
 	c.Check(contexts[0], DeepEquals, context1)
@@ -234,7 +230,7 @@ func (s *ContextTestSuite) TestMMSMoreThanOneValidContextPreferredNoMatch(c *C) 
 func (s *ContextTestSuite) TestMMSMoreThanOneValidContext2Active(c *C) {
 	context0 := OfonoContext{
 		ObjectPath: "/ril_0/context0",
-		Properties: makeGenericContextProperty("Context1", contextTypeInternet, false, true, false),
+		Properties: makeGenericContextProperty("Context0", contextTypeInternet, false, true, false),
 	}
 	s.contexts = append(s.contexts, context0)
 
@@ -254,10 +250,9 @@ func (s *ContextTestSuite) TestMMSMoreThanOneValidContext2Active(c *C) {
 		ObjectPath: "/ril_0/context3",
 		Properties: makeGenericContextProperty("Context3", contextTypeMMS, true, true, false),
 	}
-
 	s.contexts = append(s.contexts, context3)
 
-	contexts, err := s.modem.GetMMSContexts()
+	contexts, err := s.modem.GetMMSContexts("")
 	c.Assert(err, IsNil)
 	c.Assert(len(contexts), Equals, 3)
 	c.Check(contexts[0], DeepEquals, context3)
@@ -291,9 +286,7 @@ func (s *ContextTestSuite) TestMMSMoreThanOneValidContextPreferredNotActive(c *C
 
 	s.contexts = append(s.contexts, context3)
 
-	s.modem.preferredContext = "/ril_0/context3"
-
-	contexts, err := s.modem.GetMMSContexts()
+	contexts, err := s.modem.GetMMSContexts("/ril_0/context3")
 	c.Assert(err, IsNil)
 	c.Assert(len(contexts), Equals, 4)
 	c.Check(contexts[0], DeepEquals, context3)

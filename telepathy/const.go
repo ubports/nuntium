@@ -30,15 +30,16 @@ const (
 )
 
 const (
-	IDENTITY             = "Identity"
-	USE_DELIVERY_REPORTS = "UseDeliveryReports"
-	MODEM_OBJECT_PATH    = "ModemObjectPath"
-	MESSAGE_ADDED        = "MessageAdded"
-	MESSAGE_REMOVED      = "MessageRemoved"
-	SERVICE_ADDED        = "ServiceAdded"
-	SERVICE_REMOVED      = "ServiceRemoved"
-	PROPERTY_CHANGED     = "PropertyChanged"
-	STATUS               = "Status"
+	identityProperty           string = "Identity"
+	useDeliveryReportsProperty string = "UseDeliveryReports"
+	modemObjectPathProperty    string = "ModemObjectPath"
+	messageAddedSignal         string = "MessageAdded"
+	messageRemovedSignal       string = "MessageRemoved"
+	serviceAddedSignal         string = "ServiceAdded"
+	serviceRemovedSignal       string = "ServiceRemoved"
+	preferredContextProperty   string = "PreferredContext"
+	propertyChangedSignal      string = "PropertyChanged"
+	statusProperty             string = "Status"
 )
 
 const (

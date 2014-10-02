@@ -22,9 +22,11 @@
 package telepathy
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
@@ -73,10 +75,10 @@ type OutgoingMessage struct {
 
 func NewMMSService(conn *dbus.Connection, modemObjPath dbus.ObjectPath, identity string, outgoingChannel chan *OutgoingMessage, useDeliveryReports bool) *MMSService {
 	properties := make(map[string]dbus.Variant)
-	properties[IDENTITY] = dbus.Variant{identity}
+	properties[identityProperty] = dbus.Variant{identity}
 	serviceProperties := make(map[string]dbus.Variant)
-	serviceProperties[USE_DELIVERY_REPORTS] = dbus.Variant{useDeliveryReports}
-	serviceProperties[MODEM_OBJECT_PATH] = dbus.Variant{modemObjPath}
+	serviceProperties[useDeliveryReportsProperty] = dbus.Variant{useDeliveryReports}
+	serviceProperties[modemObjectPathProperty] = dbus.Variant{modemObjPath}
 	payload := Payload{
 		Path:       dbus.ObjectPath(MMS_DBUS_PATH + "/" + identity),
 		Properties: properties,
@@ -130,9 +132,25 @@ func (service *MMSService) watchDBusMethodCalls() {
 			}
 		case "GetProperties":
 			reply = dbus.NewMethodReturnMessage(msg)
+			if pc, err := service.GetPreferredContext(); err == nil {
+				service.Properties[preferredContextProperty] = dbus.Variant{pc}
+			} else {
+				// Using "/" as an invalid 'path' even though it could be considered 'incorrect'
+				service.Properties[preferredContextProperty] = dbus.Variant{dbus.ObjectPath("/")}
+			}
 			if err := reply.AppendArgs(service.Properties); err != nil {
 				log.Print("Cannot parse payload data from services")
 				reply = dbus.NewErrorMessage(msg, "Error.InvalidArguments", "Cannot parse services")
+			}
+			if err := service.conn.Send(reply); err != nil {
+				log.Println("Could not send reply:", err)
+			}
+		case "SetProperty":
+			if err := service.setProperty(msg); err != nil {
+				log.Println("Property set failed:", err)
+				reply = dbus.NewErrorMessage(msg, "Error.InvalidArguments", err.Error())
+			} else {
+				reply = dbus.NewMethodReturnMessage(msg)
 			}
 			if err := service.conn.Send(reply); err != nil {
 				log.Println("Could not send reply:", err)
@@ -175,6 +193,44 @@ func getUUIDFromObjectPath(objectPath dbus.ObjectPath) (string, error) {
 	return uuid, nil
 }
 
+func (service *MMSService) SetPreferredContext(context dbus.ObjectPath) error {
+	// make set a noop if we are setting the same thing
+	if pc, err := service.GetPreferredContext(); err != nil && context == pc {
+		return nil
+	}
+
+	if err := storage.SetPreferredContext(service.identity, context); err != nil {
+		return err
+	}
+	signal := dbus.NewSignalMessage(service.payload.Path, MMS_SERVICE_DBUS_IFACE, propertyChangedSignal)
+	if err := signal.AppendArgs(preferredContextProperty, dbus.Variant{context}); err != nil {
+		return err
+	}
+	return service.conn.Send(signal)
+}
+
+func (service *MMSService) GetPreferredContext() (dbus.ObjectPath, error) {
+	return storage.GetPreferredContext(service.identity)
+}
+
+func (service *MMSService) setProperty(msg *dbus.Message) error {
+	var propertyName string
+	var propertyValue dbus.Variant
+	if err := msg.Args(&propertyName, &propertyValue); err != nil {
+		return err
+	}
+
+	switch propertyName {
+	case preferredContextProperty:
+		preferredContextObjectPath := dbus.ObjectPath(reflect.ValueOf(propertyValue.Value).String())
+		service.Properties[preferredContextProperty] = dbus.Variant{preferredContextObjectPath}
+		return service.SetPreferredContext(preferredContextObjectPath)
+	default:
+		errors.New("property cannot be set")
+	}
+	return errors.New("unhandled property")
+}
+
 //MessageRemoved emits the MessageRemoved signal with the path of the removed
 //message.
 //It also actually removes the message from storage.
@@ -190,7 +246,7 @@ func (service *MMSService) MessageRemoved(objectPath dbus.ObjectPath) error {
 		return err
 	}
 
-	signal := dbus.NewSignalMessage(service.payload.Path, MMS_SERVICE_DBUS_IFACE, MESSAGE_REMOVED)
+	signal := dbus.NewSignalMessage(service.payload.Path, MMS_SERVICE_DBUS_IFACE, messageRemovedSignal)
 	if err := signal.AppendArgs(objectPath); err != nil {
 		return err
 	}
@@ -214,7 +270,7 @@ func (service *MMSService) IncomingMessageAdded(mRetConf *mms.MRetrieveConf) err
 //MessageAdded emits a MessageAdded with the path to the added message which
 //is taken as a parameter
 func (service *MMSService) MessageAdded(msgPayload *Payload) error {
-	signal := dbus.NewSignalMessage(service.payload.Path, MMS_SERVICE_DBUS_IFACE, MESSAGE_ADDED)
+	signal := dbus.NewSignalMessage(service.payload.Path, MMS_SERVICE_DBUS_IFACE, messageAddedSignal)
 	if err := signal.AppendArgs(msgPayload.Path, msgPayload.Properties); err != nil {
 		return err
 	}
