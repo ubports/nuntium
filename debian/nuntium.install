@@ -1,2 +1,0 @@
-debian/nuntium.conf /usr/share/upstart/sessions/
-usr/bin/nuntium
