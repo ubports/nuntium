@@ -24,8 +24,9 @@ package ofono
 import (
 	"errors"
 	"testing"
+
+	"github.com/ubuntu-phonedations/nuntium/mms"
 	. "launchpad.net/gocheck"
-	"launchpad.net/nuntium/mms"
 )
 
 type PushDecodeTestSuite struct {

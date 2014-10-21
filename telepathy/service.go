@@ -30,9 +30,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ubuntu-phonedations/nuntium/mms"
+	"github.com/ubuntu-phonedations/nuntium/storage"
 	"launchpad.net/go-dbus/v1"
-	"launchpad.net/nuntium/mms"
-	"launchpad.net/nuntium/storage"
 )
 
 //Payload is used to build the dbus messages; this is a workaround as v1 of go-dbus
