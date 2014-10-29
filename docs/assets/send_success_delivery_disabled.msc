@@ -1,0 +1,17 @@
+msc {
+
+hscale = 3;
+a [label="ofono"], b [label="nuntium"], c [label="telepathy-ofono"], d [label="Message Center"];
+
+c => b [label="SendMessage(message payload)"];
+c << b [label="MMS ObjectPath"];
+...;
+b => a [label="Activate context for MMS"];
+...;
+b => d [label="Upload(M-Send.req)"];
+b << d [label="M-Send.conf)"];
+...;
+b => a [label="Deactivate context for MMS"];
+--- [label="M-Send.conf Response Status OK"];
+b -> c [label="PropertyChanged(MMS Object Path, satus=Sent)"];
+}
