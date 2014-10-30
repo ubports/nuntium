@@ -10,6 +10,7 @@ requirements that satisfy an Ubuntu Phone (aka Ubuntu Touch).
 ## Documentation
 
 * [Architecture](docs/architecture.md)
+* [Testing](docs/testing.md)
 
 Addtional information:
 
