@@ -22,6 +22,7 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -38,9 +39,7 @@ type Mediator struct {
 	telepathyService      *telepathy.MMSService
 	NewMNotificationInd   chan *mms.MNotificationInd
 	NewMNotifyRespInd     chan *mms.MNotifyRespInd
-	NewMRetrieveConf      chan *mms.MRetrieveConf
 	NewMSendReq           chan *mms.MSendReq
-	NewMRetrieveConfFile  chan string
 	NewMNotifyRespIndFile chan string
 	NewMSendReqFile       chan struct{ filePath, uuid string }
 	outMessage            chan *telepathy.OutgoingMessage
@@ -59,8 +58,6 @@ var (
 func NewMediator(modem *ofono.Modem) *Mediator {
 	mediator := &Mediator{modem: modem}
 	mediator.NewMNotificationInd = make(chan *mms.MNotificationInd)
-	mediator.NewMRetrieveConf = make(chan *mms.MRetrieveConf)
-	mediator.NewMRetrieveConfFile = make(chan string)
 	mediator.NewMNotifyRespInd = make(chan *mms.MNotifyRespInd)
 	mediator.NewMNotifyRespIndFile = make(chan string)
 	mediator.NewMSendReq = make(chan *mms.MSendReq)
@@ -90,10 +87,6 @@ mediatorLoop:
 			} else {
 				go mediator.getMRetrieveConf(mNotificationInd)
 			}
-		case mRetrieveConfFilePath := <-mediator.NewMRetrieveConfFile:
-			go mediator.handleMRetrieveConf(mRetrieveConfFilePath)
-		case mRetrieveConf := <-mediator.NewMRetrieveConf:
-			go mediator.handleRetrieved(mRetrieveConf)
 		case mNotifyRespInd := <-mediator.NewMNotifyRespInd:
 			go mediator.handleMNotifyRespInd(mNotifyRespInd)
 		case mNotifyRespIndFilePath := <-mediator.NewMNotifyRespIndFile:
@@ -169,26 +162,33 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 	mediator.contextLock.Lock()
 	defer mediator.contextLock.Unlock()
 
-	preferredContext, _ := mediator.telepathyService.GetPreferredContext()
-	mmsContext, err := mediator.modem.ActivateMMSContext(preferredContext)
-	if err != nil {
-		log.Print("Cannot activate ofono context: ", err)
-		return
-	}
-	defer func() {
-		if err := mediator.modem.DeactivateMMSContext(mmsContext); err != nil {
-			log.Println("Issues while deactivating context:", err)
-		}
-	}()
+	var proxy ofono.ProxyInfo
 
-	if err := mediator.telepathyService.SetPreferredContext(mmsContext.ObjectPath); err != nil {
-		log.Println("Unable to store the preferred context for MMS:", err)
+	if mNotificationInd.IsLocal() {
+		log.Print("This is a local test, skipping context activation and proxy settings")
+	} else {
+		preferredContext, _ := mediator.telepathyService.GetPreferredContext()
+		mmsContext, err := mediator.modem.ActivateMMSContext(preferredContext)
+		if err != nil {
+			log.Print("Cannot activate ofono context: ", err)
+			return
+		}
+		defer func() {
+			if err := mediator.modem.DeactivateMMSContext(mmsContext); err != nil {
+				log.Println("Issues while deactivating context:", err)
+			}
+		}()
+
+		if err := mediator.telepathyService.SetPreferredContext(mmsContext.ObjectPath); err != nil {
+			log.Println("Unable to store the preferred context for MMS:", err)
+		}
+		proxy, err = mmsContext.GetProxy()
+		if err != nil {
+			log.Print("Error retrieving proxy: ", err)
+			return
+		}
 	}
-	proxy, err := mmsContext.GetProxy()
-	if err != nil {
-		log.Print("Error retrieving proxy: ", err)
-		return
-	}
+
 	if filePath, err := mNotificationInd.DownloadContent(proxy.Host, int32(proxy.Port)); err != nil {
 		//TODO telepathy service signal the download error
 		log.Print("Download issues: ", err)
@@ -197,29 +197,44 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		storage.UpdateDownloaded(mNotificationInd.UUID, filePath)
 	}
 
-	mediator.NewMRetrieveConfFile <- mNotificationInd.UUID
+	mRetrieveConf, err := mediator.handleMRetrieveConf(mNotificationInd.UUID)
+	if err != nil {
+		log.Print(err)
+		return
+	}
+
+	mNotifyRespInd := mRetrieveConf.NewMNotifyRespInd(useDeliveryReports)
+	if err := storage.UpdateRetrieved(mNotifyRespInd.UUID); err != nil {
+		log.Print("Can't update mms status: ", err)
+		return
+	}
+
+	if !mNotificationInd.IsLocal() {
+		mediator.NewMNotifyRespInd <- mNotifyRespInd
+	} else {
+		log.Print("This is a local test, skipping m-notifyresp.ind")
+	}
 }
 
-func (mediator *Mediator) handleMRetrieveConf(uuid string) {
+func (mediator *Mediator) handleMRetrieveConf(uuid string) (*mms.MRetrieveConf, error) {
 	var filePath string
 	if f, err := storage.GetMMS(uuid); err == nil {
 		filePath = f
 	} else {
-		log.Print("Unable to retrieve MMS: ", err)
-		return
+		return nil, fmt.Errorf("unable to retrieve MMS: %s", err)
 	}
+
 	mmsData, err := ioutil.ReadFile(filePath)
 	if err != nil {
-		log.Print("Issues while reading from downloaded file: ", err)
-		return
+		return nil, fmt.Errorf("issues while reading from downloaded file: %s", err)
 	}
+
 	mRetrieveConf := mms.NewMRetrieveConf(uuid)
 	dec := mms.NewDecoder(mmsData)
 	if err := dec.Decode(mRetrieveConf); err != nil {
-		log.Println("Unable to decode m-retrieve.conf: ", err, "with log", dec.GetLog())
-		return
+		return nil, fmt.Errorf("unable to decode m-retrieve.conf: %s with log %s", err, dec.GetLog())
 	}
-	mediator.NewMRetrieveConf <- mRetrieveConf
+
 	if mediator.telepathyService != nil {
 		if err := mediator.telepathyService.IncomingMessageAdded(mRetrieveConf); err != nil {
 			log.Println("Cannot notify telepathy-ofono about new message", err)
@@ -227,15 +242,8 @@ func (mediator *Mediator) handleMRetrieveConf(uuid string) {
 	} else {
 		log.Print("Not sending recently retrieved message")
 	}
-}
 
-func (mediator *Mediator) handleRetrieved(mRetrieveConf *mms.MRetrieveConf) {
-	mNotifyRespInd := mRetrieveConf.NewMNotifyRespInd(useDeliveryReports)
-	if err := storage.UpdateRetrieved(mNotifyRespInd.UUID); err != nil {
-		log.Print("Can't update mms status: ", err)
-		return
-	}
-	mediator.NewMNotifyRespInd <- mNotifyRespInd
+	return mRetrieveConf, nil
 }
 
 func (mediator *Mediator) handleMNotifyRespInd(mNotifyRespInd *mms.MNotifyRespInd) {
@@ -265,6 +273,7 @@ func (mediator *Mediator) handleMNotifyRespInd(mNotifyRespInd *mms.MNotifyRespIn
 
 func (mediator *Mediator) sendMNotifyRespInd(mNotifyRespIndFile string) {
 	defer os.Remove(mNotifyRespIndFile)
+
 	if _, err := mediator.uploadFile(mNotifyRespIndFile); err != nil {
 		log.Printf("Cannot upload m-notifyresp.ind encoded file %s to message center: %s", mNotifyRespIndFile, err)
 	}
