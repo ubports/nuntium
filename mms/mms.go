@@ -301,6 +301,10 @@ func NewMNotificationInd() *MNotificationInd {
 	return &MNotificationInd{Type: TYPE_NOTIFICATION_IND, UUID: genUUID()}
 }
 
+func (mNotificationInd *MNotificationInd) IsLocal() bool {
+	return strings.HasPrefix(mNotificationInd.ContentLocation, "http://localhost:9191/mms")
+}
+
 func (mNotificationInd *MNotificationInd) NewMNotifyRespInd(status byte, deliveryReport bool) *MNotifyRespInd {
 	return &MNotifyRespInd{
 		Type:          TYPE_NOTIFYRESP_IND,

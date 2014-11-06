@@ -70,22 +70,33 @@ the logic in code completely if needed.
 
 ### nuntium-inject-push
 
-*Needs implementation*
-
 This tool is meant to inject a push notification message through the
 `ReceiveNotification` method nuntium exposes on the system bus and 
 simulate a black box workflow as described in 
 [Receiving an MMS](architecture.md#receiving-an-mms).
 
-It will track if the correct `MessageAdded` signal was raised
-
 Install it by running:
 
     go get github.com/ubuntu-phonedations/nuntium/cmd/nuntium-inject-push
 
-Refer to the tool's
-[documentation](http://godoc.org/github.com/ubuntu-phonedations/nuntium/cmd/nuntium-inject-push)
-for more information.
+This tool does not mock out ofono completely, but instead what it creates a
+local server to serve an mms that would be passed on from the Push
+Notification with a Content Location such that this local server would be
+used to fetch the MMS.
+
+If no MMS is specified a in tool *m-retrieve.conf* would be used. Once the
+content is served once, the tool exits.
+
+The agent is registered on the system bus, as such, it should be run like:
+
+     sudo nuntium-inject-push --end-point :1.356
+
+where `:1.356` is the dbus name that nuntium has on the system bus, this can
+be discovered by looking at the nuntium logs.
+
+To use a specifc mms, just use the cli switch like:
+
+     sudo nuntium-inject-push --end-point :1.356
 
 
 ### nuntium-stub-send
