@@ -1,0 +1,36 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+
+export DH_OPTIONS
+export DH_GOPKG := github.com/ubuntu-phonedations/nuntium
+export DH_GOLANG_INSTALL_ALL := 1
+
+DEB_HOST_ARCH := $(shell dpkg-architecture -qDEB_HOST_ARCH)
+
+%:
+	dh $@ \
+		--buildsystem=golang \
+		--with=golang \
+		--fail-missing
+
+override_dh_auto_test:
+# The test runners panic when running on powerpc64.
+ifneq ($(DEB_HOST_ARCH),powerpc)
+	dh_auto_test
+endif
+	
+override_dh_auto_install:
+	dh_auto_install -O--buildsystem=golang
+	rm -r \
+		${CURDIR}/debian/tmp/usr/bin/test \
+		${CURDIR}/debian/tmp/usr/share/gocode/src/$(DH_GOPKG)/test \
+		${CURDIR}/debian/tmp/usr/share/gocode/src/$(DH_GOPKG)/storage \
+		${CURDIR}/debian/tmp/usr/share/gocode/src/$(DH_GOPKG)/scripts \
+		${CURDIR}/debian/tmp/usr/share/gocode/src/$(DH_GOPKG)/docs \
+		${CURDIR}/debian/tmp/usr/share/gocode/src/$(DH_GOPKG)/.travis.yml \
+		${CURDIR}/debian/tmp/usr/share/gocode/src/$(DH_GOPKG)/.gitignore \
+		${CURDIR}/debian/tmp/usr/share/gocode/src/$(DH_GOPKG)/README.md \
+		${CURDIR}/debian/tmp/usr/share/gocode/src/$(DH_GOPKG)/cmd
+
+override_dh_strip:
+	echo "Skipping strip"
