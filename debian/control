@@ -28,11 +28,23 @@ Description: Bridges push notifications from ofono to telepathy-ofono
  by bridging with telepathy-ofono
 
 Package: nuntium-decode-cli
+Depends: nuntium-tools, ${misc:Depends}
+Architecture: all
+Priority: extra
+Section: oldlibs
+Built-Using: ${misc:Built-Using}
+Description: transitional dummy package
+ This is a transitional dummy package. It can safely be removed.
+
+Package: nuntium-tools
 Architecture: any
 Depends: ${misc:Depends}, ${shlibs:Depends}
+Replaces: nuntium-decode-cli (<< 1.1~)
+Breaks: nuntium-decode-cli (<< 1.1~)
 Built-Using: ${misc:Built-Using}
-Description: Decode m-retrieve.conf messages
- Decodes and prints out decoding results to the
+Description: Useful tools for working with MMS and nuntium.
+ - Decode m-retrieve.conf messages
+ - Stub an ofono push notification into nuntium.
 
 Package: golang-nuntium-mms-dev
 Architecture: all
