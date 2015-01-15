@@ -305,7 +305,7 @@ func (service *MMSService) parseMessage(mRetConf *mms.MRetrieveConf) (Payload, e
 		params["Sender"] = dbus.Variant{sender[:len(sender)-len(PLMN)]}
 	}
 
-	params["Recipients"] = dbus.Variant{parseRecipients(mRetConf.To)}
+	params["Recipients"] = dbus.Variant{parseRecipients(strings.Join(mRetConf.To, ","))}
 	if smil, err := mRetConf.GetSmil(); err == nil {
 		params["Smil"] = dbus.Variant{smil}
 	} else {
