@@ -1,8 +1,5 @@
 language: go
 
-env:
-    - "CoverPkg=code.google.com/p/go.tools/cmd/cover"
-    - "CoverPkg=golang.org/x/tools/cmd/cover"
 go:
     - 1.2
     - tip
@@ -10,7 +7,7 @@ go:
 before_install:
     - go get github.com/axw/gocov/gocov
     - go get github.com/mattn/goveralls
-    - go get $CoverPkg
+    - if ! go get code.google.com/p/go.tools/cmd/cover; then go get golang.org/x/tools/cmd/cover; fi
 
 script:
     - COVERALLS="-repotoken $COVERALLS_TOKEN" ./scripts/testcoverage.sh
