@@ -149,15 +149,15 @@ func (dec *MMSDecoder) ReadMediaType(reflectedPdu *reflect.Value, hdr string) (e
 }
 
 func (dec *MMSDecoder) ReadTo(reflectedPdu *reflect.Value) error {
+        // field in the MMS protocol
 	toField, err := dec.ReadEncodedString(reflectedPdu, "")
 	if err != nil {
 		return err
 	}
-	to := reflectedPdu.FieldByName("To").String()
-	if to != "" {
-		toField = toField + "," + to
-	}
-	reflectedPdu.FieldByName("To").SetString(toField)
+	// field in the golang structure
+	to := reflectedPdu.FieldByName("To")
+	toSlice := reflect.Append(to, reflect.ValueOf(toField))
+	reflectedPdu.FieldByName("To").Set(toSlice)
 	return err
 }
 
