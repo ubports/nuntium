@@ -42,7 +42,7 @@ func NewEncoder(w io.Writer) *MMSEncoder {
 func (enc *MMSEncoder) Encode(pdu MMSWriter) error {
 	rPdu := reflect.ValueOf(pdu).Elem()
 
-	//The order of the following fields doens't matter much
+	//The order of the following fields doesn't matter much
 	typeOfPdu := rPdu.Type()
 	var err error
 	for i := 0; i < rPdu.NumField(); i++ {
@@ -79,7 +79,12 @@ func (enc *MMSEncoder) Encode(pdu MMSWriter) error {
 		case "Start":
 			err = enc.writeStringParam(WSP_PARAMETER_TYPE_START_DEFUNCT, f.String())
 		case "To":
-			err = enc.writeStringParam(TO, f.String())
+			for i := 0; i < f.Len(); i++ {
+				err = enc.writeStringParam(TO, f.Index(i).String())
+				if err != nil {
+					break
+				}
+			}
 		case "ContentType":
 			// if there is a ContentType there has to be content
 			if mSendReq, ok := pdu.(*MSendReq); ok {

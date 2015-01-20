@@ -189,7 +189,7 @@ type MSendReq struct {
 	Version          byte
 	Date             uint64 `encode:"optional"`
 	From             string
-	To               string
+	To               []string
 	Cc               string `encode:"no"`
 	Bcc              string `encode:"no"`
 	Subject          string `encode:"optional"`
@@ -252,7 +252,7 @@ type MRetrieveConf struct {
 	ReadReport, RetrieveStatus, DeliveryReport byte
 	TransactionId, MessageId, RetrieveText     string
 	From, Cc, Subject                          string
-	To                                         string
+	To                                         []string
 	ReportAllowed                              byte
 	Date                                       uint64
 	Content                                    Attachment
@@ -274,7 +274,7 @@ func NewMSendReq(recipients []string, attachments []*Attachment, deliveryReport 
 
 	return &MSendReq{
 		Type:          TYPE_SEND_REQ,
-		To:            strings.Join(recipients, ","),
+		To:            recipients,
 		TransactionId: uuid,
 		Version:       MMS_MESSAGE_VERSION_1_1,
 		UUID:          uuid,
