@@ -6,7 +6,6 @@ Build-Depends:
  debhelper (>= 9),
  dh-golang,
  gccgo,
- gccgo-go,
  golang-go-dbus-dev,
  golang-go-flags-dev,
  golang-go-xdg-dev,
