@@ -1,3 +1,28 @@
+nuntium (1.4-0ubuntu6) vivid; urgency=medium
+
+  * Drop the build dependency on gccgo-go.
+
+ -- Matthias Klose <doko@ubuntu.com>  Tue, 10 Mar 2015 19:33:49 +0100
+
+nuntium (1.4-0ubuntu5) vivid; urgency=medium
+
+  * Still build-depend on gccgo-go on 32bit architectures.
+
+ -- Matthias Klose <doko@ubuntu.com>  Sun, 08 Mar 2015 23:43:15 +0000
+
+nuntium (1.4-0ubuntu4) vivid; urgency=medium
+
+  * Drop the build dependency on gccgo-go.
+  * Drop the special handling for gccgo architectures.
+
+ -- Matthias Klose <doko@ubuntu.com>  Sat, 07 Mar 2015 22:25:21 +0100
+
+nuntium (1.4-0ubuntu2) vivid; urgency=medium
+
+  * Adjusting packaging to work on ppc64el.
+
+ -- Sergio Schvezov <sergio.schvezov@canonical.com>  Thu, 22 Jan 2015 10:33:33 -0300
+
 nuntium (1.4-0ubuntu1) vivid; urgency=medium
 
   [Manuel de la Pena]
