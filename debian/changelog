@@ -1,3 +1,14 @@
+nuntium (1.4+15.04.20150422-0ubuntu1) vivid; urgency=medium
+
+  [ CI Train Bot ]
+  * New rebuild forced.
+
+  [ Ricardo Salveti de Araujo ]
+  * control: building with golang-go instead (only package currently
+    using gccgo)
+
+ -- CI Train Bot <ci-train-bot@canonical.com>  Wed, 22 Apr 2015 00:58:08 +0000
+
 nuntium (1.4-0ubuntu6) vivid; urgency=medium
 
   * Drop the build dependency on gccgo-go.
