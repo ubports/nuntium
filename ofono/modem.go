@@ -418,7 +418,9 @@ func (modem *Modem) getProperty(interfaceName, propertyName string) (*dbus.Varia
 }
 
 func (modem *Modem) Delete() {
-	modem.IdentityRemoved <- modem.identity
+	if modem.identity != "" {
+		modem.IdentityRemoved <- modem.identity
+	}
 	modem.modemSignal.Cancel()
 	modem.modemSignal.C = nil
 	modem.simSignal.Cancel()
