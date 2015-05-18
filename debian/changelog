@@ -1,3 +1,9 @@
+nuntium (1.4+15.10.20150518-0ubuntu1) UNRELEASED; urgency=medium
+
+  * Change upstart job so nuntium is re-spawned after an exit/crash
+
+ -- Alfonso Sanchez-Beato (email Canonical) <alfonso.sanchez-beato@canonical.com>  Mon, 18 May 2015 15:36:23 +0200
+
 nuntium (1.4+15.04.20150422-0ubuntu1) vivid; urgency=medium
 
   [ CI Train Bot ]
