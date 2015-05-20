@@ -46,18 +46,24 @@ func NewModemManager(conn *dbus.Connection) *ModemManager {
 }
 
 func (mm *ModemManager) Init() error {
-	modemAddedSignal, err := connectToSignal(mm.conn, "/", OFONO_MANAGER_INTERFACE, "ModemAdded")
+	//Use a different connection for the modem signals to avoid go-dbus blocking issues
+	conn, err := dbus.Connect(dbus.SystemBus)
+	if err != nil {
+		return err;
+	}
+
+	modemAddedSignal, err := connectToSignal(conn, "/", OFONO_MANAGER_INTERFACE, "ModemAdded")
 	if err != nil {
 		return err
 	}
-	modemRemovedSignal, err := connectToSignal(mm.conn, "/", OFONO_MANAGER_INTERFACE, "ModemRemoved")
+	modemRemovedSignal, err := connectToSignal(conn, "/", OFONO_MANAGER_INTERFACE, "ModemRemoved")
 	if err != nil {
 		return err
 	}
 	go mm.watchModems(modemAddedSignal, modemRemovedSignal)
 
 	//Check for existing modems
-	modemPaths, err := getModems(mm.conn)
+	modemPaths, err := getModems(conn)
 	if err != nil {
 		log.Print("Cannot preemptively add modems: ", err)
 	} else {

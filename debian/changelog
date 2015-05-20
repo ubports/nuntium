@@ -1,3 +1,14 @@
+nuntium (1.4+15.10.20150520-0ubuntu1) UNRELEASED; urgency=medium
+
+  [ Sergio Schvezov ]
+  * Decode properly content type when there are parameters
+
+  [ Alfonso Sanchez-Beato ]
+  * Fix LP: #1441135 in the event of an oFono crash
+  * Use oFono's Preferred property when selecting the mobile context
+
+ -- Alfonso Sanchez-Beato (email Canonical) <alfonso.sanchez-beato@canonical.com>  Wed, 20 May 2015 14:19:54 +0200
+
 nuntium (1.4+15.04.20150422-0ubuntu1) vivid; urgency=medium
 
   [ CI Train Bot ]

@@ -310,6 +310,10 @@ func (oContext OfonoContext) isActive() bool {
 	return reflect.ValueOf(oContext.Properties["Active"].Value).Bool()
 }
 
+func (oContext OfonoContext) isPreferred() bool {
+	return reflect.ValueOf(oContext.Properties["Preferred"].Value).Bool()
+}
+
 func (oContext OfonoContext) hasMessageCenter() bool {
 	return oContext.messageCenter() != ""
 }
@@ -371,10 +375,11 @@ func (oContext OfonoContext) GetProxy() (proxyInfo ProxyInfo, err error) {
 //and a MessageCenter within the context.
 //
 //The following rules take place:
-//- check current type=internet context for MessageProxy & MessageCenter;
-//  if they exist and aren't empty AND the context is active, select it as the
-//  context to use for MMS.
-//- otherwise search for type=mms, if found, use it and activate
+//- if current type=internet context, check for MessageProxy & MessageCenter;
+//  if they exist and aren't empty AND the context is active, add it to the list
+//- if current type=mms, add it to the list
+//- if ofono's ConnectionManager.Preferred property is set, use only that context
+//- prioritize active and recently successfully used contexts
 //
 //Returns either the type=internet context or the type=mms, if none is found
 //an error is returned.
@@ -386,7 +391,10 @@ func (modem *Modem) GetMMSContexts(preferredContext dbus.ObjectPath) (mmsContext
 
 	for _, context := range contexts {
 		if (context.isTypeInternet() && context.isActive() && context.hasMessageCenter()) || context.isTypeMMS() {
-			if context.ObjectPath == preferredContext || context.isActive() {
+			if context.isPreferred() {
+				mmsContexts = []OfonoContext{context}
+				break
+			} else if context.ObjectPath == preferredContext || context.isActive() {
 				mmsContexts = append([]OfonoContext{context}, mmsContexts...)
 			} else {
 				mmsContexts = append(mmsContexts, context)
@@ -418,7 +426,9 @@ func (modem *Modem) getProperty(interfaceName, propertyName string) (*dbus.Varia
 }
 
 func (modem *Modem) Delete() {
-	modem.IdentityRemoved <- modem.identity
+	if modem.identity != "" {
+		modem.IdentityRemoved <- modem.identity
+	}
 	modem.modemSignal.Cancel()
 	modem.modemSignal.C = nil
 	modem.simSignal.Cancel()

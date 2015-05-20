@@ -38,11 +38,12 @@ var _ = Suite(&ContextTestSuite{})
 
 var proxy ProxyInfo
 
-func makeGenericContextProperty(name, cType string, active, messageCenter, messageProxy bool) PropertiesType {
+func makeGenericContextProperty(name, cType string, active, messageCenter, messageProxy, preferred bool) PropertiesType {
 	p := make(PropertiesType)
 	p["Name"] = dbus.Variant{name}
 	p["Type"] = dbus.Variant{cType}
 	p["Active"] = dbus.Variant{active}
+	p["Preferred"] = dbus.Variant{preferred}
 	if messageCenter {
 		p["MessageCenter"] = dbus.Variant{"http://messagecenter.com"}
 	} else {
@@ -80,7 +81,7 @@ func (s *ContextTestSuite) TestNoContext(c *C) {
 func (s *ContextTestSuite) TestMMSOverInternet(c *C) {
 	context1 := OfonoContext{
 		ObjectPath: "/ril_0/context1",
-		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, true),
+		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, true, false),
 	}
 	s.contexts = append(s.contexts, context1)
 
@@ -93,7 +94,7 @@ func (s *ContextTestSuite) TestMMSOverInternet(c *C) {
 func (s *ContextTestSuite) TestMMSOverInactiveInternet(c *C) {
 	context1 := OfonoContext{
 		ObjectPath: "/ril_0/context1",
-		Properties: makeGenericContextProperty("Context1", contextTypeInternet, false, true, true),
+		Properties: makeGenericContextProperty("Context1", contextTypeInternet, false, true, true, false),
 	}
 	s.contexts = append(s.contexts, context1)
 
@@ -105,7 +106,7 @@ func (s *ContextTestSuite) TestMMSOverInactiveInternet(c *C) {
 func (s *ContextTestSuite) TestMMSOverInternetNoProxy(c *C) {
 	context1 := OfonoContext{
 		ObjectPath: "/ril_0/context1",
-		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, false),
+		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, false, false),
 	}
 	s.contexts = append(s.contexts, context1)
 
@@ -118,13 +119,13 @@ func (s *ContextTestSuite) TestMMSOverInternetNoProxy(c *C) {
 func (s *ContextTestSuite) TestMMSOverMMS(c *C) {
 	context1 := OfonoContext{
 		ObjectPath: "/ril_0/context1",
-		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, false, false),
+		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, false, false, false),
 	}
 	s.contexts = append(s.contexts, context1)
 
 	context2 := OfonoContext{
 		ObjectPath: "/ril_0/context2",
-		Properties: makeGenericContextProperty("Context2", contextTypeMMS, false, true, true),
+		Properties: makeGenericContextProperty("Context2", contextTypeMMS, false, true, true, false),
 	}
 	s.contexts = append(s.contexts, context2)
 
@@ -137,13 +138,13 @@ func (s *ContextTestSuite) TestMMSOverMMS(c *C) {
 func (s *ContextTestSuite) TestMMSOverMMSNoProxy(c *C) {
 	context1 := OfonoContext{
 		ObjectPath: "/ril_0/context1",
-		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, false, false),
+		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, false, false, false),
 	}
 	s.contexts = append(s.contexts, context1)
 
 	context2 := OfonoContext{
 		ObjectPath: "/ril_0/context2",
-		Properties: makeGenericContextProperty("Context2", contextTypeMMS, false, true, false),
+		Properties: makeGenericContextProperty("Context2", contextTypeMMS, false, true, false, false),
 	}
 	s.contexts = append(s.contexts, context2)
 
@@ -156,13 +157,13 @@ func (s *ContextTestSuite) TestMMSOverMMSNoProxy(c *C) {
 func (s *ContextTestSuite) TestMMSMoreThanOneValid(c *C) {
 	context1 := OfonoContext{
 		ObjectPath: "/ril_0/context1",
-		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, false),
+		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, false, false),
 	}
 	s.contexts = append(s.contexts, context1)
 
 	context2 := OfonoContext{
 		ObjectPath: "/ril_0/context2",
-		Properties: makeGenericContextProperty("Context2", contextTypeMMS, false, true, false),
+		Properties: makeGenericContextProperty("Context2", contextTypeMMS, false, true, false, false),
 	}
 	s.contexts = append(s.contexts, context2)
 
@@ -176,19 +177,19 @@ func (s *ContextTestSuite) TestMMSMoreThanOneValid(c *C) {
 func (s *ContextTestSuite) TestMMSMoreThanOneValidContextSelectPreferred(c *C) {
 	context1 := OfonoContext{
 		ObjectPath: "/ril_0/context1",
-		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, false),
+		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, false, false),
 	}
 	s.contexts = append(s.contexts, context1)
 
 	context2 := OfonoContext{
 		ObjectPath: "/ril_0/context2",
-		Properties: makeGenericContextProperty("Context2", contextTypeMMS, false, true, false),
+		Properties: makeGenericContextProperty("Context2", contextTypeMMS, false, true, false, false),
 	}
 	s.contexts = append(s.contexts, context2)
 
 	context3 := OfonoContext{
 		ObjectPath: "/ril_0/context3",
-		Properties: makeGenericContextProperty("Context3", contextTypeMMS, false, true, false),
+		Properties: makeGenericContextProperty("Context3", contextTypeMMS, false, true, false, false),
 	}
 	s.contexts = append(s.contexts, context3)
 
@@ -203,19 +204,19 @@ func (s *ContextTestSuite) TestMMSMoreThanOneValidContextSelectPreferred(c *C) {
 func (s *ContextTestSuite) TestMMSMoreThanOneValidContextPreferredNoMatch(c *C) {
 	context1 := OfonoContext{
 		ObjectPath: "/ril_0/context1",
-		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, false),
+		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, false, false),
 	}
 	s.contexts = append(s.contexts, context1)
 
 	context2 := OfonoContext{
 		ObjectPath: "/ril_0/context2",
-		Properties: makeGenericContextProperty("Context2", contextTypeMMS, false, true, false),
+		Properties: makeGenericContextProperty("Context2", contextTypeMMS, false, true, false, false),
 	}
 	s.contexts = append(s.contexts, context2)
 
 	context3 := OfonoContext{
 		ObjectPath: "/ril_0/context3",
-		Properties: makeGenericContextProperty("Context3", contextTypeMMS, false, true, false),
+		Properties: makeGenericContextProperty("Context3", contextTypeMMS, false, true, false, false),
 	}
 	s.contexts = append(s.contexts, context3)
 
@@ -230,25 +231,25 @@ func (s *ContextTestSuite) TestMMSMoreThanOneValidContextPreferredNoMatch(c *C) 
 func (s *ContextTestSuite) TestMMSMoreThanOneValidContext2Active(c *C) {
 	context0 := OfonoContext{
 		ObjectPath: "/ril_0/context0",
-		Properties: makeGenericContextProperty("Context0", contextTypeInternet, false, true, false),
+		Properties: makeGenericContextProperty("Context0", contextTypeInternet, false, true, false, false),
 	}
 	s.contexts = append(s.contexts, context0)
 
 	context1 := OfonoContext{
 		ObjectPath: "/ril_0/context1",
-		Properties: makeGenericContextProperty("Context1", contextTypeMMS, false, true, false),
+		Properties: makeGenericContextProperty("Context1", contextTypeMMS, false, true, false, false),
 	}
 	s.contexts = append(s.contexts, context1)
 
 	context2 := OfonoContext{
 		ObjectPath: "/ril_0/context2",
-		Properties: makeGenericContextProperty("Context2", contextTypeMMS, false, true, false),
+		Properties: makeGenericContextProperty("Context2", contextTypeMMS, false, true, false, false),
 	}
 	s.contexts = append(s.contexts, context2)
 
 	context3 := OfonoContext{
 		ObjectPath: "/ril_0/context3",
-		Properties: makeGenericContextProperty("Context3", contextTypeMMS, true, true, false),
+		Properties: makeGenericContextProperty("Context3", contextTypeMMS, true, true, false, false),
 	}
 	s.contexts = append(s.contexts, context3)
 
@@ -263,25 +264,25 @@ func (s *ContextTestSuite) TestMMSMoreThanOneValidContext2Active(c *C) {
 func (s *ContextTestSuite) TestMMSMoreThanOneValidContextPreferredNotActive(c *C) {
 	context0 := OfonoContext{
 		ObjectPath: "/ril_0/context0",
-		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, false),
+		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, false, false),
 	}
 	s.contexts = append(s.contexts, context0)
 
 	context1 := OfonoContext{
 		ObjectPath: "/ril_0/context1",
-		Properties: makeGenericContextProperty("Context1", contextTypeMMS, false, true, false),
+		Properties: makeGenericContextProperty("Context1", contextTypeMMS, false, true, false, false),
 	}
 	s.contexts = append(s.contexts, context1)
 
 	context2 := OfonoContext{
 		ObjectPath: "/ril_0/context2",
-		Properties: makeGenericContextProperty("Context2", contextTypeMMS, false, true, false),
+		Properties: makeGenericContextProperty("Context2", contextTypeMMS, false, true, false, false),
 	}
 	s.contexts = append(s.contexts, context2)
 
 	context3 := OfonoContext{
 		ObjectPath: "/ril_0/context3",
-		Properties: makeGenericContextProperty("Context3", contextTypeMMS, false, true, false),
+		Properties: makeGenericContextProperty("Context3", contextTypeMMS, false, true, false, false),
 	}
 
 	s.contexts = append(s.contexts, context3)
@@ -295,10 +296,41 @@ func (s *ContextTestSuite) TestMMSMoreThanOneValidContextPreferredNotActive(c *C
 	c.Check(contexts[3], DeepEquals, context2)
 }
 
+func (s *ContextTestSuite) TestOnePreferredContext(c *C) {
+	context0 := OfonoContext{
+		ObjectPath: "/ril_0/context0",
+		Properties: makeGenericContextProperty("Context0", contextTypeInternet, true, true, false, false),
+	}
+	s.contexts = append(s.contexts, context0)
+
+	context1 := OfonoContext{
+		ObjectPath: "/ril_0/context1",
+		Properties: makeGenericContextProperty("Context1", contextTypeMMS, false, true, false, true),
+	}
+	s.contexts = append(s.contexts, context1)
+
+	context2 := OfonoContext{
+		ObjectPath: "/ril_0/context2",
+		Properties: makeGenericContextProperty("Context2", contextTypeMMS, false, true, false, false),
+	}
+	s.contexts = append(s.contexts, context2)
+
+	context3 := OfonoContext{
+		ObjectPath: "/ril_0/context3",
+		Properties: makeGenericContextProperty("Context3", contextTypeMMS, true, true, false, false),
+	}
+	s.contexts = append(s.contexts, context3)
+
+	contexts, err := s.modem.GetMMSContexts("")
+	c.Assert(err, IsNil)
+	c.Assert(len(contexts), Equals, 1)
+	c.Check(contexts[0], DeepEquals, context1)
+}
+
 func (s *ContextTestSuite) TestGetProxy(c *C) {
 	context := OfonoContext{
 		ObjectPath: "/ril_0/context1",
-		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, true),
+		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, true, false),
 	}
 
 	p, err := context.GetProxy()
@@ -309,7 +341,7 @@ func (s *ContextTestSuite) TestGetProxy(c *C) {
 func (s *ContextTestSuite) TestGetProxyNoProxy(c *C) {
 	context := OfonoContext{
 		ObjectPath: "/ril_0/context1",
-		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, false),
+		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, false, false),
 	}
 
 	p, err := context.GetProxy()
@@ -320,7 +352,7 @@ func (s *ContextTestSuite) TestGetProxyNoProxy(c *C) {
 func (s *ContextTestSuite) TestGetProxyWithHTTP(c *C) {
 	context := OfonoContext{
 		ObjectPath: "/ril_0/context1",
-		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, true),
+		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, true, false),
 	}
 	context.Properties["MessageProxy"] = dbus.Variant{fmt.Sprintf("http://%s:%d", proxy.Host, proxy.Port)}
 
@@ -332,7 +364,7 @@ func (s *ContextTestSuite) TestGetProxyWithHTTP(c *C) {
 func (s *ContextTestSuite) TestGetProxyNoPort(c *C) {
 	context := OfonoContext{
 		ObjectPath: "/ril_0/context1",
-		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, true),
+		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, true, false),
 	}
 	context.Properties["MessageProxy"] = dbus.Variant{fmt.Sprintf("http://%s", proxy.Host)}
 
