@@ -1,4 +1,4 @@
-nuntium (1.4+15.10.20150518-0ubuntu1) UNRELEASED; urgency=medium
+nuntium (1.4+15.04.20150518-0ubuntu1) UNRELEASED; urgency=medium
 
   * Change upstart job so nuntium is re-spawned after an exit/crash
 
