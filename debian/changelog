@@ -1,4 +1,4 @@
-nuntium (1.4+15.10.20150520-0ubuntu1) UNRELEASED; urgency=medium
+nuntium (1.4+15.04.20150520-0ubuntu1) UNRELEASED; urgency=medium
 
   [ Sergio Schvezov ]
   * Decode properly content type when there are parameters
