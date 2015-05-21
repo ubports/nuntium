@@ -125,7 +125,7 @@ func (pdu *MRetrieveConf) GetDataParts() []Attachment {
 	return dataParts
 }
 
-func (dec *MMSDecoder) ReadContentTypeParts(reflectedPdu *reflect.Value) error {
+func (dec *MMSDecoder) ReadAttachmentParts(reflectedPdu *reflect.Value) error {
 	var err error
 	var parts uint64
 	if parts, err = dec.ReadUintVar(nil, ""); err != nil {
@@ -147,7 +147,7 @@ func (dec *MMSDecoder) ReadContentTypeParts(reflectedPdu *reflect.Value) error {
 		var ct Attachment
 		ct.Offset = headerEnd + 1
 		ctReflected := reflect.ValueOf(&ct).Elem()
-		if err := dec.ReadContentType(&ctReflected); err == nil {
+		if err := dec.ReadAttachment(&ctReflected); err == nil {
 			if err := dec.ReadMMSHeaders(&ctReflected, headerEnd); err != nil {
 				return err
 			}
@@ -191,7 +191,7 @@ func (dec *MMSDecoder) ReadMMSHeaders(ctMember *reflect.Value, headerEnd int) er
 	return nil
 }
 
-func (dec *MMSDecoder) ReadContentType(ctMember *reflect.Value) error {
+func (dec *MMSDecoder) ReadAttachment(ctMember *reflect.Value) error {
 	if dec.Offset+1 >= len(dec.Data) {
 		return fmt.Errorf("message ended prematurely, offset: %d and payload length is %d", dec.Offset, len(dec.Data))
 	}

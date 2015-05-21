@@ -132,7 +132,17 @@ func (dec *MMSDecoder) ReadCharset(reflectedPdu *reflect.Value, hdr string) (str
 
 func (dec *MMSDecoder) ReadMediaType(reflectedPdu *reflect.Value, hdr string) (err error) {
 	var mediaType string
+	var endOffset int
 	origOffset := dec.Offset
+
+	if dec.Data[dec.Offset+1] <= SHORT_LENGTH_MAX || dec.Data[dec.Offset+1] == LENGTH_QUOTE {
+		if length, err := dec.ReadLength(nil); err != nil {
+			return err
+		} else {
+			endOffset = int(length) + dec.Offset
+		}
+	}
+
 	if dec.Data[dec.Offset+1] >= TEXT_MIN && dec.Data[dec.Offset+1] <= TEXT_MAX {
 		if mediaType, err = dec.ReadString(nil, ""); err != nil {
 			return err
@@ -143,8 +153,14 @@ func (dec *MMSDecoder) ReadMediaType(reflectedPdu *reflect.Value, hdr string) (e
 		return fmt.Errorf("cannot decode media type for field beginning with %#x@%d", dec.Data[origOffset], origOffset)
 	}
 
+	// skip the rest of the content type params
+	if endOffset > 0 {
+		dec.Offset = endOffset
+	}
+
 	reflectedPdu.FieldByName(hdr).SetString(mediaType)
 	dec.log = dec.log + fmt.Sprintf("%s: %s\n", hdr, mediaType)
+
 	return nil
 }
 
@@ -371,12 +387,12 @@ func (dec *MMSDecoder) Decode(pdu MMSReader) (err error) {
 			_, err = dec.ReadString(&reflectedPdu, "TransactionId")
 		case CONTENT_TYPE:
 			ctMember := reflectedPdu.FieldByName("Content")
-			if err = dec.ReadContentType(&ctMember); err != nil {
+			if err = dec.ReadAttachment(&ctMember); err != nil {
 				return err
 			}
 			//application/vnd.wap.multipart.related and others
 			if ctMember.FieldByName("MediaType").String() != "text/plain" {
-				err = dec.ReadContentTypeParts(&reflectedPdu)
+				err = dec.ReadAttachmentParts(&reflectedPdu)
 			} else {
 				dec.Offset++
 				_, err = dec.ReadBoundedBytes(&reflectedPdu, "Data", len(dec.Data))
