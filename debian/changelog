@@ -1,4 +1,4 @@
-nuntium (1.4+15.04.20150520-0ubuntu1) UNRELEASED; urgency=medium
+nuntium (1.4+15.04.20150521-0ubuntu1) vivid; urgency=medium
 
   [ Sergio Schvezov ]
   * Decode properly content type when there are parameters
@@ -7,7 +7,7 @@ nuntium (1.4+15.04.20150520-0ubuntu1) UNRELEASED; urgency=medium
   * Fix LP: #1441135 in the event of an oFono crash
   * Use oFono's Preferred property when selecting the mobile context
 
- -- Alfonso Sanchez-Beato (email Canonical) <alfonso.sanchez-beato@canonical.com>  Wed, 20 May 2015 14:19:54 +0200
+ -- CI Train Bot <ci-train-bot@canonical.com>  Thu, 21 May 2015 06:27:56 +0000
 
 nuntium (1.4+15.04.20150518-0ubuntu1) UNRELEASED; urgency=medium
 
