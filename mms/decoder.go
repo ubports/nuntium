@@ -165,7 +165,7 @@ func (dec *MMSDecoder) ReadMediaType(reflectedPdu *reflect.Value, hdr string) (e
 }
 
 func (dec *MMSDecoder) ReadTo(reflectedPdu *reflect.Value) error {
-        // field in the MMS protocol
+	// field in the MMS protocol
 	toField, err := dec.ReadEncodedString(reflectedPdu, "")
 	if err != nil {
 		return err
@@ -414,7 +414,12 @@ func (dec *MMSDecoder) Decode(pdu MMSReader) (err error) {
 		case X_MMS_RETRIEVE_TEXT:
 			_, err = dec.ReadString(&reflectedPdu, "RetrieveText")
 		case X_MMS_MMS_VERSION:
-			_, err = dec.ReadShortInteger(&reflectedPdu, "Version")
+			// TODO This should be ReadShortInteger instead, but we read it
+			// as a byte because we are not properly encoding the version
+			// either, as we are using the raw value there. To fix this we
+			// need to change the encoder and the MMS_MESSAGE_VERSION_1_X
+			// constants.
+			_, err = dec.ReadByte(&reflectedPdu, "Version")
 		case X_MMS_MESSAGE_CLASS:
 			//TODO implement Token text form
 			_, err = dec.ReadByte(&reflectedPdu, "Class")
