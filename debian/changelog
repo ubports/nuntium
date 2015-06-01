@@ -1,3 +1,11 @@
+nuntium (1.4+15.04.20150601-0ubuntu1) UNRELEASED; urgency=medium
+
+  * Fix LP #1459995 and most bugs which symptom is not receiving MMS
+    messages
+  * Remove nuntium binary from VC
+
+ -- Alfonso Sanchez-Beato (email Canonical) <alfonso.sanchez-beato@canonical.com>  Mon, 01 Jun 2015 08:31:48 +0200
+
 nuntium (1.4+15.04.20150521-0ubuntu1) vivid; urgency=medium
 
   [ Sergio Schvezov ]
