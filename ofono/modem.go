@@ -295,6 +295,13 @@ func (context OfonoContext) toggleActive(state bool, conn *dbus.Connection) erro
 				time.Sleep(2 * time.Second)
 			}
 		} else {
+			// If it works we set it as preferred in ofono, provided it is not
+			// a combined context.
+			// TODO get rid of nuntium's internal preferred setting
+			if !context.isPreferred() && context.isTypeMMS() {
+				obj.Call(CONNECTION_CONTEXT_INTERFACE, "SetProperty",
+					"Preferred", dbus.Variant{true})
+			}
 			return nil
 		}
 	}
