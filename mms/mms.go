@@ -224,6 +224,7 @@ type MNotificationInd struct {
 	UUID                                 string
 	Type, Version, Class, DeliveryReport byte
 	ReplyCharging, ReplyChargingDeadline byte
+	Priority                             byte
 	ReplyChargingId                      string
 	TransactionId, ContentLocation       string
 	From, Subject                        string

@@ -40,9 +40,10 @@ const (
 )
 
 const (
-	ofonoAttachInProgressError = "org.ofono.AttachInProgress"
-	ofonoInProgressError       = "org.ofono.InProgress"
+	ofonoAttachInProgressError = "org.ofono.Error.AttachInProgress"
+	ofonoInProgressError       = "org.ofono.Error.InProgress"
 	ofonoNotAttachedError      = "org.ofono.Error.NotAttached"
+	ofonoFailedError           = "org.ofono.Error.Failed"
 )
 
 type OfonoContext struct {
@@ -269,8 +270,16 @@ func (modem *Modem) DeactivateMMSContext(context OfonoContext) error {
 }
 
 func activationErrorNeedsWait(err error) bool {
+	// ofonoFailedError might be due to network issues or to wrong APN configuration.
+	// Retrying would not make sense for the latter, but we cannot distinguish
+	// and any possible delay retrying might cause would happen only the first time
+	// (provided we end up finding the right APN on the list so we save it as
+	// preferred).
 	if dbusErr, ok := err.(*dbus.Error); ok {
-		return dbusErr.Name == ofonoInProgressError || dbusErr.Name == ofonoAttachInProgressError || dbusErr.Name == ofonoNotAttachedError
+		return dbusErr.Name == ofonoInProgressError ||
+			dbusErr.Name == ofonoAttachInProgressError ||
+			dbusErr.Name == ofonoNotAttachedError ||
+			dbusErr.Name == ofonoFailedError
 	}
 	return false
 }
@@ -286,6 +295,13 @@ func (context OfonoContext) toggleActive(state bool, conn *dbus.Connection) erro
 				time.Sleep(2 * time.Second)
 			}
 		} else {
+			// If it works we set it as preferred in ofono, provided it is not
+			// a combined context.
+			// TODO get rid of nuntium's internal preferred setting
+			if !context.isPreferred() && context.isTypeMMS() {
+				obj.Call(CONNECTION_CONTEXT_INTERFACE, "SetProperty",
+					"Preferred", dbus.Variant{true})
+			}
 			return nil
 		}
 	}
