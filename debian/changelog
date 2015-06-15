@@ -1,11 +1,12 @@
-nuntium (1.4+15.10.20150612-0ubuntu1) UNRELEASED; urgency=medium
+nuntium (1.4+15.10.20150615-0ubuntu1) wily; urgency=medium
 
+  [ Alfonso Sanchez-Beato (email Canonical) ]
   * Fix LP: #1461107 and make PDU decoding more robust
   * Fix LP: #1460012 (context opened twice on rx)
   * Wait between retries when opening an IP context
   * Set ofono's Preferred property when a context is known to work
 
- -- Alfonso Sanchez-Beato (email Canonical) <alfonso.sanchez-beato@canonical.com>  Fri, 12 Jun 2015 14:38:53 +0200
+ -- CI Train Bot <ci-train-bot@canonical.com>  Mon, 15 Jun 2015 08:52:13 +0000
 
 nuntium (1.4+15.10.20150604-0ubuntu1) wily; urgency=medium
 
