@@ -38,9 +38,7 @@ type Mediator struct {
 	modem                 *ofono.Modem
 	telepathyService      *telepathy.MMSService
 	NewMNotificationInd   chan *mms.MNotificationInd
-	NewMNotifyRespInd     chan *mms.MNotifyRespInd
 	NewMSendReq           chan *mms.MSendReq
-	NewMNotifyRespIndFile chan string
 	NewMSendReqFile       chan struct{ filePath, uuid string }
 	outMessage            chan *telepathy.OutgoingMessage
 	terminate             chan bool
@@ -58,8 +56,6 @@ var (
 func NewMediator(modem *ofono.Modem) *Mediator {
 	mediator := &Mediator{modem: modem}
 	mediator.NewMNotificationInd = make(chan *mms.MNotificationInd)
-	mediator.NewMNotifyRespInd = make(chan *mms.MNotifyRespInd)
-	mediator.NewMNotifyRespIndFile = make(chan string)
 	mediator.NewMSendReq = make(chan *mms.MSendReq)
 	mediator.NewMSendReqFile = make(chan struct{ filePath, uuid string })
 	mediator.outMessage = make(chan *telepathy.OutgoingMessage)
@@ -87,10 +83,6 @@ mediatorLoop:
 			} else {
 				go mediator.getMRetrieveConf(mNotificationInd)
 			}
-		case mNotifyRespInd := <-mediator.NewMNotifyRespInd:
-			go mediator.handleMNotifyRespInd(mNotifyRespInd)
-		case mNotifyRespIndFilePath := <-mediator.NewMNotifyRespIndFile:
-			go mediator.sendMNotifyRespInd(mNotifyRespIndFilePath)
 		case msg := <-mediator.outMessage:
 			go mediator.handleOutgoingMessage(msg)
 		case mSendReq := <-mediator.NewMSendReq:
@@ -126,8 +118,6 @@ mediatorLoop:
 				close(mediator.NewMNotificationInd)
 				close(mediator.NewMRetrieveConf)
 				close(mediator.NewMRetrieveConfFile)
-				close(mediator.NewMNotifyRespInd)
-				close(mediator.NewMNotifyRespIndFile)
 				close(mediator.NewMSendReq)
 				close(mediator.NewMSendReqFile)
 			*/
@@ -163,12 +153,14 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 	defer mediator.contextLock.Unlock()
 
 	var proxy ofono.ProxyInfo
+	var mmsContext ofono.OfonoContext
 
 	if mNotificationInd.IsLocal() {
 		log.Print("This is a local test, skipping context activation and proxy settings")
 	} else {
+		var err error
 		preferredContext, _ := mediator.telepathyService.GetPreferredContext()
-		mmsContext, err := mediator.modem.ActivateMMSContext(preferredContext)
+		mmsContext, err = mediator.modem.ActivateMMSContext(preferredContext)
 		if err != nil {
 			log.Print("Cannot activate ofono context: ", err)
 			return
@@ -210,7 +202,12 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 	}
 
 	if !mNotificationInd.IsLocal() {
-		mediator.NewMNotifyRespInd <- mNotifyRespInd
+		// TODO deferred case
+		filePath := mediator.handleMNotifyRespInd(mNotifyRespInd)
+		if filePath == "" {
+			return
+		}
+		mediator.sendMNotifyRespInd(filePath, &mmsContext)
 	} else {
 		log.Print("This is a local test, skipping m-notifyresp.ind")
 	}
@@ -246,36 +243,47 @@ func (mediator *Mediator) handleMRetrieveConf(uuid string) (*mms.MRetrieveConf, 
 	return mRetrieveConf, nil
 }
 
-func (mediator *Mediator) handleMNotifyRespInd(mNotifyRespInd *mms.MNotifyRespInd) {
+func (mediator *Mediator) handleMNotifyRespInd(mNotifyRespInd *mms.MNotifyRespInd) string {
 	f, err := storage.CreateResponseFile(mNotifyRespInd.UUID)
 	if err != nil {
 		log.Print("Unable to create m-notifyresp.ind file for ", mNotifyRespInd.UUID)
-		return
+		return ""
 	}
 	enc := mms.NewEncoder(f)
 	if err := enc.Encode(mNotifyRespInd); err != nil {
 		log.Print("Unable to encode m-notifyresp.ind for ", mNotifyRespInd.UUID)
 		f.Close()
-		return
+		return ""
 	}
 	filePath := f.Name()
 	if err := f.Sync(); err != nil {
 		log.Print("Error while syncing", f.Name(), ": ", err)
-		return
+		return ""
 	}
 	if err := f.Close(); err != nil {
 		log.Print("Error while closing", f.Name(), ": ", err)
-		return
+		return ""
 	}
 	log.Printf("Created %s to handle m-notifyresp.ind for %s", filePath, mNotifyRespInd.UUID)
-	mediator.NewMNotifyRespIndFile <- filePath
+	return filePath
 }
 
-func (mediator *Mediator) sendMNotifyRespInd(mNotifyRespIndFile string) {
-	defer os.Remove(mNotifyRespIndFile)
+func (mediator *Mediator) sendMNotifyRespInd(filePath string, mmsContext *ofono.OfonoContext) {
+	defer os.Remove(filePath)
 
-	if _, err := mediator.uploadFile(mNotifyRespIndFile); err != nil {
-		log.Printf("Cannot upload m-notifyresp.ind encoded file %s to message center: %s", mNotifyRespIndFile, err)
+	proxy, err := mmsContext.GetProxy()
+	if err != nil {
+		log.Println("Cannot retrieve MMS proxy setting", err)
+		return
+	}
+	msc, err := mmsContext.GetMessageCenter()
+	if err != nil {
+		log.Println("Cannot retrieve MMSC setting", err)
+		return
+	}
+
+	if _, err := mms.Upload(filePath, msc, proxy.Host, int32(proxy.Port)); err != nil {
+		log.Printf("Cannot upload m-notifyresp.ind encoded file %s to message center: %s", filePath, err)
 	}
 }
 
