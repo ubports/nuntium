@@ -23,7 +23,6 @@ package ofono
 
 import (
 	"errors"
-	"fmt"
 
 	"launchpad.net/go-dbus/v1"
 	. "launchpad.net/gocheck"
@@ -332,6 +331,12 @@ func (s *ContextTestSuite) TestGetProxy(c *C) {
 		ObjectPath: "/ril_0/context1",
 		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, true, false),
 	}
+	m := make(map[interface{}]interface{})
+	pr := dbus.Variant{proxy.Host}
+	pr_pt := dbus.Variant{uint16(proxy.Port)}
+	m["Proxy"] = &pr
+	m["ProxyPort"] = &pr_pt
+	context.Properties["Settings"] = dbus.Variant{m}
 
 	p, err := context.GetProxy()
 	c.Assert(err, IsNil)
@@ -349,24 +354,15 @@ func (s *ContextTestSuite) TestGetProxyNoProxy(c *C) {
 	c.Check(p, DeepEquals, ProxyInfo{})
 }
 
-func (s *ContextTestSuite) TestGetProxyWithHTTP(c *C) {
-	context := OfonoContext{
-		ObjectPath: "/ril_0/context1",
-		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, true, false),
-	}
-	context.Properties["MessageProxy"] = dbus.Variant{fmt.Sprintf("http://%s:%d", proxy.Host, proxy.Port)}
-
-	p, err := context.GetProxy()
-	c.Assert(err, IsNil)
-	c.Check(p, DeepEquals, proxy)
-}
-
 func (s *ContextTestSuite) TestGetProxyNoPort(c *C) {
 	context := OfonoContext{
 		ObjectPath: "/ril_0/context1",
 		Properties: makeGenericContextProperty("Context1", contextTypeInternet, true, true, true, false),
 	}
-	context.Properties["MessageProxy"] = dbus.Variant{fmt.Sprintf("http://%s", proxy.Host)}
+	m := make(map[interface{}]interface{})
+	pr := dbus.Variant{proxy.Host}
+	m["Proxy"] = &pr
+	context.Properties["Settings"] = dbus.Variant{m}
 
 	p, err := context.GetProxy()
 	c.Assert(err, IsNil)
