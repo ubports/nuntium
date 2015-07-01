@@ -25,10 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"reflect"
-	"strconv"
-	"strings"
 	"time"
 
 	"launchpad.net/go-dbus/v1"
@@ -69,6 +66,11 @@ type ProxyInfo struct {
 	Host string
 	Port uint64
 }
+
+const PROP_SETTINGS = "Settings"
+const SETTINGS_PROXY = "Proxy"
+const SETTINGS_PROXYPORT = "ProxyPort"
+const DBUS_CALL_GET_PROPERTIES = "GetProperties"
 
 func (p ProxyInfo) String() string {
 	return fmt.Sprintf("%s:%d", p.Host, p.Port)
@@ -284,7 +286,18 @@ func activationErrorNeedsWait(err error) bool {
 	return false
 }
 
-func (context OfonoContext) toggleActive(state bool, conn *dbus.Connection) error {
+func (context *OfonoContext) getContextProperties(conn *dbus.Connection) {
+	ctxObj := conn.Object(OFONO_SENDER, context.ObjectPath)
+	if reply, err := ctxObj.Call(CONNECTION_CONTEXT_INTERFACE, DBUS_CALL_GET_PROPERTIES); err == nil {
+		if err := reply.Args(&context.Properties); err != nil {
+			log.Println("Cannot retrieve properties for", context.ObjectPath, err)
+		}
+	} else {
+		log.Println("Cannot get properties for", context.ObjectPath, err)
+	}
+}
+
+func (context *OfonoContext) toggleActive(state bool, conn *dbus.Connection) error {
 	log.Println("Trying to set Active property to", state, "for context on", state, context.ObjectPath)
 	obj := conn.Object("org.ofono", context.ObjectPath)
 	for i := 0; i < 3; i++ {
@@ -302,6 +315,8 @@ func (context OfonoContext) toggleActive(state bool, conn *dbus.Connection) erro
 				obj.Call(CONNECTION_CONTEXT_INTERFACE, "SetProperty",
 					"Preferred", dbus.Variant{true})
 			}
+			// Refresh context properties
+			context.getContextProperties(conn)
 			return nil
 		}
 	}
@@ -355,6 +370,54 @@ func (oContext OfonoContext) name() string {
 	return ""
 }
 
+func (oContext OfonoContext) settingsProxy() string {
+	v, ok := oContext.Properties[PROP_SETTINGS]
+	if !ok {
+		return ""
+	}
+
+	settings, ok := v.Value.(map[interface{}]interface{})
+	if !ok {
+		return ""
+	}
+
+	proxy_v, ok := settings[SETTINGS_PROXY]
+	if !ok {
+		return ""
+	}
+
+	proxy, ok := proxy_v.(*dbus.Variant).Value.(string)
+	if !ok {
+		return ""
+	}
+
+	return proxy
+}
+
+func (oContext OfonoContext) settingsProxyPort() uint64 {
+	v, ok := oContext.Properties[PROP_SETTINGS]
+	if !ok {
+		return 80
+	}
+
+	settings, ok := v.Value.(map[interface{}]interface{})
+	if !ok {
+		return 80
+	}
+
+	port_v, ok := settings[SETTINGS_PROXYPORT]
+	if !ok {
+		return 80
+	}
+
+	port, ok := port_v.(*dbus.Variant).Value.(uint16)
+	if !ok {
+		return 80
+	}
+
+	return uint64(port)
+}
+
 func (oContext OfonoContext) GetMessageCenter() (string, error) {
 	if oContext.hasMessageCenter() {
 		return oContext.messageCenter(), nil
@@ -364,25 +427,16 @@ func (oContext OfonoContext) GetMessageCenter() (string, error) {
 }
 
 func (oContext OfonoContext) GetProxy() (proxyInfo ProxyInfo, err error) {
-	proxy := oContext.messageProxy()
+	proxy := oContext.settingsProxy()
 	// we need to support empty proxies
 	if proxy == "" {
+		log.Println("No proxy in ofono settings")
 		return proxyInfo, nil
 	}
-	if strings.HasPrefix(proxy, "http://") {
-		proxy = proxy[len("http://"):]
-	}
-	var portString string
-	proxyInfo.Host, portString, err = net.SplitHostPort(proxy)
-	if err != nil {
-		proxyInfo.Host = proxy
-		proxyInfo.Port = 80
-		return proxyInfo, nil
-	}
-	proxyInfo.Port, err = strconv.ParseUint(portString, 0, 64)
-	if err != nil {
-		return proxyInfo, err
-	}
+
+	proxyInfo.Host = proxy
+	proxyInfo.Port = oContext.settingsProxyPort()
+
 	return proxyInfo, nil
 }
 
@@ -427,7 +481,7 @@ func (modem *Modem) GetMMSContexts(preferredContext dbus.ObjectPath) (mmsContext
 func (modem *Modem) getProperty(interfaceName, propertyName string) (*dbus.Variant, error) {
 	errorString := "Cannot retrieve %s from %s for %s: %s"
 	rilObj := modem.conn.Object(OFONO_SENDER, modem.Modem)
-	if reply, err := rilObj.Call(interfaceName, "GetProperties"); err == nil {
+	if reply, err := rilObj.Call(interfaceName, DBUS_CALL_GET_PROPERTIES); err == nil {
 		var property PropertiesType
 		if err := reply.Args(&property); err != nil {
 			return nil, fmt.Errorf(errorString, propertyName, interfaceName, modem.Modem, err)
