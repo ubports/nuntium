@@ -70,6 +70,7 @@ type ProxyInfo struct {
 const PROP_SETTINGS = "Settings"
 const SETTINGS_PROXY = "Proxy"
 const SETTINGS_PROXYPORT = "ProxyPort"
+const DBUS_CALL_GET_PROPERTIES = "GetProperties"
 
 func (p ProxyInfo) String() string {
 	return fmt.Sprintf("%s:%d", p.Host, p.Port)
@@ -285,7 +286,18 @@ func activationErrorNeedsWait(err error) bool {
 	return false
 }
 
-func (context OfonoContext) toggleActive(state bool, conn *dbus.Connection) error {
+func (context *OfonoContext) getContextProperties(conn *dbus.Connection) {
+	ctxObj := conn.Object(OFONO_SENDER, context.ObjectPath)
+	if reply, err := ctxObj.Call(CONNECTION_CONTEXT_INTERFACE, DBUS_CALL_GET_PROPERTIES); err == nil {
+		if err := reply.Args(&context.Properties); err != nil {
+			log.Println("Cannot retrieve properties for", context.ObjectPath, err)
+		}
+	} else {
+		log.Println("Cannot get properties for", context.ObjectPath, err)
+	}
+}
+
+func (context *OfonoContext) toggleActive(state bool, conn *dbus.Connection) error {
 	log.Println("Trying to set Active property to", state, "for context on", state, context.ObjectPath)
 	obj := conn.Object("org.ofono", context.ObjectPath)
 	for i := 0; i < 3; i++ {
@@ -303,6 +315,8 @@ func (context OfonoContext) toggleActive(state bool, conn *dbus.Connection) erro
 				obj.Call(CONNECTION_CONTEXT_INTERFACE, "SetProperty",
 					"Preferred", dbus.Variant{true})
 			}
+			// Refresh context properties
+			context.getContextProperties(conn)
 			return nil
 		}
 	}
@@ -416,6 +430,7 @@ func (oContext OfonoContext) GetProxy() (proxyInfo ProxyInfo, err error) {
 	proxy := oContext.settingsProxy()
 	// we need to support empty proxies
 	if proxy == "" {
+		log.Println("No proxy in ofono settings")
 		return proxyInfo, nil
 	}
 
@@ -466,7 +481,7 @@ func (modem *Modem) GetMMSContexts(preferredContext dbus.ObjectPath) (mmsContext
 func (modem *Modem) getProperty(interfaceName, propertyName string) (*dbus.Variant, error) {
 	errorString := "Cannot retrieve %s from %s for %s: %s"
 	rilObj := modem.conn.Object(OFONO_SENDER, modem.Modem)
-	if reply, err := rilObj.Call(interfaceName, "GetProperties"); err == nil {
+	if reply, err := rilObj.Call(interfaceName, DBUS_CALL_GET_PROPERTIES); err == nil {
 		var property PropertiesType
 		if err := reply.Args(&property); err != nil {
 			return nil, fmt.Errorf(errorString, propertyName, interfaceName, modem.Modem, err)
