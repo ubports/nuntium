@@ -207,16 +207,17 @@ func (modem *Modem) handleIdentity(propValue dbus.Variant) {
 }
 
 func (modem *Modem) updatePushInterfaceState(interfaces dbus.Variant) {
-	origState := modem.pushInterfaceAvailable
+	nextState := false
 	availableInterfaces := reflect.ValueOf(interfaces.Value)
 	for i := 0; i < availableInterfaces.Len(); i++ {
 		interfaceName := reflect.ValueOf(availableInterfaces.Index(i).Interface().(string)).String()
 		if interfaceName == PUSH_NOTIFICATION_INTERFACE {
-			modem.pushInterfaceAvailable = true
+			nextState = true
 			break
 		}
 	}
-	if modem.pushInterfaceAvailable != origState {
+	if modem.pushInterfaceAvailable != nextState {
+		modem.pushInterfaceAvailable = nextState
 		log.Printf("Push interface state: %t", modem.pushInterfaceAvailable)
 		if modem.pushInterfaceAvailable {
 			modem.PushInterfaceAvailable <- true
