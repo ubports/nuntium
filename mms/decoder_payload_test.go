@@ -43,6 +43,19 @@ func (s *PayloadDecoderTestSuite) TestDecodeSuccessfulMSendConf(c *C) {
 	c.Check(mSendConf.TransactionId, Equals, "ad6babe2628710c443cdeb3ff39679ac")
 }
 
+func (s *PayloadDecoderTestSuite) TestDecodeSuccessfulMRetrieveConf(c *C) {
+	inputBytes, err := ioutil.ReadFile("test_payloads/m-retrieve.conf_success")
+	c.Assert(err, IsNil)
+
+	mRetrieveConf := NewMRetrieveConf("55555555")
+	dec := NewDecoder(inputBytes)
+	err = dec.Decode(mRetrieveConf)
+	c.Assert(err, IsNil)
+	c.Check(mRetrieveConf.MessageId, Equals, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	c.Check(mRetrieveConf.From, Equals, "11111111111/TYPE=PLMN")
+	c.Check(mRetrieveConf.To[0], Equals, "2222222222/TYPE=PLMN")
+}
+
 func (s *PayloadDecoderTestSuite) TestDecodeInvalidMSendConf(c *C) {
 	inputBytes := []byte(`<html><head><title>719</title><meta http-equiv="Cache-Control" content="max-age=0" /><meta http-equiv="Cache-control" content="no-cache" /></head><body><h3 align="center">Disculpe,ha ocurrido un error: Failure to Query from Radius Server</h3><br/><p>Por favor, regrese al menu anterior o acceda al siguiente link.<br/></p><ul><li><a href="http://wap.personal.com.ar/"><strong>Home Personal</strong></a></li></ul></body></html>^M`)
 

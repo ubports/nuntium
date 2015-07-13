@@ -386,6 +386,7 @@ func (dec *MMSDecoder) Decode(pdu MMSReader) (err error) {
 		case FROM:
 			dec.Offset++
 			size := int(dec.Data[dec.Offset])
+			valStart := dec.Offset
 			dec.Offset++
 			token := dec.Data[dec.Offset]
 			switch token {
@@ -393,11 +394,10 @@ func (dec *MMSDecoder) Decode(pdu MMSReader) (err error) {
 				break
 			case TOKEN_ADDRESS_PRESENT:
 				// TODO add check for /TYPE=PLMN
-				var from string
-				from, err = dec.ReadString(&reflectedPdu, "From")
-				// size - 2 == size - token - '0'
-				if len(from) != size-2 {
-					err = fmt.Errorf("From field is %d but expected size is %d", len(from), size-2)
+				_, err = dec.ReadEncodedString(&reflectedPdu, "From")
+				if valStart+size != dec.Offset {
+					err = fmt.Errorf("From field length is %d but expected size is %d",
+						dec.Offset-valStart, size)
 				}
 			default:
 				err = fmt.Errorf("Unhandled token address in from field %x", token)
