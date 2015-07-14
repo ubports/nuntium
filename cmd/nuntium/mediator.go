@@ -35,14 +35,14 @@ import (
 )
 
 type Mediator struct {
-	modem                 *ofono.Modem
-	telepathyService      *telepathy.MMSService
-	NewMNotificationInd   chan *mms.MNotificationInd
-	NewMSendReq           chan *mms.MSendReq
-	NewMSendReqFile       chan struct{ filePath, uuid string }
-	outMessage            chan *telepathy.OutgoingMessage
-	terminate             chan bool
-	contextLock           sync.Mutex
+	modem               *ofono.Modem
+	telepathyService    *telepathy.MMSService
+	NewMNotificationInd chan *mms.MNotificationInd
+	NewMSendReq         chan *mms.MSendReq
+	NewMSendReqFile     chan struct{ filePath, uuid string }
+	outMessage          chan *telepathy.OutgoingMessage
+	terminate           chan bool
+	contextLock         sync.Mutex
 }
 
 //TODO these vars need a configuration location managed by system settings or
@@ -186,7 +186,10 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		log.Print("Download issues: ", err)
 		return
 	} else {
-		storage.UpdateDownloaded(mNotificationInd.UUID, filePath)
+		if err := storage.UpdateDownloaded(mNotificationInd.UUID, filePath); err != nil {
+			log.Println("When calling UpdateDownloaded: ", err)
+			return
+		}
 	}
 
 	mRetrieveConf, err := mediator.handleMRetrieveConf(mNotificationInd.UUID)
