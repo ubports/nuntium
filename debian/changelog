@@ -1,4 +1,4 @@
-nuntium (1.4+15.10.20150713-0ubuntu1) UNRELEASED; urgency=medium
+nuntium (1.4+15.10.20150714-0ubuntu1) wily; urgency=medium
 
   [ Dennis O'Flaherty ]
   * Enable receiving non-SMIL messages
@@ -6,7 +6,7 @@ nuntium (1.4+15.10.20150713-0ubuntu1) UNRELEASED; urgency=medium
   [ Alfonso Sanchez-Beato (email Canonical) ]
   * Fix decoding of From field value (LP: #1360403)
 
- -- Alfonso Sanchez-Beato (email Canonical) <alfonso.sanchez-beato@canonical.com>  Mon, 13 Jul 2015 18:05:52 +0200
+ -- CI Train Bot <ci-train-bot@canonical.com>  Tue, 14 Jul 2015 09:19:52 +0000
 
 nuntium (1.4+15.10.20150707.1-0ubuntu1) wily; urgency=medium
 
