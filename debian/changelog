@@ -1,3 +1,11 @@
+nuntium (1.4+15.10.20150902-0ubuntu1) wily; urgency=medium
+
+  [ Alfonso Sanchez-Beato ]
+  * [ Dimitri John Ledkov ] Migrate from :sys:started events to dbus
+    owner signals.
+
+ -- CI Train Bot <ci-train-bot@canonical.com>  Wed, 02 Sep 2015 12:09:41 +0000
+
 nuntium (1.4+15.10.20150714-0ubuntu1) wily; urgency=medium
 
   [ Dennis O'Flaherty ]
