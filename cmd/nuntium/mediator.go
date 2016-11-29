@@ -27,11 +27,14 @@ import (
 	"log"
 	"os"
 	"sync"
+	"os/user"
 
 	"github.com/ubuntu-phonedations/nuntium/mms"
 	"github.com/ubuntu-phonedations/nuntium/ofono"
 	"github.com/ubuntu-phonedations/nuntium/storage"
 	"github.com/ubuntu-phonedations/nuntium/telepathy"
+
+	"launchpad.net/go-dbus/v1"
 )
 
 type Mediator struct {
@@ -74,6 +77,9 @@ mediatorLoop:
 		case push, ok := <-mediator.modem.PushAgent.Push:
 			if !ok {
 				log.Print("PushChannel is closed")
+				continue
+			}
+			if !mmsEnabled() {
 				continue
 			}
 			go mediator.handleMNotificationInd(push)
@@ -420,4 +426,31 @@ func (mediator *Mediator) uploadFile(filePath string) (string, error) {
 	mSendRespFile, uploadErr := mms.Upload(filePath, msc, proxy.Host, int32(proxy.Port))
 
 	return mSendRespFile, uploadErr
+}
+
+// by default this method returns true, unless it is strictly requested to disable
+func mmsEnabled() (bool) {
+	conn, err := dbus.Connect(dbus.SystemBus)
+	if err != nil {
+	        return true
+	}
+	usr, err := user.Current()
+	if err != nil {
+		return true
+	}
+	activeUser := dbus.ObjectPath("/org/freedesktop/Accounts/User" + usr.Uid)
+
+	obj := conn.Object("org.freedesktop.Accounts", activeUser)
+
+	reply, err := obj.Call("org.freedesktop.DBus.Properties", "Get", "com.ubuntu.touch.AccountsService.Phone", "MmsEnabled")
+	if err != nil || reply.Type == dbus.TypeError {
+		fmt.Println(fmt.Errorf("failed to get mms option: %s", err))
+		return true
+	}
+	mms := dbus.Variant{true}
+	if err := reply.Args(&mms); err == nil {
+		return mms.Value.(bool)
+	}
+
+	return true
 }
