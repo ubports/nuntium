@@ -13,7 +13,8 @@ rm -r \
 	$gopkg_path/.travis.yml \
 	$gopkg_path/.gitignore \
 	$gopkg_path/README.md \
-	$gopkg_path/cmd
+	$gopkg_path/cmd \
+	$gopkg_path/Jenkinsfile
 
 [ -f $build_dir/usr/bin/*/test ] && rm $build_dir/usr/bin/*/test
 [ -f $build_dir/usr/bin/test ] && rm $build_dir/usr/bin/test
