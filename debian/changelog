@@ -1,8 +1,8 @@
-indicator-network (1.4+ubports1) xenial; urgency=medium
+nuntium (1.4+ubports1) xenial; urgency=medium
 
   * Imported to UBports
 
- -- Florian Leeber <infra@ubports.com>  Fri, 4 Apr 2020 14:34:03 +0200
+ -- Florian Leeber <florian@ubports.com>  Fri, 4 Apr 2020 14:34:03 +0200
  
  nuntium (1.4+15.10.20150902-0ubuntu1) wily; urgency=medium
 
