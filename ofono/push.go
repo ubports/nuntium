@@ -102,7 +102,7 @@ func (dec *PushPDUDecoder) decodeHeaders(pdu *PushPDU, hdrLengthRemain int) erro
 			err = fmt.Errorf("Unhandled header data %#x @%d", dec.Data[dec.Offset], dec.Offset)
 		}
 		if err != nil {
-			return fmt.Errorf("error while decoding %#x @%d: ", param, dec.Offset, err)
+			return fmt.Errorf("error while decoding %#x @%d: %v", param, dec.Offset, err)
 		} else if pdu.ApplicationId != 0 {
 			return nil
 		}
