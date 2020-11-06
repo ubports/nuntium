@@ -27,7 +27,7 @@ import (
 	"log"
 	"sync"
 
-	"github.com/ubuntu-phonedations/nuntium/mms"
+	"github.com/ubports/nuntium/mms"
 	"launchpad.net/go-dbus/v1"
 )
 
