@@ -49,7 +49,7 @@ func (mm *ModemManager) Init() error {
 	//Use a different connection for the modem signals to avoid go-dbus blocking issues
 	conn, err := dbus.Connect(dbus.SystemBus)
 	if err != nil {
-		return err;
+		return err
 	}
 
 	modemAddedSignal, err := connectToSignal(conn, "/", OFONO_MANAGER_INTERFACE, "ModemAdded")
@@ -97,7 +97,7 @@ func (mm *ModemManager) watchModems(modemAdded, modemRemoved *dbus.SignalWatch) 
 
 func (mm *ModemManager) addModem(objectPath dbus.ObjectPath) {
 	if modem, ok := mm.modems[objectPath]; ok {
-		log.Print("Need to delete stale modem instance %s", modem.Modem)
+		log.Printf("Need to delete stale modem instance %s", modem.Modem)
 		modem.Delete()
 		delete(mm.modems, objectPath)
 	}

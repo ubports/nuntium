@@ -83,7 +83,7 @@ func (agent *PushAgent) Unregister() error {
 	agent.m.Lock()
 	defer agent.m.Unlock()
 	if !agent.Registered {
-		log.Print("Agent no registered for %s", agent.modem)
+		log.Printf("Agent no registered for %s", agent.modem)
 		return nil
 	}
 	log.Print("Unregistering agent on ", agent.modem)
