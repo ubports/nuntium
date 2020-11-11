@@ -256,6 +256,25 @@ func (service *MMSService) MessageRemoved(objectPath dbus.ObjectPath) error {
 	return nil
 }
 
+func (service *MMSService) IncomingMessageFailAdded(UUID string, from string) error {
+	//just handle that mms as an empty MMS
+	params := make(map[string]dbus.Variant)
+
+	params["Status"] = dbus.Variant{"received"}
+	date := time.Now().Format(time.RFC3339)
+	params["Date"] = dbus.Variant{date}
+
+	sender := from
+	if strings.HasSuffix(from, PLMN) {
+		params["Sender"] = dbus.Variant{sender[:len(sender)-len(PLMN)]}
+	}
+
+	payload := Payload{Path: service.genMessagePath(UUID), Properties: params}
+
+	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan)
+	return service.MessageAdded(&payload)
+}
+
 //IncomingMessageAdded emits a MessageAdded with the path to the added message which
 //is taken as a parameter and creates an object path on the message interface.
 func (service *MMSService) IncomingMessageAdded(mRetConf *mms.MRetrieveConf) error {

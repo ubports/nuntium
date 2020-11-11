@@ -154,7 +154,6 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 
 	var proxy ofono.ProxyInfo
 	var mmsContext ofono.OfonoContext
-
 	if mNotificationInd.IsLocal() {
 		log.Print("This is a local test, skipping context activation and proxy settings")
 	} else {
@@ -163,6 +162,7 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		mmsContext, err = mediator.modem.ActivateMMSContext(preferredContext)
 		if err != nil {
 			log.Print("Cannot activate ofono context: ", err)
+			mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd.UUID, mNotificationInd.From)
 			return
 		}
 		defer func() {
@@ -177,6 +177,7 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		proxy, err = mmsContext.GetProxy()
 		if err != nil {
 			log.Print("Error retrieving proxy: ", err)
+			mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd.UUID, mNotificationInd.From)
 			return
 		}
 	}
@@ -184,6 +185,7 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 	if filePath, err := mNotificationInd.DownloadContent(proxy.Host, int32(proxy.Port)); err != nil {
 		//TODO telepathy service signal the download error
 		log.Print("Download issues: ", err)
+		mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd.UUID, mNotificationInd.From)
 		return
 	} else {
 		if err := storage.UpdateDownloaded(mNotificationInd.UUID, filePath); err != nil {
