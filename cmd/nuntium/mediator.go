@@ -80,6 +80,7 @@ mediatorLoop:
 				continue
 			}
 			if !mmsEnabled() {
+				log.Print("MMS is disabled")
 				continue
 			}
 			go mediator.handleMNotificationInd(push)
@@ -430,29 +431,33 @@ func (mediator *Mediator) uploadFile(filePath string) (string, error) {
 	return mSendRespFile, uploadErr
 }
 
-// by default this method returns true, unless it is strictly requested to disable
+// By default this method returns true, unless it is strictly requested to disable.
 func mmsEnabled() bool {
 	conn, err := dbus.Connect(dbus.SystemBus)
 	if err != nil {
+		log.Printf("mmsEnabled: connecting to dbus failed: %v", err)
 		return true
 	}
+
 	usr, err := user.Current()
 	if err != nil {
+		log.Printf("mmsEnabled: getting user failed: %v", err)
 		return true
 	}
 	activeUser := dbus.ObjectPath("/org/freedesktop/Accounts/User" + usr.Uid)
 
 	obj := conn.Object("org.freedesktop.Accounts", activeUser)
-
 	reply, err := obj.Call("org.freedesktop.DBus.Properties", "Get", "com.ubuntu.touch.AccountsService.Phone", "MmsEnabled")
 	if err != nil || reply.Type == dbus.TypeError {
-		fmt.Println(fmt.Errorf("failed to get mms option: %s", err))
+		log.Printf("mmsEnabled: failed to get mms option: %v", err)
 		return true
 	}
+
 	mms := dbus.Variant{true}
-	if err := reply.Args(&mms); err == nil {
-		return mms.Value.(bool)
+	if err := reply.Args(&mms); err != nil {
+		log.Printf("mmsEnabled: failed to get mms option reply: %v", err)
+		return true
 	}
 
-	return true
+	return mms.Value.(bool)
 }
