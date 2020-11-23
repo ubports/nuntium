@@ -25,7 +25,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ubuntu-phonedations/nuntium/mms"
+	"github.com/ubports/nuntium/mms"
 	. "launchpad.net/gocheck"
 )
 

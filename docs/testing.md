@@ -14,9 +14,9 @@ artifacts into a specific path.
 
 Install it by running:
 
-    go get github.com/ubuntu-phonedations/nuntium/cmd/nuntium-decode-cli
+    go get github.com/ubports/nuntium/cmd/nuntium-decode-cli
 
-Refer to the tool's [documentation](http://godoc.org/github.com/ubuntu-phonedations/nuntium/cmd/nuntium-decode-cli)
+Refer to the tool's [documentation](https://pkg.go.dev/github.com/ubports/nuntium/cmd/nuntium-decode-cli)
 for more information.
 
 
@@ -29,10 +29,10 @@ when trying to activate a context.
 
 Install it by running:
 
-    go get github.com/ubuntu-phonedations/nuntium/cmd/nuntium-preferred-context
+    go get github.com/ubports/nuntium/cmd/nuntium-preferred-context
 
 Refer to the tool's
-[documentation](http://godoc.org/github.com/ubuntu-phonedations/nuntium/cmd/nuntium-preferred-context)
+[documentation](https://pkg.go.dev/github.com/ubports/nuntium/cmd/nuntium-preferred-context)
 for more information.
 
 
@@ -77,7 +77,7 @@ simulate a black box workflow as described in
 
 Install it by running:
 
-    go get github.com/ubuntu-phonedations/nuntium/cmd/nuntium-inject-push
+    go get github.com/ubports/nuntium/cmd/nuntium-inject-push
 
 This tool does not mock out ofono completely, but instead what it creates a
 local server to serve an mms that would be passed on from the Push
@@ -110,15 +110,8 @@ It will track that the correct signals are raised over the bus.
 
 Install it by running:
 
-    go get github.com/ubuntu-phonedations/nuntium/cmd/nuntium-stub-send
+    go get github.com/ubports/nuntium/cmd/nuntium-stub-send
 
 Refer to the tool's
-[documentation](http://godoc.org/github.com/ubuntu-phonedations/nuntium/cmd/nuntium-stub-send)
+[documentation](https://pkg.go.dev/github.com/ubports/nuntium/cmd/nuntium-stub-send)
 for more information.
-
-
-## Installing on Ubuntu
-
-On Ubuntu (vivid+), all of the `nuntium-*` tools can be installed by
-
-    sudo apt install nuntium-tools

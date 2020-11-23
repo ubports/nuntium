@@ -30,8 +30,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ubuntu-phonedations/nuntium/mms"
-	"github.com/ubuntu-phonedations/nuntium/storage"
+	"github.com/ubports/nuntium/mms"
+	"github.com/ubports/nuntium/storage"
 	"launchpad.net/go-dbus/v1"
 )
 

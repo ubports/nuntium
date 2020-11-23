@@ -15,10 +15,11 @@ requirements that satisfy an Ubuntu Phone (aka Ubuntu Touch).
 Addtional information:
 
 * [mmsd documentaion](https://kernel.googlesource.com/pub/scm/network/ofono/mmsd/+/master/doc/)
-
+* This project is a continuation of [the ubuntu-phonedations nuntium project](https://github.com/ubuntu-phonedations/nuntium/). 
 
 Crossbuilder:
 
+```bash
 crossbuilder inst-foreign dh-golang \
     golang-1.6-doc \
     golang-1.6 \
@@ -27,3 +28,4 @@ crossbuilder inst-foreign dh-golang \
     golang-go-xdg-dev \
     golang-gocheck-dev\
     golang-udm-dev
+```

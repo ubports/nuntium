@@ -29,11 +29,10 @@ import (
 	"os/user"
 	"sync"
 
-	"github.com/ubuntu-phonedations/nuntium/mms"
-	"github.com/ubuntu-phonedations/nuntium/ofono"
-	"github.com/ubuntu-phonedations/nuntium/storage"
-	"github.com/ubuntu-phonedations/nuntium/telepathy"
-
+	"github.com/ubports/nuntium/mms"
+	"github.com/ubports/nuntium/ofono"
+	"github.com/ubports/nuntium/storage"
+	"github.com/ubports/nuntium/telepathy"
 	"launchpad.net/go-dbus/v1"
 )
 

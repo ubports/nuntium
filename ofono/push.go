@@ -26,7 +26,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/ubuntu-phonedations/nuntium/mms"
+	"github.com/ubports/nuntium/mms"
 )
 
 type PDU byte

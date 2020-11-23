@@ -26,8 +26,8 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/ubuntu-phonedations/nuntium/ofono"
-	"github.com/ubuntu-phonedations/nuntium/telepathy"
+	"github.com/ubports/nuntium/ofono"
+	"github.com/ubports/nuntium/telepathy"
 	"launchpad.net/go-dbus/v1"
 )
 
