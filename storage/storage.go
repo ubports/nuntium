@@ -24,9 +24,11 @@ package storage
 import (
 	"bufio"
 	"encoding/json"
+	"log"
 	"os"
 	"path"
 
+	"github.com/ubports/nuntium/mms"
 	"launchpad.net/go-xdg/v0"
 )
 
@@ -45,6 +47,7 @@ func Create(uuid, contentLocation string) error {
 }
 
 func Destroy(uuid string) error {
+	log.Printf("storage.Destroy(%v)", uuid)
 	if storePath, err := xdg.Data.Ensure(path.Join(SUBPATH, uuid+".db")); err == nil {
 		if err := os.Remove(storePath); err != nil {
 			return err
@@ -52,13 +55,22 @@ func Destroy(uuid string) error {
 	} else {
 		return err
 	}
-	if mmsPath, err := GetMMS(uuid); err == nil {
-		if err := os.Remove(mmsPath); err != nil {
+
+	if mNotificationIndPath, err := GetMNotificationInd(uuid); err == nil {
+		log.Printf("storage.Destroy: found mNotificationIndPath: %v", mNotificationIndPath)
+		if err := os.Remove(mNotificationIndPath); err != nil {
 			return err
 		}
 	} else {
-		return err
+		if mmsPath, err := GetMMS(uuid); err == nil {
+			if err := os.Remove(mmsPath); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
 	}
+
 	return nil
 }
 
@@ -70,15 +82,59 @@ func CreateResponseFile(uuid string) (*os.File, error) {
 	return os.Create(filePath)
 }
 
+func UpdateFailed(mNotificationInd *mms.MNotificationInd) error {
+	log.Printf("storage.UpdateFailed(%v)", mNotificationInd)
+	if mmsPath, err := GetMMS(mNotificationInd.UUID); err == nil {
+		log.Printf("storage.UpdateFailed: found %v, deleting", mmsPath)
+		if err := os.Remove(mmsPath); err != nil {
+			return err
+		}
+	}
+	//TODO:jezek Create this file on Create()? Do we really need it? Isn't ContentLocation enough?
+	log.Printf("storage.UpdateFailed: saving mNotificationInd to file %v: %#v", path.Join(SUBPATH, mNotificationInd.UUID+".m-notify.ind"), mNotificationInd)
+	mNotificationIndPath, err := xdg.Data.Ensure(path.Join(SUBPATH, mNotificationInd.UUID+".m-notify.ind"))
+	if err != nil {
+		return err
+	}
+
+	file, err := os.Create(mNotificationIndPath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		file.Close()
+		if err != nil {
+			os.Remove(mNotificationIndPath)
+		}
+	}()
+
+	w := bufio.NewWriter(file)
+	defer w.Flush()
+	jsonWriter := json.NewEncoder(w)
+	if err := jsonWriter.Encode(mNotificationInd); err != nil {
+		return err
+	}
+	return nil
+}
+
 func UpdateDownloaded(uuid, filePath string) error {
 	mmsPath, err := xdg.Data.Ensure(path.Join(SUBPATH, uuid+".mms"))
 	if err != nil {
 		return err
 	}
+	log.Printf("storage.UpdateDownloaded(%v): rename %v to %v", uuid, filePath, mmsPath)
 	if err := os.Rename(filePath, mmsPath); err != nil {
-		//TODO delete file
+		os.Remove(mmsPath)
 		return err
 	}
+
+	if mNotificationIndPath, err := GetMNotificationInd(uuid); err == nil {
+		log.Printf("storage.UpdateDownloaded(%v): found mNotificationIndPath: %v", uuid, mNotificationIndPath)
+		if err := os.Remove(mNotificationIndPath); err != nil {
+			return err
+		}
+	}
+
 	state := MMSState{
 		State: DOWNLOADED,
 	}
@@ -121,6 +177,11 @@ func CreateSendFile(uuid string) (*os.File, error) {
 
 func GetMMS(uuid string) (string, error) {
 	return xdg.Data.Find(path.Join(SUBPATH, uuid+".mms"))
+}
+
+func GetMNotificationInd(uuid string) (string, error) {
+	log.Printf("storage.GetMNotificationInd: looking for: %v", path.Join(SUBPATH, uuid+".m-notify.ind"))
+	return xdg.Data.Find(path.Join(SUBPATH, uuid+".m-notify.ind"))
 }
 
 func writeState(state MMSState, storePath string) error {

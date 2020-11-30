@@ -26,6 +26,7 @@ import (
 	"log"
 	"sort"
 
+	"github.com/ubports/nuntium/mms"
 	"launchpad.net/go-dbus/v1"
 )
 
@@ -37,11 +38,12 @@ func init() {
 }
 
 type MessageInterface struct {
-	conn       *dbus.Connection
-	objectPath dbus.ObjectPath
-	msgChan    chan *dbus.Message
-	deleteChan chan dbus.ObjectPath
-	status     string
+	conn                 *dbus.Connection
+	objectPath           dbus.ObjectPath
+	msgChan              chan *dbus.Message
+	deleteChan           chan dbus.ObjectPath
+	status               string
+	mNotificationIndChan chan<- *mms.MNotificationInd
 }
 
 func NewMessageInterface(conn *dbus.Connection, objectPath dbus.ObjectPath, deleteChan chan dbus.ObjectPath) *MessageInterface {
@@ -64,12 +66,17 @@ func (msgInterface *MessageInterface) Close() {
 }
 
 func (msgInterface *MessageInterface) watchDBusMethodCalls() {
+	log.Printf("msgInterface %v: watchDBusMethodCalls(): start", msgInterface.objectPath)
+	defer log.Printf("msgInterface %v: watchDBusMethodCalls(): end", msgInterface.objectPath)
 	var reply *dbus.Message
 
 	for msg := range msgInterface.msgChan {
+		log.Printf("msgInterface %v: Received message: %v", msgInterface.objectPath, msg)
 		if msg.Interface != MMS_MESSAGE_DBUS_IFACE {
+			//TODO:jezek Distinguish between this and next "Received unknown ..." error in log.
 			log.Println("Received unkown method call on", msg.Interface, msg.Member)
 			reply = dbus.NewErrorMessage(msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method")
+			//TODO:jezek Send the reply?
 			continue
 		}
 		switch msg.Member {
