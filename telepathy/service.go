@@ -22,9 +22,11 @@
 package telepathy
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -101,14 +103,62 @@ func NewMMSService(conn *dbus.Connection, modemObjPath dbus.ObjectPath, identity
 
 func (service *MMSService) watchMessageDeleteCalls() {
 	for msgObjectPath := range service.msgDeleteChan {
+		//TODO:jezek Extract uuid. check for m-notify.ind and if found, try to decode and download again.
+		mNotificationInd := func() *mms.MNotificationInd {
+			uuid, err := getUUIDFromObjectPath(msgObjectPath)
+			if err != nil {
+				log.Print("UUID retrieving error:", err)
+				return nil
+			}
+
+			mNotificationIndPath, err := storage.GetMNotificationInd(uuid)
+			if err != nil {
+				log.Print("No mNotificationInd file")
+				return nil
+			}
+
+			file, err := os.Open(mNotificationIndPath)
+			if err != nil {
+				log.Print("mNotificationInd file open error:", err)
+				return nil
+			}
+			defer file.Close()
+
+			jsonReader := json.NewDecoder(file)
+			mNotificationInd := (*mms.MNotificationInd)(nil)
+			if err := jsonReader.Decode(&mNotificationInd); err != nil {
+				log.Print("mNotificationInd file decoding error:", err)
+				return nil
+			}
+
+			return mNotificationInd
+		}()
+		mNotificationIndChan := service.messageHandlers[msgObjectPath].mNotificationIndChan
+		log.Printf("MMSService.watchMessageDeleteCalls: msgObjectPath: %v", msgObjectPath)
+		log.Printf("MMSService.watchMessageDeleteCalls: mNotificationIndChan: %v", mNotificationIndChan)
+		log.Printf("MMSService.watchMessageDeleteCalls: mNotificationInd: %#v", mNotificationInd)
+
 		if err := service.MessageRemoved(msgObjectPath); err != nil {
 			log.Print("Failed to delete ", msgObjectPath, ": ", err)
 		}
+
+		if mNotificationInd != nil {
+			if mNotificationIndChan != nil {
+				storage.Create(mNotificationInd.UUID, mNotificationInd.ContentLocation)
+				mNotificationIndChan <- mNotificationInd
+			} else {
+				log.Print("Upon message destructon mNotificationInd is no nil, but channel is")
+			}
+		}
+
 	}
 }
 
 func (service *MMSService) watchDBusMethodCalls() {
+	log.Printf("service %v: watchDBusMethodCalls(): start", service.identity)
+	defer log.Printf("service %v: watchDBusMethodCalls(): end", service.identity)
 	for msg := range service.msgChan {
+		log.Printf("service %v: watchDBusMethodCalls(): Received message: %v", service.identity, msg)
 		var reply *dbus.Message
 		if msg.Interface != MMS_SERVICE_DBUS_IFACE {
 			log.Println("Received unkown method call on", msg.Interface, msg.Member)
@@ -116,6 +166,7 @@ func (service *MMSService) watchDBusMethodCalls() {
 				msg,
 				"org.freedesktop.DBus.Error.UnknownInterface",
 				fmt.Sprintf("No such interface '%s' at object path '%s'", msg.Interface, msg.Path))
+			//TODO:jezek Send the reply?
 			continue
 		}
 		switch msg.Member {
@@ -256,7 +307,7 @@ func (service *MMSService) MessageRemoved(objectPath dbus.ObjectPath) error {
 	return nil
 }
 
-func (service *MMSService) IncomingMessageFailAdded(UUID string, from string) error {
+func (service *MMSService) IncomingMessageFailAdded(UUID string, from string, mNotificationIndChan chan<- *mms.MNotificationInd) error {
 	//just handle that mms as an empty MMS
 	params := make(map[string]dbus.Variant)
 
@@ -272,6 +323,7 @@ func (service *MMSService) IncomingMessageFailAdded(UUID string, from string) er
 	payload := Payload{Path: service.genMessagePath(UUID), Properties: params}
 
 	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan)
+	service.messageHandlers[payload.Path].mNotificationIndChan = mNotificationIndChan
 	return service.MessageAdded(&payload)
 }
 
@@ -289,6 +341,7 @@ func (service *MMSService) IncomingMessageAdded(mRetConf *mms.MRetrieveConf) err
 //MessageAdded emits a MessageAdded with the path to the added message which
 //is taken as a parameter
 func (service *MMSService) MessageAdded(msgPayload *Payload) error {
+	log.Printf("service %v: MessageAdded(): payload: %v", service.identity, msgPayload)
 	signal := dbus.NewSignalMessage(service.payload.Path, MMS_SERVICE_DBUS_IFACE, messageAddedSignal)
 	if err := signal.AppendArgs(msgPayload.Path, msgPayload.Properties); err != nil {
 		return err
