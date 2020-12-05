@@ -26,7 +26,6 @@ import (
 	"log"
 	"sort"
 
-	"github.com/ubports/nuntium/mms"
 	"launchpad.net/go-dbus/v1"
 )
 
@@ -38,12 +37,11 @@ func init() {
 }
 
 type MessageInterface struct {
-	conn                 *dbus.Connection
-	objectPath           dbus.ObjectPath
-	msgChan              chan *dbus.Message
-	deleteChan           chan dbus.ObjectPath
-	status               string
-	mNotificationIndChan chan<- *mms.MNotificationInd
+	conn       *dbus.Connection
+	objectPath dbus.ObjectPath
+	msgChan    chan *dbus.Message
+	deleteChan chan dbus.ObjectPath
+	status     string
 }
 
 func NewMessageInterface(conn *dbus.Connection, objectPath dbus.ObjectPath, deleteChan chan dbus.ObjectPath) *MessageInterface {

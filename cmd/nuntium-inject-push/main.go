@@ -38,7 +38,7 @@ func main() {
 		if args.DenialCount > 0 {
 			fmt.Println("Serving MMS content denied")
 			args.DenialCount -= 1
-			http.Error(w, "Intentional denial", http.StatusNoContent)
+			http.Error(w, "Intentional denial", http.StatusInternalServerError)
 			return
 		}
 		fmt.Print("Serving MMS content...")

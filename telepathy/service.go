@@ -22,11 +22,9 @@
 package telepathy
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -45,14 +43,15 @@ type Payload struct {
 }
 
 type MMSService struct {
-	payload         Payload
-	Properties      map[string]dbus.Variant
-	conn            *dbus.Connection
-	msgChan         chan *dbus.Message
-	messageHandlers map[dbus.ObjectPath]*MessageInterface
-	msgDeleteChan   chan dbus.ObjectPath
-	identity        string
-	outMessage      chan *OutgoingMessage
+	payload              Payload
+	Properties           map[string]dbus.Variant
+	conn                 *dbus.Connection
+	msgChan              chan *dbus.Message
+	messageHandlers      map[dbus.ObjectPath]*MessageInterface
+	msgDeleteChan        chan dbus.ObjectPath
+	identity             string
+	outMessage           chan *OutgoingMessage
+	mNotificationIndChan chan<- *mms.MNotificationInd
 }
 
 type Attachment struct {
@@ -75,7 +74,7 @@ type OutgoingMessage struct {
 	Reply       *dbus.Message
 }
 
-func NewMMSService(conn *dbus.Connection, modemObjPath dbus.ObjectPath, identity string, outgoingChannel chan *OutgoingMessage, useDeliveryReports bool) *MMSService {
+func NewMMSService(conn *dbus.Connection, modemObjPath dbus.ObjectPath, identity string, outgoingChannel chan *OutgoingMessage, useDeliveryReports bool, mNotificationIndChan chan<- *mms.MNotificationInd) *MMSService {
 	properties := make(map[string]dbus.Variant)
 	properties[identityProperty] = dbus.Variant{identity}
 	serviceProperties := make(map[string]dbus.Variant)
@@ -86,14 +85,15 @@ func NewMMSService(conn *dbus.Connection, modemObjPath dbus.ObjectPath, identity
 		Properties: properties,
 	}
 	service := MMSService{
-		payload:         payload,
-		Properties:      serviceProperties,
-		conn:            conn,
-		msgChan:         make(chan *dbus.Message),
-		msgDeleteChan:   make(chan dbus.ObjectPath),
-		messageHandlers: make(map[dbus.ObjectPath]*MessageInterface),
-		outMessage:      outgoingChannel,
-		identity:        identity,
+		payload:              payload,
+		Properties:           serviceProperties,
+		conn:                 conn,
+		msgChan:              make(chan *dbus.Message),
+		msgDeleteChan:        make(chan dbus.ObjectPath),
+		messageHandlers:      make(map[dbus.ObjectPath]*MessageInterface),
+		outMessage:           outgoingChannel,
+		identity:             identity,
+		mNotificationIndChan: mNotificationIndChan,
 	}
 	go service.watchDBusMethodCalls()
 	go service.watchMessageDeleteCalls()
@@ -103,7 +103,7 @@ func NewMMSService(conn *dbus.Connection, modemObjPath dbus.ObjectPath, identity
 
 func (service *MMSService) watchMessageDeleteCalls() {
 	for msgObjectPath := range service.msgDeleteChan {
-		//TODO:jezek Extract uuid. check for m-notify.ind and if found, try to decode and download again.
+
 		mNotificationInd := func() *mms.MNotificationInd {
 			uuid, err := getUUIDFromObjectPath(msgObjectPath)
 			if err != nil {
@@ -111,31 +111,26 @@ func (service *MMSService) watchMessageDeleteCalls() {
 				return nil
 			}
 
-			mNotificationIndPath, err := storage.GetMNotificationInd(uuid)
+			mmsState, err := storage.GetMMSState(uuid)
 			if err != nil {
-				log.Print("No mNotificationInd file")
+				log.Print("MMS state retrieving error:", err)
 				return nil
 			}
 
-			file, err := os.Open(mNotificationIndPath)
-			if err != nil {
-				log.Print("mNotificationInd file open error:", err)
-				return nil
-			}
-			defer file.Close()
-
-			jsonReader := json.NewDecoder(file)
-			mNotificationInd := (*mms.MNotificationInd)(nil)
-			if err := jsonReader.Decode(&mNotificationInd); err != nil {
-				log.Print("mNotificationInd file decoding error:", err)
+			if mmsState.State != storage.NOTIFICATION {
+				log.Print("MMS was already downloaded")
 				return nil
 			}
 
-			return mNotificationInd
+			mNotificationInd := mms.MNotificationInd{
+				Type:            mms.TYPE_NOTIFICATION_IND,
+				UUID:            uuid,
+				ContentLocation: mmsState.ContentLocation,
+			}
+
+			return &mNotificationInd
 		}()
-		mNotificationIndChan := service.messageHandlers[msgObjectPath].mNotificationIndChan
 		log.Printf("MMSService.watchMessageDeleteCalls: msgObjectPath: %v", msgObjectPath)
-		log.Printf("MMSService.watchMessageDeleteCalls: mNotificationIndChan: %v", mNotificationIndChan)
 		log.Printf("MMSService.watchMessageDeleteCalls: mNotificationInd: %#v", mNotificationInd)
 
 		if err := service.MessageRemoved(msgObjectPath); err != nil {
@@ -143,14 +138,9 @@ func (service *MMSService) watchMessageDeleteCalls() {
 		}
 
 		if mNotificationInd != nil {
-			if mNotificationIndChan != nil {
-				storage.Create(mNotificationInd.UUID, mNotificationInd.ContentLocation)
-				mNotificationIndChan <- mNotificationInd
-			} else {
-				log.Print("Upon message destructon mNotificationInd is no nil, but channel is")
-			}
+			storage.Create(mNotificationInd.UUID, mNotificationInd.ContentLocation)
+			service.mNotificationIndChan <- mNotificationInd
 		}
-
 	}
 }
 
@@ -307,7 +297,7 @@ func (service *MMSService) MessageRemoved(objectPath dbus.ObjectPath) error {
 	return nil
 }
 
-func (service *MMSService) IncomingMessageFailAdded(UUID string, from string, mNotificationIndChan chan<- *mms.MNotificationInd) error {
+func (service *MMSService) IncomingMessageFailAdded(UUID string, from string) error {
 	//just handle that mms as an empty MMS
 	params := make(map[string]dbus.Variant)
 
@@ -323,7 +313,6 @@ func (service *MMSService) IncomingMessageFailAdded(UUID string, from string, mN
 	payload := Payload{Path: service.genMessagePath(UUID), Properties: params}
 
 	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan)
-	service.messageHandlers[payload.Path].mNotificationIndChan = mNotificationIndChan
 	return service.MessageAdded(&payload)
 }
 

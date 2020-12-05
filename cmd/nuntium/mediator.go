@@ -97,7 +97,7 @@ mediatorLoop:
 			go mediator.sendMSendReq(mSendReqFile.filePath, mSendReqFile.uuid)
 		case id := <-mediator.modem.IdentityAdded:
 			var err error
-			mediator.telepathyService, err = mmsManager.AddService(id, mediator.modem.Modem, mediator.outMessage, useDeliveryReports)
+			mediator.telepathyService, err = mmsManager.AddService(id, mediator.modem.Modem, mediator.outMessage, useDeliveryReports, mediator.NewMNotificationInd)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -154,16 +154,6 @@ func (mediator *Mediator) handleDeferredDownload(mNotificationInd *mms.MNotifica
 	//TODO send MessageAdded with status="deferred" and mNotificationInd relevant headers
 }
 
-// Handles failed MMS download or decoding.
-// Stores the mNotificationInd and sends empty message to telepathy.
-func (mediator *Mediator) handleFailedDownload(mNotificationInd *mms.MNotificationInd) {
-	log.Printf("mediator %v: handleFailedDownload(%v)", mediator, mNotificationInd)
-	if err := storage.UpdateFailed(mNotificationInd); err != nil {
-		log.Print("Storing failed download error:", err)
-	}
-	mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd.UUID, mNotificationInd.From, mediator.NewMNotificationInd)
-}
-
 func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationInd) {
 	mediator.contextLock.Lock()
 	defer mediator.contextLock.Unlock()
@@ -178,7 +168,7 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		mmsContext, err = mediator.modem.ActivateMMSContext(preferredContext)
 		if err != nil {
 			log.Print("Cannot activate ofono context: ", err)
-			mediator.handleFailedDownload(mNotificationInd)
+			mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd.UUID, mNotificationInd.From)
 			return
 		}
 		defer func() {
@@ -193,18 +183,17 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		proxy, err = mmsContext.GetProxy()
 		if err != nil {
 			log.Print("Error retrieving proxy: ", err)
-			mediator.handleFailedDownload(mNotificationInd)
+			mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd.UUID, mNotificationInd.From)
 			return
 		}
 	}
 
 	//TODO:jezek Downloader always downloads to same mms file and then renames it in UpdateDownloaded. If there is concurency, will there be a problem?
 	if filePath, err := mNotificationInd.DownloadContent(proxy.Host, int32(proxy.Port)); err != nil {
-		//TODO telepathy service signal the download error //TODO:jezek delete this comment
 		log.Print("Download issues: ", err)
-		mediator.handleFailedDownload(mNotificationInd)
+		mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd.UUID, mNotificationInd.From)
 		return
-	} else { //TODO:jezek refactor this needless else
+	} else {
 		if err := storage.UpdateDownloaded(mNotificationInd.UUID, filePath); err != nil {
 			log.Println("When calling UpdateDownloaded: ", err)
 			return
@@ -214,7 +203,6 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 	mRetrieveConf, err := mediator.handleMRetrieveConf(mNotificationInd.UUID)
 	if err != nil {
 		log.Print(err)
-		mediator.handleFailedDownload(mNotificationInd)
 		return
 	}
 
@@ -247,11 +235,6 @@ func (mediator *Mediator) handleMRetrieveConf(uuid string) (*mms.MRetrieveConf, 
 	mmsData, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("issues while reading from downloaded file: %s", err)
-	}
-
-	if len(mmsData) == 0 {
-		// Shouldn't happen. It's here mainly for testing purposes with nuntium-inject-push command.
-		return nil, fmt.Errorf("no data in MMS file: %v", filePath)
 	}
 
 	mRetrieveConf := mms.NewMRetrieveConf(uuid)
