@@ -49,6 +49,7 @@ type MMSService struct {
 	msgChan              chan *dbus.Message
 	messageHandlers      map[dbus.ObjectPath]*MessageInterface
 	msgDeleteChan        chan dbus.ObjectPath
+	msgRedownloadChan    chan dbus.ObjectPath
 	identity             string
 	outMessage           chan *OutgoingMessage
 	mNotificationIndChan chan<- *mms.MNotificationInd
@@ -90,6 +91,7 @@ func NewMMSService(conn *dbus.Connection, modemObjPath dbus.ObjectPath, identity
 		conn:                 conn,
 		msgChan:              make(chan *dbus.Message),
 		msgDeleteChan:        make(chan dbus.ObjectPath),
+		msgRedownloadChan:    make(chan dbus.ObjectPath),
 		messageHandlers:      make(map[dbus.ObjectPath]*MessageInterface),
 		outMessage:           outgoingChannel,
 		identity:             identity,
@@ -97,6 +99,7 @@ func NewMMSService(conn *dbus.Connection, modemObjPath dbus.ObjectPath, identity
 	}
 	go service.watchDBusMethodCalls()
 	go service.watchMessageDeleteCalls()
+	go service.watchMessageRedownloadCalls()
 	conn.RegisterObjectPath(payload.Path, service.msgChan)
 	return &service
 }
@@ -133,14 +136,62 @@ func (service *MMSService) watchMessageDeleteCalls() {
 		log.Printf("MMSService.watchMessageDeleteCalls: msgObjectPath: %v", msgObjectPath)
 		log.Printf("MMSService.watchMessageDeleteCalls: mNotificationInd: %#v", mNotificationInd)
 
+		if mNotificationInd != nil {
+			log.Printf("MMSService.watchMessageDeleteCalls: Message not fully downloaded, not deleting.")
+			continue
+		}
+
 		if err := service.MessageRemoved(msgObjectPath); err != nil {
 			log.Print("Failed to delete ", msgObjectPath, ": ", err)
 		}
+	}
+}
 
-		if mNotificationInd != nil {
-			storage.Create(mNotificationInd.UUID, mNotificationInd.ContentLocation)
-			service.mNotificationIndChan <- mNotificationInd
+func (service *MMSService) watchMessageRedownloadCalls() {
+	for msgObjectPath := range service.msgRedownloadChan {
+
+		mNotificationInd := func() *mms.MNotificationInd {
+			uuid, err := getUUIDFromObjectPath(msgObjectPath)
+			if err != nil {
+				log.Print("UUID retrieving error:", err)
+				return nil
+			}
+
+			mmsState, err := storage.GetMMSState(uuid)
+			if err != nil {
+				log.Print("MMS state retrieving error:", err)
+				return nil
+			}
+
+			if mmsState.State != storage.NOTIFICATION {
+				log.Print("MMS was already downloaded")
+				return nil
+			}
+
+			mNotificationInd := mms.MNotificationInd{
+				Type:            mms.TYPE_NOTIFICATION_IND,
+				UUID:            uuid,
+				ContentLocation: mmsState.ContentLocation,
+			}
+
+			return &mNotificationInd
+		}()
+		log.Printf("MMSService.watchMessageRedownloadCalls: msgObjectPath: %v", msgObjectPath)
+		log.Printf("MMSService.watchMessageRedownloadCalls: mNotificationInd: %#v", mNotificationInd)
+
+		if mNotificationInd == nil {
+			log.Printf("MMSService.watchMessageRedownloadCalls: Message already downloaded, no mNotificationInd found.")
+			continue
 		}
+
+		if err := service.MessageRemoved(msgObjectPath); err != nil {
+			//TODO:jezek - just log, can some panic ocure after this?
+			log.Print("Failed to delete ", msgObjectPath, ": ", err)
+		}
+
+		storage.Create(mNotificationInd.UUID, mNotificationInd.ContentLocation)
+		service.mNotificationIndChan <- mNotificationInd
+
 	}
 }
 
@@ -312,7 +363,7 @@ func (service *MMSService) IncomingMessageFailAdded(UUID string, from string) er
 
 	payload := Payload{Path: service.genMessagePath(UUID), Properties: params}
 
-	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan)
+	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, service.msgRedownloadChan)
 	return service.MessageAdded(&payload)
 }
 
@@ -323,7 +374,7 @@ func (service *MMSService) IncomingMessageAdded(mRetConf *mms.MRetrieveConf) err
 	if err != nil {
 		return err
 	}
-	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan)
+	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, service.msgRedownloadChan)
 	return service.MessageAdded(&payload)
 }
 
@@ -350,6 +401,7 @@ func (service *MMSService) Close() {
 	service.conn.UnregisterObjectPath(service.payload.Path)
 	close(service.msgChan)
 	close(service.msgDeleteChan)
+	close(service.msgRedownloadChan)
 }
 
 func (service *MMSService) parseMessage(mRetConf *mms.MRetrieveConf) (Payload, error) {
@@ -432,7 +484,7 @@ func (service *MMSService) ReplySendMessage(reply *dbus.Message, uuid string) (d
 	if err := service.conn.Send(reply); err != nil {
 		return "", err
 	}
-	msg := NewMessageInterface(service.conn, msgObjectPath, service.msgDeleteChan)
+	msg := NewMessageInterface(service.conn, msgObjectPath, service.msgDeleteChan, service.msgRedownloadChan)
 	service.messageHandlers[msgObjectPath] = msg
 	service.MessageAdded(msg.GetPayload())
 	return msgObjectPath, nil
