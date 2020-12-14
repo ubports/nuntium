@@ -104,36 +104,21 @@ func NewMMSService(conn *dbus.Connection, modemObjPath dbus.ObjectPath, identity
 	return &service
 }
 
+func (*MMSService) getMNotificationInd(objectPath dbus.ObjectPath) *mms.MNotificationInd {
+	uuid, err := getUUIDFromObjectPath(objectPath)
+	if err != nil {
+		log.Print("UUID retrieving error:", err)
+		return nil
+	}
+
+	return storage.GetMNotificationInd(uuid)
+}
+
 func (service *MMSService) watchMessageDeleteCalls() {
 	for msgObjectPath := range service.msgDeleteChan {
-
-		mNotificationInd := func() *mms.MNotificationInd {
-			uuid, err := getUUIDFromObjectPath(msgObjectPath)
-			if err != nil {
-				log.Print("UUID retrieving error:", err)
-				return nil
-			}
-
-			mmsState, err := storage.GetMMSState(uuid)
-			if err != nil {
-				log.Print("MMS state retrieving error:", err)
-				return nil
-			}
-
-			if mmsState.State != storage.NOTIFICATION {
-				log.Print("MMS was already downloaded")
-				return nil
-			}
-
-			mNotificationInd := mms.MNotificationInd{
-				Type:            mms.TYPE_NOTIFICATION_IND,
-				UUID:            uuid,
-				ContentLocation: mmsState.ContentLocation,
-			}
-
-			return &mNotificationInd
-		}()
 		log.Printf("MMSService.watchMessageDeleteCalls: msgObjectPath: %v", msgObjectPath)
+
+		mNotificationInd := service.getMNotificationInd(msgObjectPath)
 		log.Printf("MMSService.watchMessageDeleteCalls: mNotificationInd: %#v", mNotificationInd)
 
 		if mNotificationInd != nil {
@@ -149,34 +134,9 @@ func (service *MMSService) watchMessageDeleteCalls() {
 
 func (service *MMSService) watchMessageRedownloadCalls() {
 	for msgObjectPath := range service.msgRedownloadChan {
-
-		mNotificationInd := func() *mms.MNotificationInd {
-			uuid, err := getUUIDFromObjectPath(msgObjectPath)
-			if err != nil {
-				log.Print("UUID retrieving error:", err)
-				return nil
-			}
-
-			mmsState, err := storage.GetMMSState(uuid)
-			if err != nil {
-				log.Print("MMS state retrieving error:", err)
-				return nil
-			}
-
-			if mmsState.State != storage.NOTIFICATION {
-				log.Print("MMS was already downloaded")
-				return nil
-			}
-
-			mNotificationInd := mms.MNotificationInd{
-				Type:            mms.TYPE_NOTIFICATION_IND,
-				UUID:            uuid,
-				ContentLocation: mmsState.ContentLocation,
-			}
-
-			return &mNotificationInd
-		}()
 		log.Printf("MMSService.watchMessageRedownloadCalls: msgObjectPath: %v", msgObjectPath)
+
+		mNotificationInd := service.getMNotificationInd(msgObjectPath)
 		log.Printf("MMSService.watchMessageRedownloadCalls: mNotificationInd: %#v", mNotificationInd)
 
 		if mNotificationInd == nil {
@@ -185,13 +145,12 @@ func (service *MMSService) watchMessageRedownloadCalls() {
 		}
 
 		if err := service.MessageRemoved(msgObjectPath); err != nil {
-			//TODO:jezek - just log, can some panic ocure after this?
+			//TODO:jezek - just log?, can some panic ocure after this?
 			log.Print("Failed to delete ", msgObjectPath, ": ", err)
 		}
 
 		storage.Create(mNotificationInd.UUID, mNotificationInd.ContentLocation)
 		service.mNotificationIndChan <- mNotificationInd
-
 	}
 }
 

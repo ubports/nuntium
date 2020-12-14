@@ -25,9 +25,11 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path"
 
+	"github.com/jezek/nuntium/mms"
 	"launchpad.net/go-xdg/v0"
 )
 
@@ -154,6 +156,26 @@ func GetMMSState(uuid string) (MMSState, error) {
 	}
 
 	return mmsState, nil
+}
+func GetMNotificationInd(uuid string) *mms.MNotificationInd {
+	mmsState, err := GetMMSState(uuid)
+	if err != nil {
+		log.Print("MMS state retrieving error:", err)
+		return nil
+	}
+
+	if mmsState.State != NOTIFICATION {
+		log.Print("MMS was already downloaded")
+		return nil
+	}
+
+	mNotificationInd := mms.MNotificationInd{
+		Type:            mms.TYPE_NOTIFICATION_IND,
+		UUID:            uuid,
+		ContentLocation: mmsState.ContentLocation,
+	}
+
+	return &mNotificationInd
 }
 
 func writeState(state MMSState, storePath string) error {
