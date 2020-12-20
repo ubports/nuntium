@@ -116,13 +116,13 @@ func (*MMSService) getMNotificationInd(objectPath dbus.ObjectPath) *mms.MNotific
 
 func (service *MMSService) watchMessageDeleteCalls() {
 	for msgObjectPath := range service.msgDeleteChan {
-		log.Printf("MMSService.watchMessageDeleteCalls: msgObjectPath: %v", msgObjectPath)
+		log.Printf("jezek - MMSService.watchMessageDeleteCalls: msgObjectPath: %v", msgObjectPath)
 
 		mNotificationInd := service.getMNotificationInd(msgObjectPath)
-		log.Printf("MMSService.watchMessageDeleteCalls: mNotificationInd: %#v", mNotificationInd)
+		log.Printf("jezek - MMSService.watchMessageDeleteCalls: mNotificationInd: %#v", mNotificationInd)
 
 		if mNotificationInd != nil {
-			log.Printf("MMSService.watchMessageDeleteCalls: Message not fully downloaded, not deleting.")
+			log.Printf("jezek - MMSService.watchMessageDeleteCalls: Message not fully downloaded, not deleting.")
 			continue
 		}
 
@@ -134,13 +134,13 @@ func (service *MMSService) watchMessageDeleteCalls() {
 
 func (service *MMSService) watchMessageRedownloadCalls() {
 	for msgObjectPath := range service.msgRedownloadChan {
-		log.Printf("MMSService.watchMessageRedownloadCalls: msgObjectPath: %v", msgObjectPath)
+		log.Printf("jezek - MMSService.watchMessageRedownloadCalls: msgObjectPath: %v", msgObjectPath)
 
 		mNotificationInd := service.getMNotificationInd(msgObjectPath)
-		log.Printf("MMSService.watchMessageRedownloadCalls: mNotificationInd: %#v", mNotificationInd)
+		log.Printf("jezek - MMSService.watchMessageRedownloadCalls: mNotificationInd: %#v", mNotificationInd)
 
 		if mNotificationInd == nil {
-			log.Printf("MMSService.watchMessageRedownloadCalls: Message already downloaded, no mNotificationInd found.")
+			log.Printf("jezek - MMSService.watchMessageRedownloadCalls: Message already downloaded, no mNotificationInd found.")
 			continue
 		}
 
@@ -149,16 +149,19 @@ func (service *MMSService) watchMessageRedownloadCalls() {
 			log.Print("Failed to delete ", msgObjectPath, ": ", err)
 		}
 
-		storage.Create(mNotificationInd.UUID, mNotificationInd.ContentLocation)
+		mNotificationInd.DeleteUUID = mNotificationInd.UUID
+		mNotificationInd.UUID = mms.GenUUID()
+		storage.Create(mNotificationInd)
+		log.Printf("jezek - MMSService.watchMessageRedownloadCalls: mNotificationInd new: %#v", mNotificationInd)
 		service.mNotificationIndChan <- mNotificationInd
 	}
 }
 
 func (service *MMSService) watchDBusMethodCalls() {
-	log.Printf("service %v: watchDBusMethodCalls(): start", service.identity)
-	defer log.Printf("service %v: watchDBusMethodCalls(): end", service.identity)
+	log.Printf("jezek - service %v: watchDBusMethodCalls(): start", service.identity)
+	defer log.Printf("jezek - service %v: watchDBusMethodCalls(): end", service.identity)
 	for msg := range service.msgChan {
-		log.Printf("service %v: watchDBusMethodCalls(): Received message: %v", service.identity, msg)
+		log.Printf("jezek - service %v: watchDBusMethodCalls(): Received message: %v", service.identity, msg)
 		var reply *dbus.Message
 		if msg.Interface != MMS_SERVICE_DBUS_IFACE {
 			log.Println("Received unkown method call on", msg.Interface, msg.Member)
@@ -307,20 +310,32 @@ func (service *MMSService) MessageRemoved(objectPath dbus.ObjectPath) error {
 	return nil
 }
 
-func (service *MMSService) IncomingMessageFailAdded(UUID string, from string) error {
+func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotificationInd) error {
 	//just handle that mms as an empty MMS
 	params := make(map[string]dbus.Variant)
 
+	// Signal path:
+	// https://github.com/ubports/telepathy-ofono/blob/040321101e7bfe5950934a1b718875f3fe29c495/mmsdservice.cpp#L118
+	// https://github.com/ubports/telepathy-ofono/blob/040321101e7bfe5950934a1b718875f3fe29c495/connection.cpp#L518
+	// https://github.com/ubports/telepathy-ofono/blob/040321101e7bfe5950934a1b718875f3fe29c495/connection.cpp#L423
+	// https://github.com/ubports/telepathy-ofono/blob/db5e35b68f244d007468b8de2d9ad9998a2c8bd7/ofonotextchannel.cpp#L473
+	// https://github.com/TelepathyIM/telepathy-qt/blob/7cf3e35fdf6cf7ea7d8fc301eae04fe43930b17f/TelepathyQt/base-channel.cpp#L460
+	// https://github.com/ubports/history-service/blob/8285a4a3174b84a04f00d600fff99905aec6c4e2/daemon/historydaemon.cpp#L1023
 	params["Status"] = dbus.Variant{"received"}
 	date := time.Now().Format(time.RFC3339)
 	params["Date"] = dbus.Variant{date}
+	params["Error"] = dbus.Variant{"Error"}
 
-	sender := from
-	if strings.HasSuffix(from, PLMN) {
+	sender := mNotificationInd.From
+	if strings.HasSuffix(mNotificationInd.From, PLMN) {
 		params["Sender"] = dbus.Variant{sender[:len(sender)-len(PLMN)]}
 	}
 
-	payload := Payload{Path: service.genMessagePath(UUID), Properties: params}
+	payload := Payload{Path: service.genMessagePath(mNotificationInd.UUID), Properties: params}
+
+	if mNotificationInd.DeleteUUID != "" {
+		payload.Properties["DeleteEvent"] = dbus.Variant{string(service.genMessagePath(mNotificationInd.DeleteUUID))}
+	}
 
 	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, service.msgRedownloadChan)
 	return service.MessageAdded(&payload)
@@ -328,11 +343,16 @@ func (service *MMSService) IncomingMessageFailAdded(UUID string, from string) er
 
 //IncomingMessageAdded emits a MessageAdded with the path to the added message which
 //is taken as a parameter and creates an object path on the message interface.
-func (service *MMSService) IncomingMessageAdded(mRetConf *mms.MRetrieveConf) error {
+func (service *MMSService) IncomingMessageAdded(mRetConf *mms.MRetrieveConf, mNotificationInd *mms.MNotificationInd) error {
 	payload, err := service.parseMessage(mRetConf)
 	if err != nil {
 		return err
 	}
+
+	if mNotificationInd.DeleteUUID != "" {
+		payload.Properties["DeleteEvent"] = dbus.Variant{string(service.genMessagePath(mNotificationInd.DeleteUUID))}
+	}
+
 	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, service.msgRedownloadChan)
 	return service.MessageAdded(&payload)
 }
@@ -340,7 +360,7 @@ func (service *MMSService) IncomingMessageAdded(mRetConf *mms.MRetrieveConf) err
 //MessageAdded emits a MessageAdded with the path to the added message which
 //is taken as a parameter
 func (service *MMSService) MessageAdded(msgPayload *Payload) error {
-	log.Printf("service %v: MessageAdded(): payload: %v", service.identity, msgPayload)
+	log.Printf("jezek - service %v: MessageAdded(): payload: %v", service.identity, msgPayload)
 	signal := dbus.NewSignalMessage(service.payload.Path, MMS_SERVICE_DBUS_IFACE, messageAddedSignal)
 	if err := signal.AppendArgs(msgPayload.Path, msgPayload.Properties); err != nil {
 		return err

@@ -21,6 +21,8 @@
 
 package storage
 
+import "github.com/ubports/nuntium/mms"
+
 //SendInfo is a map where every key is a destination and the value can be any of:
 //
 // - "none": no report has been received yet.
@@ -46,9 +48,12 @@ type SendInfo map[string]string
 //
 // SendState contains the sent state for each delivered message associated to
 // a particular MMS
+//
+// MNotificationInd holds the received m-Notify.Ind until PDU downloaded (is not nil when State is "notification").
 type MMSState struct {
-	Id              string
-	State           string
-	ContentLocation string
-	SendState       SendInfo
+	Id               string
+	State            string
+	ContentLocation  string
+	SendState        SendInfo //TODO:jezek remove? it is not used anywhere.
+	MNotificationInd *mms.MNotificationInd
 }
