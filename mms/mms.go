@@ -221,7 +221,7 @@ type MSendConf struct {
 // OMA-WAP-MMS-ENC section 6.2
 type MNotificationInd struct {
 	MMSReader
-	UUID                                 string
+	UUID, DeleteUUID                     string
 	Type, Version, Class, DeliveryReport byte
 	ReplyCharging, ReplyChargingDeadline byte
 	Priority                             byte
@@ -269,7 +269,7 @@ func NewMSendReq(recipients []string, attachments []*Attachment, deliveryReport 
 	for i := range recipients {
 		recipients[i] += "/TYPE=PLMN"
 	}
-	uuid := genUUID()
+	uuid := GenUUID()
 
 	orderedAttachments, smilStart, smilType := processAttachments(attachments)
 
@@ -299,7 +299,7 @@ func NewMSendConf() *MSendConf {
 }
 
 func NewMNotificationInd() *MNotificationInd {
-	return &MNotificationInd{Type: TYPE_NOTIFICATION_IND, UUID: genUUID()}
+	return &MNotificationInd{Type: TYPE_NOTIFICATION_IND, UUID: GenUUID()}
 }
 
 func (mNotificationInd *MNotificationInd) IsLocal() bool {
@@ -336,7 +336,7 @@ func NewMRetrieveConf(uuid string) *MRetrieveConf {
 	return &MRetrieveConf{Type: TYPE_RETRIEVE_CONF, UUID: uuid}
 }
 
-func genUUID() string {
+func GenUUID() string {
 	var id string
 	random, err := os.Open("/dev/urandom")
 	if err != nil {

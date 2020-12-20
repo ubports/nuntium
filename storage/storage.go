@@ -29,18 +29,19 @@ import (
 	"os"
 	"path"
 
-	"github.com/jezek/nuntium/mms"
+	"github.com/ubports/nuntium/mms"
 	"launchpad.net/go-xdg/v0"
 )
 
 const SUBPATH = "nuntium/store"
 
-func Create(uuid, contentLocation string) error {
+func Create(mNotificationInd *mms.MNotificationInd) error {
 	state := MMSState{
-		State:           NOTIFICATION,
-		ContentLocation: contentLocation,
+		State:            NOTIFICATION,
+		ContentLocation:  mNotificationInd.ContentLocation, //TODO:jezek remove location, it is not used anywhere and the loc. is stored in MNotificationInd anyway.
+		MNotificationInd: mNotificationInd,
 	}
-	storePath, err := xdg.Data.Ensure(path.Join(SUBPATH, uuid+".db"))
+	storePath, err := xdg.Data.Ensure(path.Join(SUBPATH, mNotificationInd.UUID+".db"))
 	if err != nil {
 		return err
 	}
@@ -169,13 +170,7 @@ func GetMNotificationInd(uuid string) *mms.MNotificationInd {
 		return nil
 	}
 
-	mNotificationInd := mms.MNotificationInd{
-		Type:            mms.TYPE_NOTIFICATION_IND,
-		UUID:            uuid,
-		ContentLocation: mmsState.ContentLocation,
-	}
-
-	return &mNotificationInd
+	return mmsState.MNotificationInd
 }
 
 func writeState(state MMSState, storePath string) error {

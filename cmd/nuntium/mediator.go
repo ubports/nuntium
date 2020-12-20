@@ -146,7 +146,7 @@ func (mediator *Mediator) handleMNotificationInd(pushMsg *ofono.PushPDU) {
 		log.Println("Unable to decode m-notification.ind: ", err, "with log", dec.GetLog())
 		return
 	}
-	storage.Create(mNotificationInd.UUID, mNotificationInd.ContentLocation)
+	storage.Create(mNotificationInd)
 	mediator.NewMNotificationInd <- mNotificationInd
 }
 
@@ -168,7 +168,7 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		mmsContext, err = mediator.modem.ActivateMMSContext(preferredContext)
 		if err != nil {
 			log.Print("Cannot activate ofono context: ", err)
-			mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd.UUID, mNotificationInd.From)
+			mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd)
 			return
 		}
 		defer func() {
@@ -183,7 +183,7 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		proxy, err = mmsContext.GetProxy()
 		if err != nil {
 			log.Print("Error retrieving proxy: ", err)
-			mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd.UUID, mNotificationInd.From)
+			mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd)
 			return
 		}
 	}
@@ -191,7 +191,7 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 	//TODO:jezek Downloader always downloads to same mms file and then renames it in UpdateDownloaded. If there is concurency, will there be a problem?
 	if filePath, err := mNotificationInd.DownloadContent(proxy.Host, int32(proxy.Port)); err != nil {
 		log.Print("Download issues: ", err)
-		mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd.UUID, mNotificationInd.From)
+		mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd)
 		return
 	} else {
 		if err := storage.UpdateDownloaded(mNotificationInd.UUID, filePath); err != nil {
@@ -200,7 +200,7 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		}
 	}
 
-	mRetrieveConf, err := mediator.handleMRetrieveConf(mNotificationInd.UUID)
+	mRetrieveConf, err := mediator.handleMRetrieveConf(mNotificationInd)
 	if err != nil {
 		log.Print(err)
 		return
@@ -224,9 +224,9 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 	}
 }
 
-func (mediator *Mediator) handleMRetrieveConf(uuid string) (*mms.MRetrieveConf, error) {
+func (mediator *Mediator) handleMRetrieveConf(mNotificationInd *mms.MNotificationInd) (*mms.MRetrieveConf, error) {
 	var filePath string
-	if f, err := storage.GetMMS(uuid); err == nil {
+	if f, err := storage.GetMMS(mNotificationInd.UUID); err == nil {
 		filePath = f
 	} else {
 		return nil, fmt.Errorf("unable to retrieve MMS: %s", err)
@@ -237,14 +237,14 @@ func (mediator *Mediator) handleMRetrieveConf(uuid string) (*mms.MRetrieveConf, 
 		return nil, fmt.Errorf("issues while reading from downloaded file: %s", err)
 	}
 
-	mRetrieveConf := mms.NewMRetrieveConf(uuid)
+	mRetrieveConf := mms.NewMRetrieveConf(mNotificationInd.UUID)
 	dec := mms.NewDecoder(mmsData)
 	if err := dec.Decode(mRetrieveConf); err != nil {
 		return nil, fmt.Errorf("unable to decode m-retrieve.conf: %s with log %s", err, dec.GetLog())
 	}
 
 	if mediator.telepathyService != nil {
-		if err := mediator.telepathyService.IncomingMessageAdded(mRetrieveConf); err != nil {
+		if err := mediator.telepathyService.IncomingMessageAdded(mRetrieveConf, mNotificationInd); err != nil {
 			log.Println("Cannot notify telepathy-ofono about new message", err)
 		}
 	} else {

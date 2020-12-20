@@ -66,12 +66,12 @@ func (msgInterface *MessageInterface) Close() {
 }
 
 func (msgInterface *MessageInterface) watchDBusMethodCalls() {
-	log.Printf("msgInterface %v: watchDBusMethodCalls(): start", msgInterface.objectPath)
-	defer log.Printf("msgInterface %v: watchDBusMethodCalls(): end", msgInterface.objectPath)
+	log.Printf("jezek - msgInterface %v: watchDBusMethodCalls(): start", msgInterface.objectPath)
+	defer log.Printf("jezek - msgInterface %v: watchDBusMethodCalls(): end", msgInterface.objectPath)
 	var reply *dbus.Message
 
 	for msg := range msgInterface.msgChan {
-		log.Printf("msgInterface %v: Received message: %v", msgInterface.objectPath, msg)
+		log.Printf("jezek - msgInterface %v: Received message: %v", msgInterface.objectPath, msg)
 		if msg.Interface != MMS_MESSAGE_DBUS_IFACE {
 			//TODO:jezek Distinguish between this and next "Received unknown ..." error in log.
 			log.Println("Received unkown method call on", msg.Interface, msg.Member)
