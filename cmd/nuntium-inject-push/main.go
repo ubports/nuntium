@@ -8,17 +8,19 @@ import (
 	flags "github.com/jessevdk/go-flags"
 )
 
+type mainFlags struct {
+	// Sender is only used in the push notification.
+	Sender string `long:"sender" short:"s" description:"the sender of the MMS" default:"0118 999 881 99 9119 7253"`
+	// EndPoint is the name where nuntium listens to on the System Bus.
+	EndPoint string `long:"end-point" required:"true" description:"dbus name where the nuntium agent is listening for push requests from ofono"`
+	// MRetrieveConf is an alternative file to use as m-retrieve.conf, no mangling is done with it.
+	MRetrieveConf string `long:"m-retrieve-conf" description:"Use a specific m-retrieve.conf to test"`
+	// DenialCount is an integer, which indicates how many times will MMS content serving be denied until successfuly served.
+	DenialCount int `long:"denial-count" short:"d" description:"number of serving denials until successful MMS serving" default:"0"`
+}
+
 func main() {
-	var args struct {
-		// Sender is only used in the push notification.
-		Sender string `long:"sender" short:"s" description:"the sender of the MMS" default:"0118 999 881 99 9119 7253"`
-		// EndPoint is the name where nuntium listens to on the System Bus.
-		EndPoint string `long:"end-point" required:"true" description:"dbus name where the nuntium agent is listening for push requests from ofono"`
-		// MRetrieveConf is an alternative file to use as m-retrieve.conf, no mangling is done with it.
-		MRetrieveConf string `long:"m-retrieve-conf" description:"Use a specific m-retrieve.conf to test"`
-		// DenialCount is an integer, which indicates how many times will MMS content serving be denied until successfuly served.
-		DenialCount int `long:"denial-count" short:"d" description:"number of serving denials until successful MMS serving" default:"0"`
-	}
+	var args mainFlags
 
 	parser := flags.NewParser(&args, flags.Default)
 	if _, err := parser.Parse(); err != nil {
