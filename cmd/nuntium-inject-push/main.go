@@ -29,7 +29,7 @@ func main() {
 
 	fmt.Println("Creating web server to serve mms")
 	done := make(chan bool)
-	mmsHandler, err := createSpace(args.MRetrieveConf, done)
+	mmsHandler, err := createSpace(args, done)
 	if err != nil {
 		fmt.Println("Issues while creating mms local server instance:", err)
 		os.Exit(1)
