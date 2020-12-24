@@ -10,6 +10,7 @@ import (
 
 type mainFlags struct {
 	// Sender is only used in the push notification.
+	//TODO describe that sender does not work if MRetrieveConf is set
 	Sender string `long:"sender" short:"s" description:"the sender of the MMS" default:"0118 999 881 99 9119 7253"`
 	// EndPoint is the name where nuntium listens to on the System Bus.
 	EndPoint string `long:"end-point" required:"true" description:"dbus name where the nuntium agent is listening for push requests from ofono"`
@@ -50,7 +51,7 @@ func main() {
 
 	go http.ListenAndServe("localhost:9191", nil) //http.FileServer(http.Dir(servedDir)))
 
-	if err := push(args.EndPoint, args.Sender); err != nil {
+	if err := push(args); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
