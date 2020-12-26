@@ -13,6 +13,36 @@ const (
 	pushMethod    string = "ReceiveNotification"
 )
 
+func getMNotificationIndPayload(args mainFlags) []byte {
+	from := mNotificationIndFrom
+	if args.Sender != "" {
+		from = bytes.Join(
+			[][]byte{
+				// From + size + token address present +
+				[]byte{0x80 + mms.FROM, byte(len(args.Sender)) + 12, mms.TOKEN_ADDRESS_PRESENT},
+				// + sender +
+				[]byte(args.Sender),
+				// + "/TYPE=PLMN|0"
+				[]byte{0x2f, 0x54, 0x59, 0x50, 0x45, 0x3d, 0x50, 0x4c, 0x4d, 0x4e, 0x00},
+			},
+			nil,
+		)
+	}
+
+	return bytes.Join(
+		[][]byte{
+			mNotificationIndHeader,
+			mNotificationIndVersion,
+			from,
+			mNotificationIndClass,
+			mNotificationIndSize,
+			mNotificationIndExpire,
+			mNotificationIndContentLocation,
+		},
+		nil,
+	)
+}
+
 var mNotificationInd = bytes.Join([][]byte{
 	mNotificationIndHeader,
 	mNotificationIndVersion,
@@ -92,7 +122,7 @@ func push(args mainFlags) error {
 	info := map[string]*dbus.Variant{"LocalSentTime": &dbus.Variant{"2014-02-05T08:29:55-0300"},
 		"Sender": &dbus.Variant{args.Sender}}
 
-	reply, err := obj.Call(pushInterface, pushMethod, mNotificationInd, info)
+	reply, err := obj.Call(pushInterface, pushMethod, getMNotificationIndPayload(args), info)
 	if err != nil || reply.Type == dbus.TypeError {
 		return fmt.Errorf("notification error: %s", err)
 	}
