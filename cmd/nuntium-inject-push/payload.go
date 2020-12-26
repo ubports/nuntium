@@ -51,14 +51,17 @@ var mRetrieveConf = bytes.Join([][]byte{
 
 var mRetrieveConfType = []byte{
 	// Type m-Retrieve.conf
+	// 0x8c, 0x82
 	0x80 + mms.X_MMS_MESSAGE_TYPE, mms.TYPE_RETRIEVE_CONF,
 }
 var mRetrieveConfTransactionId = []byte{
 	// Transaction Id "123456789\0"
+	// 0x98, ...
 	0x80 + mms.X_MMS_TRANSACTION_ID, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x00,
 }
 var mRetrieveConfMMSVersion = []byte{
 	// Version 1.3
+	// 0x8d, 0x93
 	0x80 + mms.X_MMS_MMS_VERSION, mms.MMS_MESSAGE_VERSION_1_3,
 }
 var mRetrieveConfMessageId = []byte{
@@ -70,9 +73,10 @@ var mRetrieveConfDate = []byte{
 	0x80 + mms.DATE, 0x04, 0x54, 0x5a, 0xc0, 0x37,
 }
 var mRetrieveConfFrom = []byte{
-	// From  size + token address present + "01189998819991197253" +
+	// From + size + token address present + "01189998819991197253" +
+	// 0x89, 32, 0x80, ...
 	0x80 + mms.FROM, 0x20, mms.TOKEN_ADDRESS_PRESENT, 0x30, 0x31, 0x31, 0x38, 0x39, 0x39, 0x39, 0x38, 0x38, 0x31, 0x39, 0x39, 0x39, 0x31, 0x31, 0x39, 0x37, 0x32, 0x35, 0x33,
-	// "/TYPE=PLMN"
+	// + "/TYPE=PLMN|0"
 	0x2f, 0x54, 0x59, 0x50, 0x45, 0x3d, 0x50, 0x4c, 0x4d, 0x4e, 0x00,
 }
 var mRetrieveConfContentType = []byte{
