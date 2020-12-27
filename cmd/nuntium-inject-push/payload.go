@@ -6,38 +6,6 @@ import (
 	"github.com/ubports/nuntium/mms"
 )
 
-func GetMRetrieveConfPayload(args mainFlags) []byte {
-
-	from := mRetrieveConfFrom
-	if args.Sender != "" {
-		from = bytes.Join(
-			[][]byte{
-				// From + size + token address present +
-				[]byte{0x80 + mms.FROM, byte(len(args.Sender)) + 12, mms.TOKEN_ADDRESS_PRESENT},
-				// + sender +
-				[]byte(args.Sender),
-				// + "/TYPE=PLMN|0"
-				[]byte{0x2f, 0x54, 0x59, 0x50, 0x45, 0x3d, 0x50, 0x4c, 0x4d, 0x4e, 0x00},
-			},
-			nil,
-		)
-	}
-
-	return bytes.Join(
-		[][]byte{
-			mRetrieveConfType,
-			mRetrieveConfTransactionId,
-			mRetrieveConfMMSVersion,
-			mRetrieveConfMessageId,
-			mRetrieveConfDate,
-			from,
-			mRetrieveConfContentType,
-			mRetrieveConfAttachments,
-		},
-		nil,
-	)
-}
-
 var mRetrieveConf = bytes.Join([][]byte{
 	mRetrieveConfType,
 	mRetrieveConfTransactionId,
@@ -284,4 +252,36 @@ var mRetrieveConfAttachments = []byte{
 	0x65, 0x78, 0x74, 0x5f, 0x30, 0x2e, 0x74, 0x78, 0x74, 0x00, 0x8e, 0x74, 0x65, 0x78, 0x74, 0x5f, 0x30,
 	0x2e, 0x74, 0x78, 0x74, 0x00, 0xc0, 0x22, 0x74, 0x65, 0x78, 0x74, 0x5f, 0x30, 0x2e, 0x74, 0x78, 0x74,
 	0x00, 0x54, 0x65, 0x73, 0x74,
+}
+
+func getMRetrieveConfPayload(args mainFlags) []byte {
+
+	from := mRetrieveConfFrom
+	if args.Sender != "" {
+		from = bytes.Join(
+			[][]byte{
+				// From + size + token address present +
+				[]byte{0x80 + mms.FROM, byte(len(args.Sender)) + 12, mms.TOKEN_ADDRESS_PRESENT},
+				// + sender +
+				[]byte(args.Sender),
+				// + "/TYPE=PLMN|0"
+				[]byte{0x2f, 0x54, 0x59, 0x50, 0x45, 0x3d, 0x50, 0x4c, 0x4d, 0x4e, 0x00},
+			},
+			nil,
+		)
+	}
+
+	return bytes.Join(
+		[][]byte{
+			mRetrieveConfType,
+			mRetrieveConfTransactionId,
+			mRetrieveConfMMSVersion,
+			mRetrieveConfMessageId,
+			mRetrieveConfDate,
+			from,
+			mRetrieveConfContentType,
+			mRetrieveConfAttachments,
+		},
+		nil,
+	)
 }
