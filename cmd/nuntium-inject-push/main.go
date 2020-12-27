@@ -11,13 +11,14 @@ import (
 type mainFlags struct {
 	// Sender is only used in the push notification.
 	//TODO describe that sender does not work if MRetrieveConf is set
-	Sender string `long:"sender" short:"s" description:"the sender of the MMS" default:"0118 999 881 99 9119 7253"`
+	Sender             string `long:"sender" short:"s" description:"The sender of the MMS (when not set or empty, it defaults to: 01189998819991197253)"`
+	SenderNotification string `long:"sender-notification" description:"The sender of the MMS notification (when not set or empty, it defaults to: +543515924906)"`
 	// EndPoint is the name where nuntium listens to on the System Bus.
-	EndPoint string `long:"end-point" required:"true" description:"dbus name where the nuntium agent is listening for push requests from ofono"`
+	EndPoint string `long:"end-point" required:"true" description:"Dbus name where the nuntium agent is listening for push requests from ofono"`
 	// MRetrieveConf is an alternative file to use as m-retrieve.conf, no mangling is done with it.
-	MRetrieveConf string `long:"m-retrieve-conf" description:"Use a specific m-retrieve.conf to test"`
+	MRetrieveConf string `long:"m-retrieve-conf" description:"Use a specific m-retrieve.conf to test (the --sender flag will not be considered)"`
 	// DenialCount is an integer, which indicates how many times will MMS content serving be denied until successfuly served.
-	DenialCount int `long:"denial-count" short:"d" description:"number of serving denials until successful MMS serving" default:"0"`
+	DenialCount int `long:"denial-count" short:"d" description:"Number of serving denials until successful MMS serving" default:"0"`
 }
 
 func main() {

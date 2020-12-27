@@ -15,6 +15,8 @@ func TestGetMRetrieveConfPayload(t *testing.T) {
 		{},
 		{mainFlags{Sender: "+12345"}, true},
 		{mainFlags{Sender: "01189998819991197253"}, false},
+		{mainFlags{SenderNotification: "+12345"}, false},
+		{mainFlags{SenderNotification: "01189998819991197253"}, false},
 	}
 
 	for _, tc := range testCases {
@@ -24,7 +26,7 @@ func TestGetMRetrieveConfPayload(t *testing.T) {
 			if !tc.differFromDefault {
 				differ = "not "
 			}
-			t.Errorf("Payload for args %v should %sdiffer from default payload", tc.args, differ)
+			t.Errorf("Payload for args %#v should %sdiffer from default payload", tc.args, differ)
 			continue
 		}
 
