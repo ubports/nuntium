@@ -13,36 +13,6 @@ const (
 	pushMethod    string = "ReceiveNotification"
 )
 
-func getMNotificationIndPayload(args mainFlags) []byte {
-	from := mNotificationIndFrom
-	if args.SenderNotification != "" {
-		from = bytes.Join(
-			[][]byte{
-				// From + size + token address present +
-				[]byte{0x80 + mms.FROM, byte(len(args.SenderNotification)) + 12, mms.TOKEN_ADDRESS_PRESENT},
-				// + sender +
-				[]byte(args.SenderNotification),
-				// + "/TYPE=PLMN|0"
-				[]byte{0x2f, 0x54, 0x59, 0x50, 0x45, 0x3d, 0x50, 0x4c, 0x4d, 0x4e, 0x00},
-			},
-			nil,
-		)
-	}
-
-	return bytes.Join(
-		[][]byte{
-			mNotificationIndHeader,
-			mNotificationIndVersion,
-			from,
-			mNotificationIndClass,
-			mNotificationIndSize,
-			mNotificationIndExpire,
-			mNotificationIndContentLocation,
-		},
-		nil,
-	)
-}
-
 var mNotificationInd = bytes.Join([][]byte{
 	mNotificationIndHeader,
 	mNotificationIndVersion,
@@ -109,6 +79,36 @@ var mNotificationIndContentLocation = []byte{
 	0x6c, 0x6f, 0x63, 0x61, 0x6c, 0x68, 0x6f, 0x73, 0x74,
 	// :     9     1     9     1     /     m     m     s
 	0x3a, 0x39, 0x31, 0x39, 0x31, 0x2f, 0x6d, 0x6d, 0x73, 0x00,
+}
+
+func getMNotificationIndPayload(args mainFlags) []byte {
+	from := mNotificationIndFrom
+	if args.SenderNotification != "" {
+		from = bytes.Join(
+			[][]byte{
+				// From + size + token address present +
+				[]byte{0x80 + mms.FROM, byte(len(args.SenderNotification)) + 12, mms.TOKEN_ADDRESS_PRESENT},
+				// + sender +
+				[]byte(args.SenderNotification),
+				// + "/TYPE=PLMN|0"
+				[]byte{0x2f, 0x54, 0x59, 0x50, 0x45, 0x3d, 0x50, 0x4c, 0x4d, 0x4e, 0x00},
+			},
+			nil,
+		)
+	}
+
+	return bytes.Join(
+		[][]byte{
+			mNotificationIndHeader,
+			mNotificationIndVersion,
+			from,
+			mNotificationIndClass,
+			mNotificationIndSize,
+			mNotificationIndExpire,
+			mNotificationIndContentLocation,
+		},
+		nil,
+	)
 }
 
 func push(args mainFlags) error {

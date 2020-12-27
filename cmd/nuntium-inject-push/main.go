@@ -9,9 +9,9 @@ import (
 )
 
 type mainFlags struct {
-	// Sender is only used in the push notification.
-	//TODO describe that sender does not work if MRetrieveConf is set
-	Sender             string `long:"sender" short:"s" description:"The sender of the MMS (when not set or empty, it defaults to: 01189998819991197253)"`
+	// Sender affects only the MMS payload (not notification).
+	Sender string `long:"sender" short:"s" description:"The sender of the MMS (when not set or empty, it defaults to: 01189998819991197253)"`
+	// SenderNotification is only used in the push notification.
 	SenderNotification string `long:"sender-notification" description:"The sender of the MMS notification (when not set or empty, it defaults to: +543515924906)"`
 	// EndPoint is the name where nuntium listens to on the System Bus.
 	EndPoint string `long:"end-point" required:"true" description:"Dbus name where the nuntium agent is listening for push requests from ofono"`

@@ -20,7 +20,7 @@ func TestGetMRetrieveConfPayload(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		pl := GetMRetrieveConfPayload(tc.args)
+		pl := getMRetrieveConfPayload(tc.args)
 		if !tc.differFromDefault != reflect.DeepEqual(pl, mRetrieveConf) {
 			differ := ""
 			if !tc.differFromDefault {

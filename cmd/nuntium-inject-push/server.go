@@ -22,7 +22,7 @@ func createSpace(args mainFlags, done chan<- bool) (handler http.HandlerFunc, er
 		}
 	} else {
 		handler = func(w http.ResponseWriter, r *http.Request) {
-			http.ServeContent(w, r, "mms", time.Time{}, bytes.NewReader(GetMRetrieveConfPayload(args)))
+			http.ServeContent(w, r, "mms", time.Time{}, bytes.NewReader(getMRetrieveConfPayload(args)))
 			done <- true
 		}
 	}
