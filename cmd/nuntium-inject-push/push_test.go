@@ -13,8 +13,10 @@ func TestGetMNotificationIndPayload(t *testing.T) {
 		differFromDefault bool
 	}{
 		{},
-		{mainFlags{Sender: "+12345"}, true},
+		{mainFlags{Sender: "+12345"}, false},
 		{mainFlags{Sender: "+543515924906"}, false},
+		{mainFlags{SenderNotification: "+12345"}, true},
+		{mainFlags{SenderNotification: "+543515924906"}, false},
 	}
 
 	for _, tc := range testCases {
@@ -24,7 +26,7 @@ func TestGetMNotificationIndPayload(t *testing.T) {
 			if !tc.differFromDefault {
 				differ = "not "
 			}
-			t.Errorf("Push payload for args %v should %sdiffer from default payload", tc.args, differ)
+			t.Errorf("Push payload for args %#v should %sdiffer from default payload", tc.args, differ)
 			continue
 		}
 
@@ -35,8 +37,8 @@ func TestGetMNotificationIndPayload(t *testing.T) {
 			continue
 		}
 
-		wantFrom := tc.args.Sender + "/TYPE=PLMN"
-		if tc.args.Sender == "" {
+		wantFrom := tc.args.SenderNotification + "/TYPE=PLMN"
+		if tc.args.SenderNotification == "" {
 			wantFrom = "+543515924906/TYPE=PLMN"
 		}
 		if mni.From != wantFrom {
