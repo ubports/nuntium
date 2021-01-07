@@ -84,6 +84,19 @@ mediatorLoop:
 			}
 			go mediator.handleMNotificationInd(push)
 		case mNotificationInd := <-mediator.NewMNotificationInd:
+			//TODO:jezek - my operator delivers mNotificationInd every x minutes if not downloaded.
+			//Don't send message if duplicate (or notify oerator, that the mms is deferred, to stop? it is possibel? see manuals).
+			//See /todo.undownloaded_notifications.log
+			//
+			//Reading:
+			//	http://www.openmobilealliance.org/release/MMS/V1_1-20021104-C/OMA-WAP-MMS-ENC-V1_1-20021030-C.pdf - no deferred instructions, just mentions.
+			//	https://dl.cdn-anritsu.com/en-gb/test-measurement/files/Technical-Notes/White-Paper/MC-MMS_Signaling_Examples_and_KPI_Calculations-WP-1_0.pdf - no defered instructions, just mentions.
+			//	https://developer.brewmp.com/resources/tech-guides/multimedia-messaging-service-mms-technology-guide/mms-protocol-overview/mms-fe/receiving-mms-message - instructions on how to deffer.
+			//	https://www.slideshare.net/glebodic/mobile-messaging-part-5-76-mms-arch-and-transactions-reduced - has deferred instructions
+			//
+			//Notes:
+			//	If the application chooses to download the message at a later point in time, then an M-NotifyResp.ind is sent with the deferred flag set to acknowledge the receipt notification and notify that message download is deferred.
+
 			if deferredDownload {
 				go mediator.handleDeferredDownload(mNotificationInd)
 			} else {
