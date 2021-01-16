@@ -45,6 +45,7 @@ type Mediator struct {
 	outMessage          chan *telepathy.OutgoingMessage
 	terminate           chan bool
 	contextLock         sync.Mutex
+	undownloaded        map[string]string //transactionId => UUID
 }
 
 //TODO these vars need a configuration location managed by system settings or
@@ -62,6 +63,8 @@ func NewMediator(modem *ofono.Modem) *Mediator {
 	mediator.NewMSendReqFile = make(chan struct{ filePath, uuid string })
 	mediator.outMessage = make(chan *telepathy.OutgoingMessage)
 	mediator.terminate = make(chan bool)
+	mediator.undownloaded = make(map[string]string)
+	//TODO:jezek - Fill undownloaded from storage.
 	return mediator
 }
 
@@ -114,6 +117,7 @@ mediatorLoop:
 			if err != nil {
 				log.Fatal(err)
 			}
+			//TODO:jezek - Spawn service interfaces from storage.
 		case id := <-mediator.modem.IdentityRemoved:
 			err := mmsManager.RemoveService(id)
 			if err != nil {
@@ -181,7 +185,7 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		mmsContext, err = mediator.modem.ActivateMMSContext(preferredContext)
 		if err != nil {
 			log.Print("Cannot activate ofono context: ", err)
-			mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd)
+			mediator.handleMRetrieveConfDownloadError(mNotificationInd, err)
 			return
 		}
 		defer func() {
@@ -196,15 +200,15 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		proxy, err = mmsContext.GetProxy()
 		if err != nil {
 			log.Print("Error retrieving proxy: ", err)
-			mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd)
+			mediator.handleMRetrieveConfDownloadError(mNotificationInd, err)
 			return
 		}
 	}
 
-	//TODO:jezek Downloader always downloads to same mms file and then renames it in UpdateDownloaded. If there is concurency, will there be a problem?
+	//TODO:jezek Downloader always downloads to same mms file(?) and then renames it in UpdateDownloaded. If there is concurency, will there be a problem?
 	if filePath, err := mNotificationInd.DownloadContent(proxy.Host, int32(proxy.Port)); err != nil {
 		log.Print("Download issues: ", err)
-		mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd)
+		mediator.handleMRetrieveConfDownloadError(mNotificationInd, err)
 		return
 	} else {
 		if err := storage.UpdateDownloaded(mNotificationInd.UUID, filePath); err != nil {
@@ -215,9 +219,10 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 
 	mRetrieveConf, err := mediator.handleMRetrieveConf(mNotificationInd)
 	if err != nil {
-		log.Print(err)
+		log.Printf("Handling MRetrieveConf error: %v", err)
 		return
 	}
+	delete(mediator.undownloaded, mNotificationInd.TransactionId)
 
 	mNotifyRespInd := mRetrieveConf.NewMNotifyRespInd(useDeliveryReports)
 	if err := storage.UpdateRetrieved(mNotifyRespInd.UUID); err != nil {
@@ -234,6 +239,20 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		mediator.sendMNotifyRespInd(filePath, &mmsContext)
 	} else {
 		log.Print("This is a local test, skipping m-notifyresp.ind")
+	}
+}
+
+func (mediator *Mediator) handleMRetrieveConfDownloadError(mNotificationInd *mms.MNotificationInd, err error) {
+	if _, ok := mediator.undownloaded[mNotificationInd.TransactionId]; mNotificationInd.RedownloadOfUUID != "" || !ok || mNotificationInd.TransactionId == "" {
+		// Error occurred after redownload requested or this is the first time the some download error for TransactionId occurred (or is empty, but this shouldn't happen)
+		// Send error message to telepathy service.
+		mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd)
+		if mNotificationInd.TransactionId != "" {
+			// Mark that some error for TransactionId occurred.
+			mediator.undownloaded[mNotificationInd.TransactionId] = mNotificationInd.UUID
+		}
+	} else {
+		log.Printf("Download error for MNotificationInd with TransactionId: \"%s\" was already communicated by UUID: \"%s\"", mNotificationInd.TransactionId, mediator.undownloaded[mNotificationInd.TransactionId])
 	}
 }
 
@@ -258,10 +277,15 @@ func (mediator *Mediator) handleMRetrieveConf(mNotificationInd *mms.MNotificatio
 
 	if mediator.telepathyService != nil {
 		if err := mediator.telepathyService.IncomingMessageAdded(mRetrieveConf, mNotificationInd); err != nil {
-			log.Println("Cannot notify telepathy-ofono about new message", err)
+			return nil, fmt.Errorf("cannot notify telepathy-ofono about new message: %v", err)
+		}
+
+		if uuid, ok := mediator.undownloaded[mNotificationInd.TransactionId]; mNotificationInd.RedownloadOfUUID == "" && ok {
+			// Close listener for redownload request, if there was some download error for TransactionId before and no redownload was triggered (on redownload request, listener is stopped automatically).
+			mediator.telepathyService.MessageRemoved(mediator.telepathyService.GenMessagePath(uuid))
 		}
 	} else {
-		log.Print("Not sending recently retrieved message")
+		log.Print("Not sending recently retrieved message, there is no telepathyService.")
 	}
 
 	return mRetrieveConf, nil
