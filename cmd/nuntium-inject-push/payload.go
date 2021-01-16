@@ -44,7 +44,7 @@ var mRetrieveConfFrom = []byte{
 	// From + size + token address present + "01189998819991197253" +
 	// 0x89, 32, 0x80, ...
 	0x80 + mms.FROM, 0x20, mms.TOKEN_ADDRESS_PRESENT, 0x30, 0x31, 0x31, 0x38, 0x39, 0x39, 0x39, 0x38, 0x38, 0x31, 0x39, 0x39, 0x39, 0x31, 0x31, 0x39, 0x37, 0x32, 0x35, 0x33,
-	// + "/TYPE=PLMN|0"
+	// + "/TYPE=PLMN\0"
 	0x2f, 0x54, 0x59, 0x50, 0x45, 0x3d, 0x50, 0x4c, 0x4d, 0x4e, 0x00,
 }
 var mRetrieveConfContentType = []byte{
@@ -264,8 +264,23 @@ func getMRetrieveConfPayload(args mainFlags) []byte {
 				[]byte{0x80 + mms.FROM, byte(len(args.Sender)) + 12, mms.TOKEN_ADDRESS_PRESENT},
 				// + sender +
 				[]byte(args.Sender),
-				// + "/TYPE=PLMN|0"
+				// + "/TYPE=PLMN\0"
 				[]byte{0x2f, 0x54, 0x59, 0x50, 0x45, 0x3d, 0x50, 0x4c, 0x4d, 0x4e, 0x00},
+			},
+			nil,
+		)
+	}
+
+	transactionId := mRetrieveConfTransactionId
+	if args.TransactionId != "" {
+		transactionId = bytes.Join(
+			[][]byte{
+				// TransactionId +
+				[]byte{0x80 + mms.X_MMS_TRANSACTION_ID},
+				// + id string +
+				[]byte(args.TransactionId),
+				// + "\0"
+				[]byte{0x00},
 			},
 			nil,
 		)
@@ -274,7 +289,7 @@ func getMRetrieveConfPayload(args mainFlags) []byte {
 	return bytes.Join(
 		[][]byte{
 			mRetrieveConfType,
-			mRetrieveConfTransactionId,
+			transactionId,
 			mRetrieveConfMMSVersion,
 			mRetrieveConfMessageId,
 			mRetrieveConfDate,

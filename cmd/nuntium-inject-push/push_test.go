@@ -17,6 +17,8 @@ func TestGetMNotificationIndPayload(t *testing.T) {
 		{mainFlags{Sender: "+543515924906"}, false},
 		{mainFlags{SenderNotification: "+12345"}, true},
 		{mainFlags{SenderNotification: "+543515924906"}, false},
+		{mainFlags{TransactionId: "12345abcde"}, true},
+		{mainFlags{TransactionId: ""}, false},
 	}
 
 	for _, tc := range testCases {
@@ -43,6 +45,10 @@ func TestGetMNotificationIndPayload(t *testing.T) {
 		}
 		if mni.From != wantFrom {
 			t.Errorf("Decoded MRetrieveConf.From \"%v\" should equal %v", mni.From, wantFrom)
+		}
+
+		if mni.TransactionId != tc.args.TransactionId {
+			t.Errorf("Decoded MRetrieveConf.TransactionId \"%v\" should equal %v", mni.TransactionId, tc.args.TransactionId)
 		}
 	}
 }
