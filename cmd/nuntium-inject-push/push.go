@@ -48,7 +48,7 @@ var mNotificationIndFrom = []byte{
 	// From + size + token address present + "+543515924906" +
 	// 0x89, 25, 0x80, ...
 	0x80 + mms.FROM, 0x19, mms.TOKEN_ADDRESS_PRESENT, 0x2b, 0x35, 0x34, 0x33, 0x35, 0x31, 0x35, 0x39, 0x32, 0x34, 0x39, 0x30, 0x36,
-	// "/TYPE=PLMN|0"
+	// "/TYPE=PLMN\0"
 	0x2f, 0x54, 0x59, 0x50, 0x45, 0x3d, 0x50, 0x4c, 0x4d, 0x4e, 0x00,
 }
 
@@ -71,7 +71,7 @@ var mNotificationIndExpire = []byte{
 }
 
 var mNotificationIndContentLocation = []byte{
-	// Content location + "http://localhost:9191/mms|0"
+	// Content location + "http://localhost:9191/mms\0"
 	0x80 + mms.X_MMS_CONTENT_LOCATION,
 	// h     t     t     p     :     /     /
 	0x68, 0x74, 0x74, 0x70, 0x3a, 0x2f, 0x2f,
@@ -81,6 +81,8 @@ var mNotificationIndContentLocation = []byte{
 	0x3a, 0x39, 0x31, 0x39, 0x31, 0x2f, 0x6d, 0x6d, 0x73, 0x00,
 }
 
+// Composes m-notification.ind payload based on flags.
+// Assumes that all string flags in `args` contain no "\0" character.
 func getMNotificationIndPayload(args mainFlags) []byte {
 	from := mNotificationIndFrom
 	if args.SenderNotification != "" {
@@ -90,8 +92,23 @@ func getMNotificationIndPayload(args mainFlags) []byte {
 				[]byte{0x80 + mms.FROM, byte(len(args.SenderNotification)) + 12, mms.TOKEN_ADDRESS_PRESENT},
 				// + sender +
 				[]byte(args.SenderNotification),
-				// + "/TYPE=PLMN|0"
+				// + "/TYPE=PLMN\0"
 				[]byte{0x2f, 0x54, 0x59, 0x50, 0x45, 0x3d, 0x50, 0x4c, 0x4d, 0x4e, 0x00},
+			},
+			nil,
+		)
+	}
+
+	transactionId := []byte(nil)
+	if args.TransactionId != "" {
+		transactionId = bytes.Join(
+			[][]byte{
+				// TransactionId +
+				[]byte{0x80 + mms.X_MMS_TRANSACTION_ID},
+				// + id string +
+				[]byte(args.TransactionId),
+				// + "\0"
+				[]byte{0x00},
 			},
 			nil,
 		)
@@ -101,6 +118,7 @@ func getMNotificationIndPayload(args mainFlags) []byte {
 		[][]byte{
 			mNotificationIndHeader,
 			mNotificationIndVersion,
+			transactionId,
 			from,
 			mNotificationIndClass,
 			mNotificationIndSize,

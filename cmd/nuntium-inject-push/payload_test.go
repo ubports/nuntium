@@ -17,6 +17,9 @@ func TestGetMRetrieveConfPayload(t *testing.T) {
 		{mainFlags{Sender: "01189998819991197253"}, false},
 		{mainFlags{SenderNotification: "+12345"}, false},
 		{mainFlags{SenderNotification: "01189998819991197253"}, false},
+		{mainFlags{TransactionId: "12345abcde"}, true},
+		{mainFlags{TransactionId: ""}, false},
+		{mainFlags{TransactionId: "123456789"}, false},
 	}
 
 	for _, tc := range testCases {
@@ -37,12 +40,21 @@ func TestGetMRetrieveConfPayload(t *testing.T) {
 			continue
 		}
 
-		wantFrom := tc.args.Sender + "/TYPE=PLMN"
-		if tc.args.Sender == "" {
-			wantFrom = "01189998819991197253/TYPE=PLMN"
+		wantFrom := "01189998819991197253/TYPE=PLMN"
+		if tc.args.Sender != "" {
+			wantFrom = tc.args.Sender + "/TYPE=PLMN"
 		}
 		if mrc.From != wantFrom {
-			t.Errorf("Decoded MRetrieveConf.From \"%v\" should equal %v", mrc.From, wantFrom)
+			t.Errorf("Decoded MRetrieveConf.From \"%v\" should equal \"%v\"", mrc.From, wantFrom)
+		}
+
+		wantTransaionId := "123456789"
+		if tc.args.TransactionId != "" {
+			wantTransaionId = tc.args.TransactionId
+		}
+
+		if mrc.TransactionId != wantTransaionId {
+			t.Errorf("Decoded MRetrieveConf.TransactionId \"%v\" should equal \"%v\"", mrc.TransactionId, wantTransaionId)
 		}
 	}
 }
