@@ -149,7 +149,7 @@ func (service *MMSService) watchMessageRedownloadCalls() {
 			log.Print("Failed to delete ", msgObjectPath, ": ", err)
 		}
 
-		mNotificationInd.DeleteUUID = mNotificationInd.UUID
+		mNotificationInd.RedownloadOfUUID = mNotificationInd.UUID
 		mNotificationInd.UUID = mms.GenUUID()
 		storage.Create(mNotificationInd)
 		log.Printf("jezek - MMSService.watchMessageRedownloadCalls: mNotificationInd new: %#v", mNotificationInd)
@@ -331,10 +331,10 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 		params["Sender"] = dbus.Variant{sender[:len(sender)-len(PLMN)]}
 	}
 
-	payload := Payload{Path: service.genMessagePath(mNotificationInd.UUID), Properties: params}
+	payload := Payload{Path: service.GenMessagePath(mNotificationInd.UUID), Properties: params}
 
-	if mNotificationInd.DeleteUUID != "" {
-		payload.Properties["DeleteEvent"] = dbus.Variant{string(service.genMessagePath(mNotificationInd.DeleteUUID))}
+	if mNotificationInd.RedownloadOfUUID != "" {
+		payload.Properties["DeleteEvent"] = dbus.Variant{string(service.GenMessagePath(mNotificationInd.RedownloadOfUUID))}
 	}
 
 	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, service.msgRedownloadChan)
@@ -349,8 +349,8 @@ func (service *MMSService) IncomingMessageAdded(mRetConf *mms.MRetrieveConf, mNo
 		return err
 	}
 
-	if mNotificationInd.DeleteUUID != "" {
-		payload.Properties["DeleteEvent"] = dbus.Variant{string(service.genMessagePath(mNotificationInd.DeleteUUID))}
+	if mNotificationInd.RedownloadOfUUID != "" {
+		payload.Properties["DeleteEvent"] = dbus.Variant{string(service.GenMessagePath(mNotificationInd.RedownloadOfUUID))}
 	}
 
 	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, service.msgRedownloadChan)
@@ -420,7 +420,7 @@ func (service *MMSService) parseMessage(mRetConf *mms.MRetrieveConf) (Payload, e
 		attachments = append(attachments, attachment)
 	}
 	params["Attachments"] = dbus.Variant{attachments}
-	payload := Payload{Path: service.genMessagePath(mRetConf.UUID), Properties: params}
+	payload := Payload{Path: service.GenMessagePath(mRetConf.UUID), Properties: params}
 	return payload, nil
 }
 
@@ -441,7 +441,7 @@ func parseRecipients(to string) []string {
 }
 
 func (service *MMSService) MessageDestroy(uuid string) error {
-	msgObjectPath := service.genMessagePath(uuid)
+	msgObjectPath := service.GenMessagePath(uuid)
 	if msgInterface, ok := service.messageHandlers[msgObjectPath]; ok {
 		msgInterface.Close()
 		delete(service.messageHandlers, msgObjectPath)
@@ -450,7 +450,7 @@ func (service *MMSService) MessageDestroy(uuid string) error {
 }
 
 func (service *MMSService) MessageStatusChanged(uuid, status string) error {
-	msgObjectPath := service.genMessagePath(uuid)
+	msgObjectPath := service.GenMessagePath(uuid)
 	if msgInterface, ok := service.messageHandlers[msgObjectPath]; ok {
 		return msgInterface.StatusChanged(status)
 	}
@@ -458,7 +458,7 @@ func (service *MMSService) MessageStatusChanged(uuid, status string) error {
 }
 
 func (service *MMSService) ReplySendMessage(reply *dbus.Message, uuid string) (dbus.ObjectPath, error) {
-	msgObjectPath := service.genMessagePath(uuid)
+	msgObjectPath := service.GenMessagePath(uuid)
 	reply.AppendArgs(msgObjectPath)
 	if err := service.conn.Send(reply); err != nil {
 		return "", err
@@ -470,6 +470,6 @@ func (service *MMSService) ReplySendMessage(reply *dbus.Message, uuid string) (d
 }
 
 //TODO randomly creating a uuid until the download manager does this for us
-func (service *MMSService) genMessagePath(uuid string) dbus.ObjectPath {
+func (service *MMSService) GenMessagePath(uuid string) dbus.ObjectPath {
 	return dbus.ObjectPath(MMS_DBUS_PATH + "/" + service.identity + "/" + uuid)
 }

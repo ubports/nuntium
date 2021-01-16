@@ -221,7 +221,7 @@ type MSendConf struct {
 // OMA-WAP-MMS-ENC section 6.2
 type MNotificationInd struct {
 	MMSReader
-	UUID, DeleteUUID                     string
+	UUID, RedownloadOfUUID               string
 	Type, Version, Class, DeliveryReport byte
 	ReplyCharging, ReplyChargingDeadline byte
 	Priority                             byte
