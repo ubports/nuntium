@@ -276,14 +276,19 @@ func (mediator *Mediator) handleMRetrieveConf(mNotificationInd *mms.MNotificatio
 	}
 
 	if mediator.telepathyService != nil {
+
+		// Check if there was some download error communicated for TransactionId before and no redownload was triggered (on redownload request, RedownloadOfUUID is filled and listener is stopped automatically).
+		if uuid, ok := mediator.undownloaded[mNotificationInd.TransactionId]; mNotificationInd.RedownloadOfUUID == "" && ok {
+			// There was an error message communicated to telepathy before, mark it to delete it by telepathy when communicating this message.
+			mNotificationInd.RedownloadOfUUID = uuid
+			// Before return, close listener for redownload request.
+			defer mediator.telepathyService.MessageRemoved(mediator.telepathyService.GenMessagePath(uuid))
+		}
+
 		if err := mediator.telepathyService.IncomingMessageAdded(mRetrieveConf, mNotificationInd); err != nil {
 			return nil, fmt.Errorf("cannot notify telepathy-ofono about new message: %v", err)
 		}
 
-		if uuid, ok := mediator.undownloaded[mNotificationInd.TransactionId]; mNotificationInd.RedownloadOfUUID == "" && ok {
-			// Close listener for redownload request, if there was some download error for TransactionId before and no redownload was triggered (on redownload request, listener is stopped automatically).
-			mediator.telepathyService.MessageRemoved(mediator.telepathyService.GenMessagePath(uuid))
-		}
 	} else {
 		log.Print("Not sending recently retrieved message, there is no telepathyService.")
 	}
