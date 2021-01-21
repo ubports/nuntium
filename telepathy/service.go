@@ -104,26 +104,26 @@ func NewMMSService(conn *dbus.Connection, modemObjPath dbus.ObjectPath, identity
 	return &service
 }
 
-func (*MMSService) getMNotificationInd(objectPath dbus.ObjectPath) *mms.MNotificationInd {
+func (*MMSService) getMMSState(objectPath dbus.ObjectPath) (storage.MMSState, error) {
 	uuid, err := getUUIDFromObjectPath(objectPath)
 	if err != nil {
-		log.Print("UUID retrieving error:", err)
-		return nil
+		return storage.MMSState{}, err
 	}
 
-	return storage.GetMNotificationInd(uuid)
+	return storage.GetMMSState(uuid)
 }
 
 func (service *MMSService) watchMessageDeleteCalls() {
 	for msgObjectPath := range service.msgDeleteChan {
 		log.Printf("jezek - MMSService.watchMessageDeleteCalls: msgObjectPath: %v", msgObjectPath)
 
-		mNotificationInd := service.getMNotificationInd(msgObjectPath)
-		log.Printf("jezek - MMSService.watchMessageDeleteCalls: mNotificationInd: %#v", mNotificationInd)
-
-		if mNotificationInd != nil {
-			log.Printf("jezek - MMSService.watchMessageDeleteCalls: Message not fully downloaded, not deleting.")
-			continue
+		if mmsState, err := service.getMMSState(msgObjectPath); err == nil {
+			if mmsState.State == storage.NOTIFICATION {
+				log.Printf("jezek - MMSService.watchMessageDeleteCalls: Message not fully downloaded, not deleting.")
+				continue
+			}
+		} else {
+			log.Printf("jezek - MMSService.watchMessageRedownloadCalls: error retrieving message state: %v", err)
 		}
 
 		if err := service.MessageRemoved(msgObjectPath); err != nil {
@@ -136,24 +136,31 @@ func (service *MMSService) watchMessageRedownloadCalls() {
 	for msgObjectPath := range service.msgRedownloadChan {
 		log.Printf("jezek - MMSService.watchMessageRedownloadCalls: msgObjectPath: %v", msgObjectPath)
 
-		mNotificationInd := service.getMNotificationInd(msgObjectPath)
-		log.Printf("jezek - MMSService.watchMessageRedownloadCalls: mNotificationInd: %#v", mNotificationInd)
-
-		if mNotificationInd == nil {
-			log.Printf("jezek - MMSService.watchMessageRedownloadCalls: Message already downloaded, no mNotificationInd found.")
+		mmsState, err := service.getMMSState(msgObjectPath)
+		if err != nil {
+			log.Printf("jezek - MMSService.watchMessageRedownloadCalls: error retrieving message state: %v", err)
 			continue
 		}
+		if mmsState.State != storage.NOTIFICATION {
+			log.Printf("jezek - MMSService.watchMessageRedownloadCalls: message was already downloaded")
+			continue
+		}
+		if mmsState.MNotificationInd == nil {
+			log.Printf("jezek - MMSService.watchMessageRedownloadCalls: no mNotificationInd found.")
+			continue
+		}
+		log.Printf("jezek - MMSService.watchMessageRedownloadCalls: mNotificationInd: %#v", mmsState.MNotificationInd)
 
 		if err := service.MessageRemoved(msgObjectPath); err != nil {
 			//TODO:jezek - just log?, can some panic ocure after this?
 			log.Print("Failed to delete ", msgObjectPath, ": ", err)
 		}
-
-		mNotificationInd.RedownloadOfUUID = mNotificationInd.UUID
-		mNotificationInd.UUID = mms.GenUUID()
-		storage.Create(mNotificationInd)
-		log.Printf("jezek - MMSService.watchMessageRedownloadCalls: mNotificationInd new: %#v", mNotificationInd)
-		service.mNotificationIndChan <- mNotificationInd
+		newMNotificationInd := mmsState.MNotificationInd
+		newMNotificationInd.RedownloadOfUUID = mmsState.MNotificationInd.UUID
+		newMNotificationInd.UUID = mms.GenUUID()
+		storage.Create(mmsState.ModemId, newMNotificationInd)
+		log.Printf("jezek - MMSService.watchMessageRedownloadCalls: new mNotificationInd new: %#v", newMNotificationInd)
+		service.mNotificationIndChan <- newMNotificationInd
 	}
 }
 
@@ -161,7 +168,7 @@ func (service *MMSService) watchDBusMethodCalls() {
 	log.Printf("jezek - service %v: watchDBusMethodCalls(): start", service.identity)
 	defer log.Printf("jezek - service %v: watchDBusMethodCalls(): end", service.identity)
 	for msg := range service.msgChan {
-		log.Printf("jezek - service %v: watchDBusMethodCalls(): Received message: %v", service.identity, msg)
+		log.Printf("jezek - service %v: watchDBusMethodCalls(): Received message: %s - %v", service.identity, msg.Member, msg)
 		var reply *dbus.Message
 		if msg.Interface != MMS_SERVICE_DBUS_IFACE {
 			log.Println("Received unkown method call on", msg.Interface, msg.Member)
@@ -472,4 +479,15 @@ func (service *MMSService) ReplySendMessage(reply *dbus.Message, uuid string) (d
 //TODO randomly creating a uuid until the download manager does this for us
 func (service *MMSService) GenMessagePath(uuid string) dbus.ObjectPath {
 	return dbus.ObjectPath(MMS_DBUS_PATH + "/" + service.identity + "/" + uuid)
+}
+
+// Creates handlers for message.
+// If already handled, prints log and returns.
+func (service *MMSService) HandleMessage(uuid string) {
+	path := service.GenMessagePath(uuid)
+	if _, ok := service.messageHandlers[path]; ok {
+		log.Printf("Message %s already handled", uuid)
+		return
+	}
+	service.messageHandlers[path] = NewMessageInterface(service.conn, path, service.msgDeleteChan, service.msgRedownloadChan)
 }

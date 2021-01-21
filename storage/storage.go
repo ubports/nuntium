@@ -28,6 +28,8 @@ import (
 	"log"
 	"os"
 	"path"
+	"path/filepath"
+	"strings"
 
 	"github.com/ubports/nuntium/mms"
 	"launchpad.net/go-xdg/v0"
@@ -35,10 +37,12 @@ import (
 
 const SUBPATH = "nuntium/store"
 
-func Create(mNotificationInd *mms.MNotificationInd) error {
+func Create(modemId string, mNotificationInd *mms.MNotificationInd) error {
 	state := MMSState{
+		Id:               mNotificationInd.TransactionId,
 		State:            NOTIFICATION,
-		ContentLocation:  mNotificationInd.ContentLocation, //TODO:jezek remove location, it is not used anywhere and the loc. is stored in MNotificationInd anyway.
+		ContentLocation:  mNotificationInd.ContentLocation,
+		ModemId:          modemId,
 		MNotificationInd: mNotificationInd,
 	}
 	storePath, err := xdg.Data.Ensure(path.Join(SUBPATH, mNotificationInd.UUID+".db"))
@@ -48,18 +52,36 @@ func Create(mNotificationInd *mms.MNotificationInd) error {
 	return writeState(state, storePath)
 }
 
-func Destroy(uuid string) error {
-	mmsState, err := GetMMSState(uuid)
-	if err != nil {
-		return fmt.Errorf("Error getting MMS state: %w", err)
+type multierror []error
+
+func (me multierror) Error() string {
+	if len(me) == 0 {
+		panic("empty multierror")
+	}
+	if len(me) == 1 {
+		return me[0].Error()
 	}
 
-	if storePath, err := xdg.Data.Ensure(path.Join(SUBPATH, uuid+".db")); err == nil {
-		if err := os.Remove(storePath); err != nil {
-			return err
-		}
-	} else {
+	return fmt.Sprintf("multiple errors: %v", me)
+}
+func Destroy(uuid string) (err error) {
+	storePath, err := xdg.Data.Ensure(path.Join(SUBPATH, uuid+".db"))
+	if err != nil {
 		return err
+	}
+	defer func() {
+		if remErr := os.Remove(storePath); remErr != nil {
+			if err == nil {
+				err = remErr
+			}
+			err = multierror{err, remErr}
+		}
+	}()
+
+	mmsState, err := GetMMSState(uuid)
+	if err != nil {
+		//TODO:jezek - debin compiler has to ensure go v1.13 or grater.
+		return fmt.Errorf("Error getting MMS state: %w", err)
 	}
 
 	if mmsState.State == NOTIFICATION {
@@ -85,6 +107,13 @@ func CreateResponseFile(uuid string) (*os.File, error) {
 }
 
 func UpdateDownloaded(uuid, filePath string) error {
+	log.Printf("jezek - UpdateDownloaded(%s, %s)", uuid, filePath)
+	state, err := GetMMSState(uuid)
+	if err != nil {
+		return fmt.Errorf("error retrieving message state: %w", err)
+	}
+
+	// Move downloaded file (filePath) to xdg data storage.
 	mmsPath, err := xdg.Data.Ensure(path.Join(SUBPATH, uuid+".mms"))
 	if err != nil {
 		return err
@@ -93,9 +122,9 @@ func UpdateDownloaded(uuid, filePath string) error {
 		//TODO delete file
 		return err
 	}
-	state := MMSState{
-		State: DOWNLOADED,
-	}
+
+	state.State = DOWNLOADED
+
 	storePath, err := xdg.Data.Find(path.Join(SUBPATH, uuid+".db"))
 	if err != nil {
 		return err
@@ -103,10 +132,29 @@ func UpdateDownloaded(uuid, filePath string) error {
 	return writeState(state, storePath)
 }
 
-func UpdateRetrieved(uuid string) error {
-	state := MMSState{
-		State: RETRIEVED,
+func UpdateReceived(uuid string) error {
+	state, err := GetMMSState(uuid)
+	if err != nil {
+		return fmt.Errorf("error retrieving message state: %w", err)
 	}
+
+	state.State = RECEIVED
+
+	storePath, err := xdg.Data.Find(path.Join(SUBPATH, uuid+".db"))
+	if err != nil {
+		return err
+	}
+	return writeState(state, storePath)
+}
+
+func UpdateResponded(uuid string) error {
+	state, err := GetMMSState(uuid)
+	if err != nil {
+		return fmt.Errorf("error retrieving message state: %w", err)
+	}
+
+	state.State = RESPONDED
+
 	storePath, err := xdg.Data.Find(path.Join(SUBPATH, uuid+".db"))
 	if err != nil {
 		return err
@@ -191,4 +239,36 @@ func writeState(state MMSState, storePath string) error {
 		return err
 	}
 	return nil
+}
+
+// Returns list of UUID strings stored in storage.
+func GetStoredUUIDs() []string {
+	// Search for all *.db files in xdg data directory in SUBPATH subfolder and extract UUID from filenames.
+
+	storeDir, err := xdg.Data.Find(SUBPATH)
+	if err != nil {
+		log.Printf("Storage directory %s not found in xdg data directories", SUBPATH)
+		return nil
+	}
+
+	uuids := make([]string, 0)
+	err = filepath.Walk(storeDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if matched, err := filepath.Match("*.db", filepath.Base(path)); err != nil {
+			return err
+		} else if matched {
+			uuids = append(uuids, strings.TrimSuffix(filepath.Base(path), ".db"))
+		}
+		return nil
+	})
+	if err != nil {
+		return nil
+	}
+
+	return uuids
 }
