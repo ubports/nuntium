@@ -37,23 +37,33 @@ type SendInfo map[string]string
 
 //Status represents an MMS' state
 //
-// Id represents the transacion ID for the MMS if using delivery request reports
+// Id represents the transaction ID for the MMS if using delivery request reports
 //
 // State can be:
-// - "notification": m-Notify.Ind PDU not yet downloaded.
-// - "downloaded": m-Retrieve.Conf PDU downloaded, but not yet acknowledged.
-// - "received": m-Retrieve.Conf PDU downloaded and successfully acknowledged.
-// - "draft": m-Send.Req PDU ready for sending.
-// - "sent": m-Send.Req PDU successfully sent.
+// - For incoming messages:
+//   - NOTIFICATION : m-Notify.Ind PDU not yet downloaded.
+//   - DOWNLOADED   : m-Retrieve.Conf PDU downloaded, but not yet communicated to telepathy or acknowledged to MMS provider.
+//   - RECEIVED     : m-Retrieve.Conf PDU downloaded and successfully communicated to telepathy, but not acknowledged to MMS provider.
+//   - RESPONDED    : m-Retrieve.Conf PDU downloaded and successfully communicated to telepathy and acknowledged to MMS provider.
+// - For outgoing messages:
+//   - DRAFT : m-Send.Req PDU ready for sending.
+//   - SENT  : m-Send.Req PDU successfully sent.
 //
 // SendState contains the sent state for each delivered message associated to
 // a particular MMS
+//
+// ModemId represents ID of modem to which the message belongs
 //
 // MNotificationInd holds the received m-Notify.Ind until PDU downloaded (is not nil when State is "notification").
 type MMSState struct {
 	Id               string
 	State            string
 	ContentLocation  string
-	SendState        SendInfo //TODO:jezek remove? it is not used anywhere.
+	SendState        SendInfo
+	ModemId          string
 	MNotificationInd *mms.MNotificationInd
+}
+
+func (m MMSState) IsIncoming() bool {
+	return m.State == NOTIFICATION || m.State == DOWNLOADED || m.State == RECEIVED || m.State == RESPONDED
 }

@@ -36,6 +36,7 @@ const (
 	NOTIFICATION = "notification"
 	DOWNLOADED   = "downloaded"
 	RECEIVED     = "received"
+	RESPONDED    = "responded"
 	DRAFT        = "draft"
 	SENT         = "sent"
 )

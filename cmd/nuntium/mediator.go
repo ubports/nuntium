@@ -64,7 +64,6 @@ func NewMediator(modem *ofono.Modem) *Mediator {
 	mediator.outMessage = make(chan *telepathy.OutgoingMessage)
 	mediator.terminate = make(chan bool)
 	mediator.undownloaded = make(map[string]string)
-	//TODO:jezek - Fill undownloaded from storage.
 	return mediator
 }
 
@@ -85,21 +84,8 @@ mediatorLoop:
 				log.Print("MMS is disabled")
 				continue
 			}
-			go mediator.handleMNotificationInd(push)
+			go mediator.handleMNotificationInd(push, mediator.modem.Identity())
 		case mNotificationInd := <-mediator.NewMNotificationInd:
-			//TODO:jezek - my operator delivers mNotificationInd every x minutes if not downloaded.
-			//Don't send message if duplicate (or notify oerator, that the mms is deferred, to stop? it is possibel? see manuals).
-			//See /todo.undownloaded_notifications.log
-			//
-			//Reading:
-			//	http://www.openmobilealliance.org/release/MMS/V1_1-20021104-C/OMA-WAP-MMS-ENC-V1_1-20021030-C.pdf - no deferred instructions, just mentions.
-			//	https://dl.cdn-anritsu.com/en-gb/test-measurement/files/Technical-Notes/White-Paper/MC-MMS_Signaling_Examples_and_KPI_Calculations-WP-1_0.pdf - no defered instructions, just mentions.
-			//	https://developer.brewmp.com/resources/tech-guides/multimedia-messaging-service-mms-technology-guide/mms-protocol-overview/mms-fe/receiving-mms-message - instructions on how to deffer.
-			//	https://www.slideshare.net/glebodic/mobile-messaging-part-5-76-mms-arch-and-transactions-reduced - has deferred instructions
-			//
-			//Notes:
-			//	If the application chooses to download the message at a later point in time, then an M-NotifyResp.ind is sent with the deferred flag set to acknowledge the receipt notification and notify that message download is deferred.
-
 			if deferredDownload {
 				go mediator.handleDeferredDownload(mNotificationInd)
 			} else {
@@ -117,7 +103,8 @@ mediatorLoop:
 			if err != nil {
 				log.Fatal(err)
 			}
-			//TODO:jezek - Spawn service interfaces from storage.
+
+			mediator.initializeMessages(id)
 		case id := <-mediator.modem.IdentityRemoved:
 			err := mmsManager.RemoveService(id)
 			if err != nil {
@@ -152,7 +139,7 @@ mediatorLoop:
 	log.Print("Ending mediator instance loop for modem")
 }
 
-func (mediator *Mediator) handleMNotificationInd(pushMsg *ofono.PushPDU) {
+func (mediator *Mediator) handleMNotificationInd(pushMsg *ofono.PushPDU, modemId string) {
 	if pushMsg == nil {
 		log.Print("Received nil push")
 		return
@@ -163,12 +150,22 @@ func (mediator *Mediator) handleMNotificationInd(pushMsg *ofono.PushPDU) {
 		log.Println("Unable to decode m-notification.ind: ", err, "with log", dec.GetLog())
 		return
 	}
-	storage.Create(mNotificationInd)
+	storage.Create(modemId, mNotificationInd)
 	mediator.NewMNotificationInd <- mNotificationInd
 }
 
 func (mediator *Mediator) handleDeferredDownload(mNotificationInd *mms.MNotificationInd) {
 	//TODO send MessageAdded with status="deferred" and mNotificationInd relevant headers
+	//
+	//Reading:
+	//	http://www.openmobilealliance.org/release/MMS/V1_1-20021104-C/OMA-WAP-MMS-ENC-V1_1-20021030-C.pdf - no deferred instructions, just mentions.
+	//	https://dl.cdn-anritsu.com/en-gb/test-measurement/files/Technical-Notes/White-Paper/MC-MMS_Signaling_Examples_and_KPI_Calculations-WP-1_0.pdf - no defered instructions, just mentions.
+	//	https://developer.brewmp.com/resources/tech-guides/multimedia-messaging-service-mms-technology-guide/mms-protocol-overview/mms-fe/receiving-mms-message - instructions on how to deffer.
+	//	https://www.slideshare.net/glebodic/mobile-messaging-part-5-76-mms-arch-and-transactions-reduced - has deferred instructions
+	//
+	//Notes:
+	//	If the application chooses to download the message at a later point in time, then an M-NotifyResp.ind is sent with the deferred flag set to acknowledge the receipt notification and notify that message download is deferred.
+
 }
 
 func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationInd) {
@@ -212,7 +209,7 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		return
 	} else {
 		if err := storage.UpdateDownloaded(mNotificationInd.UUID, filePath); err != nil {
-			log.Println("When calling UpdateDownloaded: ", err)
+			log.Println("Error updating storage (UpdateDownloaded): ", err)
 			return
 		}
 	}
@@ -222,14 +219,12 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		log.Printf("Handling MRetrieveConf error: %v", err)
 		return
 	}
-	delete(mediator.undownloaded, mNotificationInd.TransactionId)
-
-	mNotifyRespInd := mRetrieveConf.NewMNotifyRespInd(useDeliveryReports)
-	if err := storage.UpdateRetrieved(mNotifyRespInd.UUID); err != nil {
-		log.Print("Can't update mms status: ", err)
+	if err := storage.UpdateReceived(mRetrieveConf.UUID); err != nil {
+		log.Println("Error updating storage (UpdateRetrieved): ", err)
 		return
 	}
 
+	mNotifyRespInd := mRetrieveConf.NewMNotifyRespInd(useDeliveryReports)
 	if !mNotificationInd.IsLocal() {
 		// TODO deferred case
 		filePath := mediator.handleMNotifyRespInd(mNotifyRespInd)
@@ -240,6 +235,13 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 	} else {
 		log.Print("This is a local test, skipping m-notifyresp.ind")
 	}
+	//TODO:jezek - Add storage states to docs graph file docs/assets/receiving_success_deferral_disabled.msc
+	if err := storage.UpdateResponded(mNotifyRespInd.UUID); err != nil {
+		log.Println("Error updating storage (UpdateResponded): ", err)
+		return
+	}
+
+	delete(mediator.undownloaded, mNotificationInd.TransactionId)
 }
 
 func (mediator *Mediator) handleMRetrieveConfDownloadError(mNotificationInd *mms.MNotificationInd, err error) {
@@ -253,6 +255,11 @@ func (mediator *Mediator) handleMRetrieveConfDownloadError(mNotificationInd *mms
 		}
 	} else {
 		log.Printf("Download error for MNotificationInd with TransactionId: \"%s\" was already communicated by UUID: \"%s\"", mNotificationInd.TransactionId, mediator.undownloaded[mNotificationInd.TransactionId])
+		if err := storage.Destroy(mNotificationInd.UUID); err != nil {
+			log.Printf("Error removing message %s from storage: %v", mNotificationInd.UUID, err)
+		} else {
+			log.Printf("Message %s removed from storage", mNotificationInd.UUID)
+		}
 	}
 }
 
@@ -501,4 +508,68 @@ func mmsEnabled() bool {
 	}
 
 	return mms.Value.(bool)
+}
+
+// For messages storage with correspondind 'modemId' do:
+// - Spawns message handlers.
+// - Fills undownloaded map.
+//TODO:jezek - Empty expired & notify telepathy.
+func (mediator *Mediator) initializeMessages(modemId string) {
+	log.Printf("jezek - Mediator.initializeMessages(%s): start", modemId)
+	defer log.Printf("jezek - Mediator.initializeMessages(%s): end", modemId)
+	uuids := storage.GetStoredUUIDs()
+
+	log.Printf("Found %d messages in storage", len(uuids))
+	for _, uuid := range uuids {
+		log.Printf("jezek - checking uuid: %s", uuid)
+		mmsState, err := storage.GetMMSState(uuid)
+		if err != nil {
+			log.Printf("Error checking state of message stored under UUID: %s : %v", uuid, err)
+			if err := storage.Destroy(uuid); err != nil {
+				log.Printf("Error destroying faulty message: %v", err)
+			}
+			continue
+		}
+		log.Printf("jezek - %#v", mmsState)
+
+		if !mmsState.IsIncoming() {
+			log.Printf("Message %s is not an incoming message. State: %s", uuid, mmsState.State)
+			continue
+		}
+
+		// Housekeeping. Delete all old stored incoming messages, which are missing the ModemId.
+		if mmsState.ModemId == "" {
+			log.Printf("Message %s is an old incoming message. State: %s", uuid, mmsState.State)
+			if err := storage.Destroy(uuid); err != nil {
+				log.Printf("Error destroying old message: %v", err)
+			}
+			continue
+		}
+
+		if modemId != mmsState.ModemId {
+			log.Printf("jezek - message modem id (%s) doesn't match added modem (%s)", mmsState.ModemId, modemId)
+			continue
+		}
+
+		// Spawn interface listener.
+		if mmsState.State == storage.RECEIVED || mmsState.State == storage.RESPONDED {
+			log.Printf("jezek - spawning message handlers")
+			mediator.telepathyService.HandleMessage(uuid)
+		}
+
+		// Add to undownloaded.
+		if mmsState.State == storage.NOTIFICATION || mmsState.State == storage.DOWNLOADED || mmsState.State == storage.RECEIVED {
+			if mmsState.MNotificationInd != nil && mmsState.MNotificationInd.TransactionId != "" {
+				log.Printf("jezek - adding message to undownloaded")
+				mediator.undownloaded[mmsState.MNotificationInd.TransactionId] = uuid
+			} else {
+				log.Printf("Message state is \"%s\", but there is no MNotificationInd or TransactionId: %v", mmsState.State, mmsState.MNotificationInd)
+			}
+		}
+
+		//TODO:jezek - Try communicate and acknowledge DOWNLOADED message.
+		//TODO:jezek - Try to acknowledge RECEIVED message.
+		//TODO:jezek - Ask telepathy-service if a RECEIVED or RESPONDED message is read and if not, telepathy should spawn listeners.
+	}
+
 }

@@ -506,3 +506,7 @@ func (modem *Modem) Delete() {
 	modem.simSignal.C = nil
 	modem.endWatch <- true
 }
+
+func (modem *Modem) Identity() string {
+	return modem.identity
+}
