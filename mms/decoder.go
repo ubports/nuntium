@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"time"
 )
 
 func NewDecoder(data []byte) *MMSDecoder {
@@ -414,10 +415,20 @@ func (dec *MMSDecoder) Decode(pdu MMSReader) (err error) {
 			for ; dec.Offset < endOffset; dec.Offset++ {
 				val = (val << 8) | uint(dec.Data[dec.Offset])
 			}
-			// TODO add switch case for token
+
 			dec.log = dec.log + fmt.Sprintf("Expiry token: %x\n", token)
-			reflectedPdu.FieldByName("Expiry").SetUint(uint64(val))
-			dec.log = dec.log + fmt.Sprintf("Message Expiry %d, %x\n", val, dec.Data[dec.Offset])
+			expire := time.Time{}
+			switch token {
+			case ExpiryTokenAbsolute:
+				expire = time.Unix(int64(val), 0)
+			case ExpiryTokenRelative:
+				expire = time.Now().Add(time.Duration(val) * time.Second)
+			default:
+				err = fmt.Errorf("Unhandled token address in expiry field %x", token)
+			}
+
+			reflectedPdu.FieldByName("Expiry").SetUint(uint64(expire.Unix()))
+			dec.log = dec.log + fmt.Sprintf("Message Expiry %s (%d)\n", expire, reflectedPdu.FieldByName("Expiry").Uint())
 		case X_MMS_TRANSACTION_ID:
 			_, err = dec.ReadString(&reflectedPdu, "TransactionId")
 		case CONTENT_TYPE:
