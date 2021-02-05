@@ -219,16 +219,19 @@ type MSendConf struct {
 
 // MNotificationInd holds a m-notification.ind message defined in
 // OMA-WAP-MMS-ENC section 6.2
+// Note: Upon decode, if the expiry token in the 'Expiry' field is ExpiryTokenRelative, the 'Expiry' field will be computed relative to decode time.
 type MNotificationInd struct {
 	MMSReader
-	UUID, RedownloadOfUUID               string
+	UUID                                 string
+	RedownloadOfUUID                     string // If not empty, it means that the struct was created to redownload a previously failed message download with UUID stored in field.
 	Type, Version, Class, DeliveryReport byte
 	ReplyCharging, ReplyChargingDeadline byte
 	Priority                             byte
 	ReplyChargingId                      string
 	TransactionId, ContentLocation       string
 	From, Subject                        string
-	Expiry, Size                         uint64
+	Expiry                               uint64 // Unix time at which the message expires at MMS proxy.
+	Size                                 uint64
 }
 
 // MNotificationInd holds a m-notifyresp.ind message defined in
