@@ -22,6 +22,7 @@
 package telepathy
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -321,7 +322,7 @@ func (service *MMSService) MessageRemoved(objectPath dbus.ObjectPath) error {
 	return nil
 }
 
-func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotificationInd) error {
+func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotificationInd, downloadError error) error {
 	//just handle that mms as an empty MMS
 	params := make(map[string]dbus.Variant)
 
@@ -335,7 +336,22 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 	params["Status"] = dbus.Variant{"received"}
 	date := time.Now().Format(time.RFC3339)
 	params["Date"] = dbus.Variant{date}
-	params["Error"] = dbus.Variant{"Error"}
+	expire := ""
+	if mNotificationInd.Expiry > 0 {
+		expire = time.Unix(int64(mNotificationInd.Expiry), 0).Format(time.RFC3339)
+	}
+	errorMessage, err := json.Marshal(&struct {
+		Description string
+		Expire      string
+		Size        uint64
+	}{downloadError.Error(), expire, mNotificationInd.Size})
+	if err != nil {
+		log.Printf("Error marshaling download error message to json: %v", err)
+		errorMessage = []byte("{}")
+	}
+	params["Error"] = dbus.Variant{true}
+	params["ErrorMessage"] = dbus.Variant{string(errorMessage)}
+	params["AllowRedownload"] = dbus.Variant{true}
 
 	sender := mNotificationInd.From
 	if strings.HasSuffix(mNotificationInd.From, PLMN) {

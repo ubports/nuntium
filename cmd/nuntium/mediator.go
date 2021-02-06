@@ -250,7 +250,7 @@ func (mediator *Mediator) handleMRetrieveConfDownloadError(mNotificationInd *mms
 	if _, ok := mediator.undownloaded[mNotificationInd.TransactionId]; mNotificationInd.RedownloadOfUUID != "" || !ok || mNotificationInd.TransactionId == "" {
 		// Error occurred after redownload requested or this is the first time the some download error for TransactionId occurred (or is empty, but this shouldn't happen)
 		// Send error message to telepathy service.
-		mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd)
+		mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd, err)
 		if mNotificationInd.TransactionId != "" {
 			// Mark that some error for TransactionId occurred.
 			mediator.undownloaded[mNotificationInd.TransactionId] = mNotificationInd.UUID
