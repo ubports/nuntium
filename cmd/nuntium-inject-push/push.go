@@ -55,7 +55,7 @@ var mNotificationIndFrom = []byte{
 var mNotificationIndClass = []byte{
 	// Class
 	// 0x8a, 0x80,
-	0x80 + mms.X_MMS_MESSAGE_CLASS, 0x80,
+	0x80 + mms.X_MMS_MESSAGE_CLASS, mms.ClassPersonal,
 }
 
 var mNotificationIndSize = []byte{
