@@ -337,8 +337,8 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 	date := time.Now().Format(time.RFC3339)
 	params["Date"] = dbus.Variant{date}
 	expire := ""
-	if mNotificationInd.Expiry > 0 {
-		expire = time.Unix(int64(mNotificationInd.Expiry), 0).Format(time.RFC3339)
+	if mNotificationInd.Expiry.Value > 0 {
+		expire = mNotificationInd.Expiry.Time().Format(time.RFC3339)
 	}
 	errorMessage, err := json.Marshal(&struct {
 		Description string

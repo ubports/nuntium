@@ -217,9 +217,25 @@ type MSendConf struct {
 	MessageId      string
 }
 
+type Expiry struct {
+	Token uint8  // ExpiryTokenRelative | ExpiryTokenAbsolute
+	Value uint64 // Unix time if Absolute, # of seconds otherwise.
+}
+
+// Return time of expiration. If the expiry value is relative, the result will be relative to function call time (now).
+// If Token is invalid returns empty time.Time{}.
+func (e Expiry) Time() time.Time {
+	if e.Token == ExpiryTokenAbsolute {
+		return time.Unix(int64(e.Value), -1)
+	}
+	if e.Token == ExpiryTokenRelative {
+		return time.Now().Add(time.Second * time.Duration(e.Value))
+	}
+	return time.Time{}
+}
+
 // MNotificationInd holds a m-notification.ind message defined in
 // OMA-WAP-MMS-ENC section 6.2
-// Note: Upon decode, if the expiry token in the 'Expiry' field is ExpiryTokenRelative, the 'Expiry' field will be computed relative to decode time.
 type MNotificationInd struct {
 	MMSReader
 	UUID                                 string
@@ -230,7 +246,7 @@ type MNotificationInd struct {
 	ReplyChargingId                      string
 	TransactionId, ContentLocation       string
 	From, Subject                        string
-	Expiry                               uint64 // Unix time at which the message expires at MMS proxy.
+	Expiry                               Expiry
 	Size                                 uint64
 }
 

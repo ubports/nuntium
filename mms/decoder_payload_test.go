@@ -67,3 +67,20 @@ func (s *PayloadDecoderTestSuite) TestDecodeInvalidMSendConf(c *C) {
 	c.Check(mSendConf.TransactionId, Equals, "")
 	mSendConf.Status()
 }
+
+func (s *PayloadDecoderTestSuite) TestDecodeSuccessfulMNotificationInd(c *C) {
+	inputBytes, err := ioutil.ReadFile("test_payloads/m-notification.ind_success")
+	c.Assert(err, IsNil)
+
+	mNotificationInd := NewMNotificationInd()
+	dec := NewDecoder(inputBytes)
+	err = dec.Decode(mNotificationInd)
+	c.Log(dec.GetLog())
+	c.Assert(err, IsNil)
+	c.Check(mNotificationInd.Version, Equals, uint8(MMS_MESSAGE_VERSION_1_0))
+	c.Check(mNotificationInd.From, Equals, "+543515924906/TYPE=PLMN")
+	c.Check(mNotificationInd.Class, Equals, ClassPersonal)
+	c.Check(mNotificationInd.Size, Equals, uint64(29696))
+	c.Check(mNotificationInd.Expiry, Equals, Expiry{ExpiryTokenRelative, 172799})
+	c.Check(mNotificationInd.ContentLocation, Equals, "http://localhost:9191/mms")
+}
