@@ -338,17 +338,23 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 	params["Date"] = dbus.Variant{date}
 	expire := ""
 	if mNotificationInd.Expiry.Value > 0 {
-		expire = mNotificationInd.Expiry.Time().Format(time.RFC3339)
+		expire = mNotificationInd.Received.Add(mNotificationInd.Expiry.DurationFrom(mNotificationInd.Received)).Format(time.RFC3339)
+	}
+	errorCode := "x-ubports-nuntium-error-unknown"
+	if ec, ok := downloadError.(interface{ Code() string }); ok {
+		errorCode = ec.Code()
 	}
 	errorMessage, err := json.Marshal(&struct {
-		Description string
-		Expire      string
-		Size        uint64
-	}{downloadError.Error(), expire, mNotificationInd.Size})
+		Code    string
+		Message string
+		Expire  string `json:",omitempty"`
+		Size    uint64 `json:",omitempty"`
+	}{errorCode, downloadError.Error(), expire, mNotificationInd.Size})
 	if err != nil {
 		log.Printf("Error marshaling download error message to json: %v", err)
 		errorMessage = []byte("{}")
 	}
+	//TODO:jezek - merge Error & ErrorMessage
 	params["Error"] = dbus.Variant{true}
 	params["ErrorMessage"] = dbus.Variant{string(errorMessage)}
 	params["AllowRedownload"] = dbus.Variant{true}

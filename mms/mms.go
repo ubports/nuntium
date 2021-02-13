@@ -222,16 +222,16 @@ type Expiry struct {
 	Value uint64 // Unix time if Absolute, # of seconds otherwise.
 }
 
-// Return time of expiration. If the expiry value is relative, the result will be relative to function call time (now).
-// If Token is invalid returns empty time.Time{}.
-func (e Expiry) Time() time.Time {
-	if e.Token == ExpiryTokenAbsolute {
-		return time.Unix(int64(e.Value), -1)
+// Returns a duration which has to pass from input param time to expire the message in MMS proxy.
+// If Expiry.Token is invalid returns time.Duration(0).
+func (e Expiry) DurationFrom(from time.Time) time.Duration {
+	switch e.Token {
+	case ExpiryTokenAbsolute:
+		return time.Unix(int64(e.Value), 0).Sub(from)
+	case ExpiryTokenRelative:
+		return time.Duration(e.Value) * time.Second
 	}
-	if e.Token == ExpiryTokenRelative {
-		return time.Now().Add(time.Second * time.Duration(e.Value))
-	}
-	return time.Time{}
+	return time.Duration(0)
 }
 
 // MNotificationInd holds a m-notification.ind message defined in
@@ -240,6 +240,7 @@ type MNotificationInd struct {
 	MMSReader
 	UUID                                 string
 	RedownloadOfUUID                     string // If not empty, it means that the struct was created to redownload a previously failed message download with UUID stored in field.
+	Received                             time.Time
 	Type, Version, Class, DeliveryReport byte
 	ReplyCharging, ReplyChargingDeadline byte
 	Priority                             byte

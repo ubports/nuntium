@@ -28,6 +28,7 @@ import (
 	"os"
 	"os/user"
 	"sync"
+	"time"
 
 	"github.com/ubports/nuntium/mms"
 	"github.com/ubports/nuntium/ofono"
@@ -146,6 +147,7 @@ func (mediator *Mediator) handleMNotificationInd(pushMsg *ofono.PushPDU, modemId
 	}
 	dec := mms.NewDecoder(pushMsg.Data)
 	mNotificationInd := mms.NewMNotificationInd()
+	mNotificationInd.Received = time.Now()
 	if err := dec.Decode(mNotificationInd); err != nil {
 		log.Println("Unable to decode m-notification.ind: ", err, "with log", dec.GetLog())
 		return
@@ -168,6 +170,13 @@ func (mediator *Mediator) handleDeferredDownload(mNotificationInd *mms.MNotifica
 
 }
 
+type standartizedError struct {
+	error
+	code string
+}
+
+func (e standartizedError) Code() string { return e.code }
+
 func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationInd) {
 	mediator.contextLock.Lock()
 	defer mediator.contextLock.Unlock()
@@ -183,7 +192,7 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		mmsContext, err = mediator.modem.ActivateMMSContext(preferredContext)
 		if err != nil {
 			log.Print("Cannot activate ofono context: ", err)
-			mediator.handleMRetrieveConfDownloadError(mNotificationInd, err)
+			mediator.handleMRetrieveConfDownloadError(mNotificationInd, standartizedError{err, "x-ubports-nuntium-mms-activate-context-error"})
 			return
 		}
 		defer func() {
@@ -198,7 +207,7 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		proxy, err = mmsContext.GetProxy()
 		if err != nil {
 			log.Print("Error retrieving proxy: ", err)
-			mediator.handleMRetrieveConfDownloadError(mNotificationInd, err)
+			mediator.handleMRetrieveConfDownloadError(mNotificationInd, standartizedError{err, "x-ubports-nuntium-mms-get-proxy-error"})
 			return
 		}
 	}
@@ -206,7 +215,7 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 	//TODO:jezek Downloader always downloads to same mms file(?) and then renames it in UpdateDownloaded. If there is concurency, will there be a problem?
 	if filePath, err := mNotificationInd.DownloadContent(proxy.Host, int32(proxy.Port)); err != nil {
 		log.Print("Download issues: ", err)
-		mediator.handleMRetrieveConfDownloadError(mNotificationInd, err)
+		mediator.handleMRetrieveConfDownloadError(mNotificationInd, standartizedError{err, "x-ubports-nuntium-mms-download-content-error"})
 		return
 	} else {
 		if err := storage.UpdateDownloaded(mNotificationInd.UUID, filePath); err != nil {
