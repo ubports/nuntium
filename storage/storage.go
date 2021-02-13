@@ -64,6 +64,14 @@ func (me multierror) Error() string {
 
 	return fmt.Sprintf("multiple errors: %v", me)
 }
+
+//TODO:jezek - Remove all possible stored files found for uuid.
+//data:
+// <uuid>.db
+// <uuid>.mms
+//cache:
+// <uuid>.m-notifyresp.ind
+// <uuid>.m-send.req
 func Destroy(uuid string) (err error) {
 	storePath, err := xdg.Data.Ensure(path.Join(SUBPATH, uuid+".db"))
 	if err != nil {
@@ -73,6 +81,7 @@ func Destroy(uuid string) (err error) {
 		if remErr := os.Remove(storePath); remErr != nil {
 			if err == nil {
 				err = remErr
+				return
 			}
 			err = multierror{err, remErr}
 		}
@@ -99,6 +108,11 @@ func Destroy(uuid string) (err error) {
 }
 
 func CreateResponseFile(uuid string) (*os.File, error) {
+	_, err := GetMMSState(uuid)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving message state: %w", err)
+	}
+
 	filePath, err := xdg.Cache.Ensure(path.Join(SUBPATH, uuid+".m-notifyresp.ind"))
 	if err != nil {
 		return nil, err
