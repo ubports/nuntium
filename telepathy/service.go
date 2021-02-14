@@ -334,15 +334,22 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 	// https://github.com/TelepathyIM/telepathy-qt/blob/7cf3e35fdf6cf7ea7d8fc301eae04fe43930b17f/TelepathyQt/base-channel.cpp#L460
 	// https://github.com/ubports/history-service/blob/8285a4a3174b84a04f00d600fff99905aec6c4e2/daemon/historydaemon.cpp#L1023
 	params["Status"] = dbus.Variant{"received"}
+
 	date := time.Now().Format(time.RFC3339)
 	params["Date"] = dbus.Variant{date}
-	expire := ""
-	if mNotificationInd.Expiry.Value > 0 {
-		expire = mNotificationInd.Received.Add(mNotificationInd.Expiry.DurationFrom(mNotificationInd.Received)).Format(time.RFC3339)
+
+	sender := mNotificationInd.From
+	if strings.HasSuffix(mNotificationInd.From, PLMN) {
+		params["Sender"] = dbus.Variant{sender[:len(sender)-len(PLMN)]}
 	}
+
 	errorCode := "x-ubports-nuntium-error-unknown"
 	if ec, ok := downloadError.(interface{ Code() string }); ok {
 		errorCode = ec.Code()
+	}
+	expire := ""
+	if mNotificationInd.Expiry.IsValid() {
+		expire = mNotificationInd.Received.Add(mNotificationInd.Expiry.DurationFrom(mNotificationInd.Received)).Format(time.RFC3339)
 	}
 	errorMessage, err := json.Marshal(&struct {
 		Code    string
@@ -359,19 +366,12 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 	params["ErrorMessage"] = dbus.Variant{string(errorMessage)}
 	params["AllowRedownload"] = dbus.Variant{true}
 
-	sender := mNotificationInd.From
-	if strings.HasSuffix(mNotificationInd.From, PLMN) {
-		params["Sender"] = dbus.Variant{sender[:len(sender)-len(PLMN)]}
+	if mNotificationInd.RedownloadOfUUID != "" {
+		params["DeleteEvent"] = dbus.Variant{string(service.GenMessagePath(mNotificationInd.RedownloadOfUUID))}
 	}
 
 	payload := Payload{Path: service.GenMessagePath(mNotificationInd.UUID), Properties: params}
-
-	if mNotificationInd.RedownloadOfUUID != "" {
-		payload.Properties["DeleteEvent"] = dbus.Variant{string(service.GenMessagePath(mNotificationInd.RedownloadOfUUID))}
-	}
-
 	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, service.msgRedownloadChan)
-	//TODO:jezek - store if not notified into storage & re-try on init
 	return service.MessageAdded(&payload)
 }
 

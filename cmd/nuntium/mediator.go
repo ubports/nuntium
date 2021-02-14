@@ -46,7 +46,7 @@ type Mediator struct {
 	outMessage          chan *telepathy.OutgoingMessage
 	terminate           chan bool
 	contextLock         sync.Mutex
-	undownloaded        map[string]string //transactionId => UUID
+	undownloaded        map[string]string // (transactionId: UUID) Messages with download error, which was successfully communicated to telepathyService.
 }
 
 //TODO these vars need a configuration location managed by system settings or
@@ -255,22 +255,34 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 	delete(mediator.undownloaded, mNotificationInd.TransactionId)
 }
 
+// Communicates the download error "err" of mNotificationInd to telepathy-ofono service.
+// Some operators repeatedly push mNotificationInd with the same transaction id, if download not acknowledged by mNotifyRespInd. So we have to make sure, to communicate the download error just once.
 func (mediator *Mediator) handleMRetrieveConfDownloadError(mNotificationInd *mms.MNotificationInd, err error) {
-	if _, ok := mediator.undownloaded[mNotificationInd.TransactionId]; mNotificationInd.RedownloadOfUUID != "" || !ok || mNotificationInd.TransactionId == "" {
-		// Error occurred after redownload requested or this is the first time the some download error for TransactionId occurred (or is empty, but this shouldn't happen)
-		// Send error message to telepathy service.
-		mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd, err)
-		if mNotificationInd.TransactionId != "" {
-			// Mark that some error for TransactionId occurred.
-			mediator.undownloaded[mNotificationInd.TransactionId] = mNotificationInd.UUID
-		}
-	} else {
+	_, inUndownloaded := mediator.undownloaded[mNotificationInd.TransactionId]
+	if mNotificationInd.RedownloadOfUUID == "" && inUndownloaded && mNotificationInd.TransactionId != "" {
+		// This download error "err" happened not after redownload and not after first download fail of pushed mNotificationInd with the same transaction id.
 		log.Printf("Download error for MNotificationInd with TransactionId: \"%s\" was already communicated by UUID: \"%s\"", mNotificationInd.TransactionId, mediator.undownloaded[mNotificationInd.TransactionId])
+		// Delete the message from storage.
 		if err := storage.Destroy(mNotificationInd.UUID); err != nil {
 			log.Printf("Error removing message %s from storage: %v", mNotificationInd.UUID, err)
-		} else {
-			log.Printf("Message %s removed from storage", mNotificationInd.UUID)
+			return
 		}
+		log.Printf("Message %s was removed from storage", mNotificationInd.UUID)
+		return
+	}
+
+	// Error occurred after redownload requested or this is the first time the same download error for TransactionId occurred (or is empty, but this shouldn't happen)
+	// Send error message to telepathy-ofono service.
+	if addErr := mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd, err); addErr != nil {
+		// Couldn't inform telepathy-ofono about download fail.
+		//TODO Store into storage & re-try on initilization.
+		log.Printf("Sending download error message to telepathy-ofono has failed with error: %v", addErr)
+		return
+	}
+
+	if mNotificationInd.TransactionId != "" {
+		// Mark that some download error for TransactionId occurred and was already successfully communicated to telepathy-ofono service.
+		mediator.undownloaded[mNotificationInd.TransactionId] = mNotificationInd.UUID
 	}
 }
 
