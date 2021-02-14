@@ -344,13 +344,26 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 	}
 
 	errorCode := "x-ubports-nuntium-error-unknown"
-	if ec, ok := downloadError.(interface{ Code() string }); ok {
-		errorCode = ec.Code()
+	if eci, ok := downloadError.(interface{ Code() string }); ok {
+		log.Printf("jezek - downloadError has Code() function returning: %v", eci.Code())
+		errorCode = eci.Code()
+	}
+
+	allowRedownload := false
+	if ari, ok := downloadError.(interface{ AllowRedownload() bool }); ok {
+		log.Printf("jezek - downloadError has AllowRedownload() function returning: %v", ari.AllowRedownload())
+		allowRedownload = ari.AllowRedownload()
 	}
 
 	expire := ""
+	expireTime := mNotificationInd.Received.Add(mNotificationInd.Expiry.DurationFrom(mNotificationInd.Received))
 	if mNotificationInd.Expiry.IsValid() {
-		expire = mNotificationInd.Received.Add(mNotificationInd.Expiry.DurationFrom(mNotificationInd.Received)).Format(time.RFC3339)
+		expire = expireTime.Format(time.RFC3339)
+		if allowRedownload && time.Now().After(expireTime) {
+			// Expired, don't allow redownload.
+			log.Printf("Message expired at %s", expireTime)
+			allowRedownload = false
+		}
 	}
 
 	var mobileData *bool
@@ -374,7 +387,7 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 	//TODO:jezek - merge Error & ErrorMessage
 	params["Error"] = dbus.Variant{true}
 	params["ErrorMessage"] = dbus.Variant{string(errorMessage)}
-	params["AllowRedownload"] = dbus.Variant{true}
+	params["AllowRedownload"] = dbus.Variant{allowRedownload}
 
 	if mNotificationInd.RedownloadOfUUID != "" {
 		params["DeleteEvent"] = dbus.Variant{string(service.GenMessagePath(mNotificationInd.RedownloadOfUUID))}

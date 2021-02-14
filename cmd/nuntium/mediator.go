@@ -177,6 +177,12 @@ type standartizedError struct {
 
 func (e standartizedError) Code() string { return e.code }
 
+type downloadError struct {
+	standartizedError
+}
+
+func (e standartizedError) AllowRedownload() bool { return true }
+
 func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationInd) {
 	mediator.contextLock.Lock()
 	defer mediator.contextLock.Unlock()
@@ -192,7 +198,7 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		mmsContext, err = mediator.modem.ActivateMMSContext(preferredContext)
 		if err != nil {
 			log.Print("Cannot activate ofono context: ", err)
-			mediator.handleMRetrieveConfDownloadError(mNotificationInd, standartizedError{err, "x-ubports-nuntium-mms-activate-context-error"})
+			mediator.handleMRetrieveConfDownloadError(mNotificationInd, downloadError{standartizedError{err, "x-ubports-nuntium-mms-activate-context-error"}})
 			return
 		}
 		defer func() {
@@ -207,27 +213,31 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		proxy, err = mmsContext.GetProxy()
 		if err != nil {
 			log.Print("Error retrieving proxy: ", err)
-			mediator.handleMRetrieveConfDownloadError(mNotificationInd, standartizedError{err, "x-ubports-nuntium-mms-get-proxy-error"})
+			mediator.handleMRetrieveConfDownloadError(mNotificationInd, downloadError{standartizedError{err, "x-ubports-nuntium-mms-get-proxy-error"}})
 			return
 		}
 	}
 
 	//TODO:jezek Downloader always downloads to same mms file(?) and then renames it in UpdateDownloaded. If there is concurency, will there be a problem?
+	// Download message content.
 	if filePath, err := mNotificationInd.DownloadContent(proxy.Host, int32(proxy.Port)); err != nil {
 		log.Print("Download issues: ", err)
-		mediator.handleMRetrieveConfDownloadError(mNotificationInd, standartizedError{err, "x-ubports-nuntium-mms-download-content-error"})
+		mediator.handleMRetrieveConfDownloadError(mNotificationInd, downloadError{standartizedError{err, "x-ubports-nuntium-mms-download-content-error"}})
 		return
 	} else {
 		if err := storage.UpdateDownloaded(mNotificationInd.UUID, filePath); err != nil {
 			log.Println("Error updating storage (UpdateDownloaded): ", err)
+			mediator.handleMRetrieveConfDownloadError(mNotificationInd, standartizedError{err, "x-ubports-nuntium-mms-storage-error"})
 			return
 		}
 	}
 
 	//TODO:jezek - split handleMRetrieveConf into getMRetrieveConf & handle...
+	// Forward message to telepathy-ofono service.
 	mRetrieveConf, err := mediator.handleMRetrieveConf(mNotificationInd)
 	if err != nil {
 		log.Printf("Handling MRetrieveConf error: %v", err)
+		mediator.handleMRetrieveConfDownloadError(mNotificationInd, standartizedError{err, "x-ubports-nuntium-mms-forward-error"})
 		return
 	}
 	if err := storage.UpdateReceived(mRetrieveConf.UUID); err != nil {
@@ -235,6 +245,7 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		return
 	}
 
+	// Notify MMS service about successful download.
 	mNotifyRespInd := mRetrieveConf.NewMNotifyRespInd(useDeliveryReports)
 	if !mNotificationInd.IsLocal() {
 		// TODO deferred case
@@ -305,27 +316,26 @@ func (mediator *Mediator) handleMRetrieveConf(mNotificationInd *mms.MNotificatio
 		return nil, fmt.Errorf("unable to decode m-retrieve.conf: %s with log %s", err, dec.GetLog())
 	}
 
-	if mediator.telepathyService != nil {
+	if mediator.telepathyService == nil {
+		return nil, fmt.Errorf("no telepathy-ofono service found")
+	}
 
-		// Check if there was some download error communicated for TransactionId before and no redownload was triggered (on redownload request, RedownloadOfUUID is filled and listener is stopped automatically).
-		if uuid, ok := mediator.undownloaded[mNotificationInd.TransactionId]; mNotificationInd.RedownloadOfUUID == "" && ok {
-			// There was an error message communicated to telepathy before, mark it to delete it by telepathy when communicating this message.
-			mNotificationInd.RedownloadOfUUID = uuid
-			// Before return, close listener for redownload request.
-			defer func() {
-				if err := mediator.telepathyService.MessageRemoved(mediator.telepathyService.GenMessagePath(uuid)); err != nil {
-					// Just log possible errors.
-					log.Printf("Error closing meesage %s handlers: %v", uuid, err)
-				}
-			}()
-		}
+	// Check if there was some download error communicated for TransactionId before and no redownload was triggered (on redownload request, RedownloadOfUUID is filled and listener is stopped automatically).
+	if uuid, ok := mediator.undownloaded[mNotificationInd.TransactionId]; mNotificationInd.RedownloadOfUUID == "" && ok {
+		// There was an error message communicated to telepathy before, mark it to delete it by telepathy when communicating this message.
+		mNotificationInd.RedownloadOfUUID = uuid
+		// Before return, close listener for redownload request.
+		defer func() {
+			if err := mediator.telepathyService.MessageRemoved(mediator.telepathyService.GenMessagePath(uuid)); err != nil {
+				// Just log possible errors.
+				log.Printf("Error closing meesage %s handlers: %v", uuid, err)
+			}
+		}()
+	}
 
-		if err := mediator.telepathyService.IncomingMessageAdded(mRetrieveConf, mNotificationInd); err != nil {
-			return nil, fmt.Errorf("cannot notify telepathy-ofono about new message: %v", err)
-		}
-
-	} else {
-		log.Print("Not sending recently retrieved message, there is no telepathyService.")
+	// Forward message to telepathy-ofono service.
+	if err := mediator.telepathyService.IncomingMessageAdded(mRetrieveConf, mNotificationInd); err != nil {
+		return nil, fmt.Errorf("cannot notify telepathy-ofono about new message: %v", err)
 	}
 
 	return mRetrieveConf, nil
