@@ -234,6 +234,14 @@ func (e Expiry) DurationFrom(from time.Time) time.Duration {
 	return time.Duration(0)
 }
 
+// Returns if Expiry is valid. To be valid it is enough for the Token has to be valid.
+func (e Expiry) IsValid() bool {
+	if e.Token != ExpiryTokenAbsolute && e.Token != ExpiryTokenRelative {
+		return false
+	}
+	return true
+}
+
 // MNotificationInd holds a m-notification.ind message defined in
 // OMA-WAP-MMS-ENC section 6.2
 type MNotificationInd struct {
