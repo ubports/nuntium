@@ -347,16 +347,26 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 	if ec, ok := downloadError.(interface{ Code() string }); ok {
 		errorCode = ec.Code()
 	}
+
 	expire := ""
 	if mNotificationInd.Expiry.IsValid() {
 		expire = mNotificationInd.Received.Add(mNotificationInd.Expiry.DurationFrom(mNotificationInd.Received)).Format(time.RFC3339)
 	}
+
+	var mobileData *bool
+	if enabled, err := service.MobileDataEnabled(); err == nil {
+		mobileData = &enabled
+	} else {
+		log.Printf("Error detecting mobile data enabled: %v", err)
+	}
+
 	errorMessage, err := json.Marshal(&struct {
-		Code    string
-		Message string
-		Expire  string `json:",omitempty"`
-		Size    uint64 `json:",omitempty"`
-	}{errorCode, downloadError.Error(), expire, mNotificationInd.Size})
+		Code       string
+		Message    string
+		Expire     string `json:",omitempty"`
+		Size       uint64 `json:",omitempty"`
+		MobileData *bool  `json:",omitempty"`
+	}{errorCode, downloadError.Error(), expire, mNotificationInd.Size, mobileData})
 	if err != nil {
 		log.Printf("Error marshaling download error message to json: %v", err)
 		errorMessage = []byte("{}")
@@ -518,6 +528,39 @@ func (service *MMSService) HandleMessage(uuid string) {
 	}
 	log.Printf("jezek - HandleMessage(%v)", uuid)
 	service.messageHandlers[path] = NewMessageInterface(service.conn, path, service.msgDeleteChan, service.msgRedownloadChan)
+}
+
+// Returns if mobile data is enabled right now.
+// Under the hood, DBus service property is read, if something fails, error is returned.
+//
+// dbus-send --session --print-reply \
+//     --dest=com.ubuntu.connectivity1 \
+//     /com/ubuntu/connectivity1/Private \
+//     org.freedesktop.DBus.Properties.Get \
+// string:com.ubuntu.connectivity1.Private \
+// 	string:'MobileDataEnabled'
+func (service *MMSService) MobileDataEnabled() (bool, error) {
+	log.Printf("jezek - MobileDataEnabled()")
+	call := dbus.NewMethodCallMessage("com.ubuntu.connectivity1", "/com/ubuntu/connectivity1/Private", "org.freedesktop.DBus.Properties", "Get")
+	call.AppendArgs("com.ubuntu.connectivity1.Private", "MobileDataEnabled")
+	reply, err := service.conn.SendWithReply(call)
+	if err != nil {
+		return false, fmt.Errorf("send with reply error: %w", err)
+	}
+	if reply.Type == dbus.TypeError {
+		return false, fmt.Errorf("reply is error: %w", reply.AsError())
+	}
+
+	var msg dbus.Variant
+	if err := reply.Args(&msg); err != nil {
+		return false, fmt.Errorf("reply decoding error: %w", err)
+	}
+
+	enabled, ok := msg.Value.(bool)
+	if !ok {
+		return false, fmt.Errorf("decoded variant does not contain bool vale: %#v", msg)
+	}
+	return enabled, nil
 }
 
 // Returns message identified by parameters from HistoryService.
