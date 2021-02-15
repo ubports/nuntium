@@ -356,8 +356,8 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 	}
 
 	expire := ""
-	expireTime := mNotificationInd.Received.Add(mNotificationInd.Expiry.DurationFrom(mNotificationInd.Received))
 	if mNotificationInd.Expiry.IsValid() {
+		expireTime := mNotificationInd.Received.Add(mNotificationInd.Expiry.DurationFrom(mNotificationInd.Received))
 		expire = expireTime.Format(time.RFC3339)
 		if allowRedownload && time.Now().After(expireTime) {
 			// Expired, don't allow redownload.

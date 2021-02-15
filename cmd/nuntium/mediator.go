@@ -145,6 +145,7 @@ func (mediator *Mediator) handleMNotificationInd(pushMsg *ofono.PushPDU, modemId
 		log.Print("Received nil push")
 		return
 	}
+
 	dec := mms.NewDecoder(pushMsg.Data)
 	mNotificationInd := mms.NewMNotificationInd()
 	mNotificationInd.Received = time.Now()
@@ -152,6 +153,12 @@ func (mediator *Mediator) handleMNotificationInd(pushMsg *ofono.PushPDU, modemId
 		log.Println("Unable to decode m-notification.ind: ", err, "with log", dec.GetLog())
 		return
 	}
+
+	if !mNotificationInd.Expiry.IsValid() {
+		// If expiry time not valid, set default expiry 7 days.
+		mNotificationInd.Expiry = mms.Expiry{mms.ExpiryTokenRelative, 7 * 24 * 60 * 60}
+	}
+
 	storage.Create(modemId, mNotificationInd)
 	mediator.NewMNotificationInd <- mNotificationInd
 }
