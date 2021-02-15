@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
 Build-Depends: debhelper (>= 9),
                dh-golang,
-               golang-go (>=1.11) | golang-1.13 (>=1.13),
+               golang-1.13,
                golang-go-dbus-dev,
                golang-go-flags-dev,
                golang-go-xdg-dev,
