@@ -20,6 +20,7 @@ ifneq ($(DEB_HOST_ARCH),powerpc)
 endif
 	
 override_dh_auto_install:
+    export PATH="$$PATH:/usr/lib/go-1.13/bin"; \
 	dh_auto_install -O--buildsystem=golang
 	sh debian/cleanup.sh ${CURDIR}/debian/tmp $(DH_GOPKG)
 
