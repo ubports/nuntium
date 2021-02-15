@@ -343,7 +343,7 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 		params["Sender"] = dbus.Variant{sender[:len(sender)-len(PLMN)]}
 	}
 
-	errorCode := "x-ubports-nuntium-error-unknown"
+	errorCode := "x-ubports-nuntium-mms-error-unknown"
 	if eci, ok := downloadError.(interface{ Code() string }); ok {
 		log.Printf("jezek - downloadError has Code() function returning: %v", eci.Code())
 		errorCode = eci.Code()
