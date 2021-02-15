@@ -4,6 +4,7 @@
 export DH_OPTIONS
 export DH_GOPKG := github.com/ubports/nuntium
 export DH_GOLANG_INSTALL_ALL := 1
+export PATH := /usr/lib/go-1.13/bin:$(PATH)
 
 DEB_HOST_ARCH := $(shell dpkg-architecture -qDEB_HOST_ARCH)
 
@@ -20,7 +21,6 @@ ifneq ($(DEB_HOST_ARCH),powerpc)
 endif
 	
 override_dh_auto_install:
-	export PATH="$$PATH:/usr/lib/go-1.13/bin"; \
 	dh_auto_install -O--buildsystem=golang
 	sh debian/cleanup.sh ${CURDIR}/debian/tmp $(DH_GOPKG)
 
