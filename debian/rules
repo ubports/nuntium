@@ -4,7 +4,7 @@
 export DH_OPTIONS
 export DH_GOPKG := github.com/ubports/nuntium
 export DH_GOLANG_INSTALL_ALL := 1
-export GOPATH := $(CURDIR)/obj-$(DEB_BUILD_GNU_TYPE)
+export GOPATH := $(CURDIR)/obj-$(DEB_BUILD_GNU_TYPE)/src/$(DH_GOPKG)
 export PATH := /usr/lib/go-1.13/bin:$(PATH)
 
 DEB_HOST_ARCH := $(shell dpkg-architecture -qDEB_HOST_ARCH)
