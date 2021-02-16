@@ -89,7 +89,6 @@ func Destroy(uuid string) (err error) {
 
 	mmsState, err := GetMMSState(uuid)
 	if err != nil {
-		//TODO:jezek - debin compiler has to ensure go v1.13 or grater.
 		return fmt.Errorf("Error getting MMS state: %w", err)
 	}
 

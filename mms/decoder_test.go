@@ -137,7 +137,6 @@ func TestMMSDecoder_ReadExpiry(t *testing.T) {
 			[]byte{0x88, 0x04, 0x81, 0x02, 0x01, 0x2c}, 0, &struct{ Token uint8 }{},
 			Expiry{ExpiryTokenRelative, 300}, nil, 5, nil,
 		},
-		//TODO:jezek - destination encoding (success, errors)
 	}
 
 	for _, tc := range testCases {
