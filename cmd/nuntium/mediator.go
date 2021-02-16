@@ -155,8 +155,8 @@ func (mediator *Mediator) handleMNotificationInd(pushMsg *ofono.PushPDU, modemId
 	}
 
 	if !mNotificationInd.Expiry.IsValid() {
-		// If expiry time not valid, set default expiry 7 days.
-		mNotificationInd.Expiry = mms.Expiry{mms.ExpiryTokenRelative, 7 * 24 * 60 * 60}
+		// If expiry time not valid, set default expiry 15 days.
+		mNotificationInd.Expiry = mms.Expiry{mms.ExpiryTokenRelative, 15 * 24 * 60 * 60}
 	}
 
 	storage.Create(modemId, mNotificationInd)
