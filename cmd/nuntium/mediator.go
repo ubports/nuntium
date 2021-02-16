@@ -225,7 +225,6 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		}
 	}
 
-	//TODO:jezek Downloader always downloads to same mms file(?) and then renames it in UpdateDownloaded. If there is concurency, will there be a problem?
 	// Download message content.
 	if filePath, err := mNotificationInd.DownloadContent(proxy.Host, int32(proxy.Port)); err != nil {
 		log.Print("Download issues: ", err)
@@ -413,6 +412,8 @@ func (mediator *Mediator) handleOutgoingMessage(msg *telepathy.OutgoingMessage) 
 
 func (mediator *Mediator) handleMSendReq(mSendReq *mms.MSendReq) {
 	log.Print("Encoding M-Send.Req")
+	//TODO:jezek - stoage is created, but it seems it is not deleted anywhere. Ensure deletion.
+	//TODO:jezek - on initialize, handle undeleted send messages (also add modem id and on init delete old stored messages).
 	f, err := storage.CreateSendFile(mSendReq.UUID)
 	if err != nil {
 		log.Print("Unable to create m-send.req file for ", mSendReq.UUID)

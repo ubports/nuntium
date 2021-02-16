@@ -139,23 +139,25 @@ func (service *MMSService) watchMessageRedownloadCalls() {
 
 		mmsState, err := service.getMMSState(msgObjectPath)
 		if err != nil {
-			log.Printf("jezek - MMSService.watchMessageRedownloadCalls: error retrieving message state: %v", err)
+			log.Printf("Redownload of %s error: retrieving message state error: %v", string(msgObjectPath), err)
 			continue
 		}
 		if mmsState.State != storage.NOTIFICATION {
-			log.Printf("jezek - MMSService.watchMessageRedownloadCalls: message was already downloaded")
+			log.Printf("Redownload of %s error: message was already downloaded", string(msgObjectPath))
 			continue
 		}
 		if mmsState.MNotificationInd == nil {
-			log.Printf("jezek - MMSService.watchMessageRedownloadCalls: no mNotificationInd found.")
+			log.Printf("Redownload of %s error: no mNotificationInd found", string(msgObjectPath))
 			continue
 		}
 		log.Printf("jezek - MMSService.watchMessageRedownloadCalls: mNotificationInd: %#v", mmsState.MNotificationInd)
 
+		// Stop previous message handling, remove and notify.
 		if err := service.MessageRemoved(msgObjectPath); err != nil {
-			//TODO:jezek - just log?, can some panic ocure after this?
-			log.Print("Failed to delete ", msgObjectPath, ": ", err)
+			log.Printf("Redownload of %s warning: removing message error: %v", string(msgObjectPath), err)
 		}
+
+		// Start new mNotificationInd handling as if pushed from MMS service, but with info about redownload.
 		newMNotificationInd := mmsState.MNotificationInd
 		newMNotificationInd.RedownloadOfUUID = mmsState.MNotificationInd.UUID
 		newMNotificationInd.UUID = mms.GenUUID()
@@ -293,9 +295,8 @@ func (service *MMSService) setProperty(msg *dbus.Message) error {
 	return errors.New("unhandled property")
 }
 
-//MessageRemoved emits the MessageRemoved signal with the path of the removed
-//message.
-//It also actually removes the message from storage.
+// MessageRemoved closes message handlers, removes message from storage and emits the MessageRemoved signal to mms service dbus interface for message identified by objectPath parameter in this order.
+// If message is not handled, removing from storage or sending signal fails, error is returned.
 func (service *MMSService) MessageRemoved(objectPath dbus.ObjectPath) error {
 	if _, ok := service.messageHandlers[objectPath]; !ok {
 		return fmt.Errorf("message not handled")

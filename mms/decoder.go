@@ -285,8 +285,7 @@ func (dec *MMSDecoder) ReadLongInteger(reflectedPdu *reflect.Value, hdr string) 
 	dec.Offset++
 	size := int(dec.Data[dec.Offset])
 	if size > SHORT_LENGTH_MAX {
-		//TODO:jezek Why is SHORT_LENGTH_MAX = 30, when later you're storing the size*bytes in an uint64 in which can fit only 8*bytes?
-		return 0, fmt.Errorf("cannot encode long integer, lenght was %d but expected %d", size, SHORT_LENGTH_MAX)
+		return 0, fmt.Errorf("cannot encode long integer, length was %d but expected %d", size, SHORT_LENGTH_MAX)
 	}
 	dec.Offset++
 	end := dec.Offset + size
