@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"time"
 )
 
 func NewDecoder(data []byte) *MMSDecoder {
@@ -54,6 +55,7 @@ func (dec *MMSDecoder) setPduField(pdu *reflect.Value, name string, v interface{
 func setterString(field *reflect.Value, v interface{}) { field.SetString(v.(string)) }
 func setterUint64(field *reflect.Value, v interface{}) { field.SetUint(v.(uint64)) }
 func setterSlice(field *reflect.Value, v interface{})  { field.SetBytes(v.([]byte)) }
+func setterTime(field *reflect.Value, v interface{})   { field.Set(reflect.ValueOf(v)) }
 
 func (dec *MMSDecoder) ReadEncodedString(reflectedPdu *reflect.Value, hdr string) (string, error) {
 	var length uint64
@@ -300,8 +302,9 @@ func (dec *MMSDecoder) ReadLongInteger(reflectedPdu *reflect.Value, hdr string) 
 	return v, nil
 }
 
-// ReadExpiry reads the expiry data from the next position according to OMA-TS-MMS_ENC-V1_3-20110913-A.
-// If not nil reflectedPdu provided, it's elements "Token"(uint8) and "Value"(uint64) will be filled with decoded values. If the elements are not valid, only a log message will be written.
+// ReadExpiry reads the expiry data from the next position according to OMA-TS-MMS_ENC-V1_3-20110913-A and returns the decoded expiry time.
+// If the data contains relative expiry time, the result will be computed relative to "received" time parameter.
+// If not nil "reflectedPdu" parameter provided, it's element "Expiry"(time.Time) will be filled on successful decoding. If the element is not present or not a time.Time type, only a log message will be written.
 //
 // 7.3.20 (X-Mms-Expiry Field) of
 // Expiry-value = Value-length (Absolute-token Date-value | Relative-token Delta-seconds-value)
@@ -314,7 +317,7 @@ func (dec *MMSDecoder) ReadLongInteger(reflectedPdu *reflect.Value, hdr string) 
 //
 // 7.3.15 (Delta-Seconds-Value) of OMA-TS-MMS_ENC-V1_3-20110913-A
 // Delta-seconds-value = Long-integer
-func (dec *MMSDecoder) ReadExpiry(reflectedPdu *reflect.Value) (expiry Expiry, err error) {
+func (dec *MMSDecoder) ReadExpiry(reflectedPdu *reflect.Value, received time.Time) (expiry time.Time, err error) {
 	length, err := dec.ReadLength(nil)
 	if err != nil {
 		return expiry, err
@@ -324,20 +327,17 @@ func (dec *MMSDecoder) ReadExpiry(reflectedPdu *reflect.Value) (expiry Expiry, e
 		return expiry, ErrorDecodeShortData{len(dec.Data), endOffset}
 	}
 
-	tokenField, valueField := "", ""
-	if reflectedPdu != nil {
-		tokenField, valueField = "Token", "Value"
-	}
-
-	expiry.Token, err = dec.ReadByte(reflectedPdu, tokenField)
+	var token uint8
+	token, err = dec.ReadByte(nil, "")
 	if err != nil {
 		return expiry, err
 	}
-	if expiry.Token != ExpiryTokenAbsolute && expiry.Token != ExpiryTokenRelative {
-		return expiry, ErrorDecodeUnknownExpiryToken(expiry.Token)
+	if token != ExpiryTokenAbsolute && token != ExpiryTokenRelative {
+		return expiry, ErrorDecodeUnknownExpiryToken(token)
 	}
 
-	expiry.Value, err = dec.ReadLongInteger(reflectedPdu, valueField)
+	var value uint64
+	value, err = dec.ReadLongInteger(nil, "")
 	if err != nil {
 		return expiry, err
 	}
@@ -346,7 +346,25 @@ func (dec *MMSDecoder) ReadExpiry(reflectedPdu *reflect.Value) (expiry Expiry, e
 		return expiry, ErrorDecodeInconsistentOffset{dec.Offset, endOffset}
 	}
 
-	dec.log = dec.log + fmt.Sprintf("Message Expiry %#v\n", expiry)
+	if token == ExpiryTokenRelative {
+		expiry = received.Add(time.Duration(value) * time.Second)
+	} else {
+		expiry = time.Unix(int64(value), 0)
+	}
+
+	if reflectedPdu != nil {
+		field := reflectedPdu.FieldByName("Expiry")
+		if field.IsValid() {
+			if field.Type() == reflect.TypeOf(time.Time{}) {
+				dec.setPduField(reflectedPdu, "Expiry", expiry, setterTime)
+			} else {
+				log.Printf("Field Expiry in decoding structure is not a time.Time type")
+			}
+		} else {
+			log.Printf("Field Expiry is not in decoding structure")
+		}
+	}
+	dec.log = dec.log + fmt.Sprintf("Message Expiry %v\n", expiry)
 	return expiry, nil
 }
 
@@ -453,13 +471,17 @@ func (dec *MMSDecoder) Decode(pdu MMSReader) (err error) {
 				err = fmt.Errorf("Unhandled token address in from field %x", token)
 			}
 		case X_MMS_EXPIRY:
-			var expiryPdu *reflect.Value
-			if e := reflectedPdu.FieldByName("Expiry"); e.IsValid() {
-				expiryPdu = &e
+			received := time.Time{}
+			if rf := reflectedPdu.FieldByName("Received"); rf.IsValid() {
+				if rec, ok := rf.Interface().(time.Time); ok {
+					received = rec
+				} else {
+					log.Printf("Field Received in decoding structure is not a time.Time type")
+				}
 			} else {
-				log.Println("Field Expiry not in decoding structure")
+				log.Printf("Field Received is not in decoding structure")
 			}
-			_, err = dec.ReadExpiry(expiryPdu)
+			_, err = dec.ReadExpiry(&reflectedPdu, received)
 		case X_MMS_TRANSACTION_ID:
 			_, err = dec.ReadString(&reflectedPdu, "TransactionId")
 		case CONTENT_TYPE:

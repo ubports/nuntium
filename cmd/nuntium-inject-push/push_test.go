@@ -3,6 +3,7 @@ package main
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/ubports/nuntium/mms"
 )
@@ -33,7 +34,7 @@ func TestGetMNotificationIndPayload(t *testing.T) {
 		}
 
 		dec := mms.NewDecoder(pl)
-		mni := mms.NewMNotificationInd()
+		mni := mms.NewMNotificationInd(time.Time{})
 		if err := dec.Decode(mni); err != nil {
 			t.Errorf("Error decoding payload: %v", err)
 			continue

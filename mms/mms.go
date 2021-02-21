@@ -217,31 +217,6 @@ type MSendConf struct {
 	MessageId      string
 }
 
-type Expiry struct {
-	Token uint8  // ExpiryTokenRelative | ExpiryTokenAbsolute
-	Value uint64 // Unix time if Absolute, # of seconds otherwise.
-}
-
-// Returns a duration which has to pass from input param time to expire the message in MMS proxy.
-// If Expiry.Token is invalid returns time.Duration(0).
-func (e Expiry) DurationFrom(from time.Time) time.Duration {
-	switch e.Token {
-	case ExpiryTokenAbsolute:
-		return time.Unix(int64(e.Value), 0).Sub(from)
-	case ExpiryTokenRelative:
-		return time.Duration(e.Value) * time.Second
-	}
-	return time.Duration(0)
-}
-
-// Returns if Expiry is valid. To be valid it is enough for the Token has to be valid.
-func (e Expiry) IsValid() bool {
-	if e.Token != ExpiryTokenAbsolute && e.Token != ExpiryTokenRelative {
-		return false
-	}
-	return true
-}
-
 // MNotificationInd holds a m-notification.ind message defined in
 // OMA-WAP-MMS-ENC section 6.2
 type MNotificationInd struct {
@@ -255,7 +230,7 @@ type MNotificationInd struct {
 	ReplyChargingId                      string
 	TransactionId, ContentLocation       string
 	From, Subject                        string
-	Expiry                               Expiry
+	Expiry                               time.Time
 	Size                                 uint64
 }
 
@@ -326,12 +301,44 @@ func NewMSendConf() *MSendConf {
 	}
 }
 
-func NewMNotificationInd() *MNotificationInd {
-	return &MNotificationInd{Type: TYPE_NOTIFICATION_IND, UUID: GenUUID()}
+func NewMNotificationInd(received time.Time) *MNotificationInd {
+	return &MNotificationInd{Type: TYPE_NOTIFICATION_IND, UUID: GenUUID(), Received: received}
 }
 
 func (mNotificationInd *MNotificationInd) IsLocal() bool {
 	return strings.HasPrefix(mNotificationInd.ContentLocation, "http://localhost:9191/mms")
+}
+
+// Default expire duration is 15 days.
+const ExpiryDefaultDuration = 15 * 24 * time.Hour
+
+// Returns the expiry time of the MNotificationInd, which is stored in Expiry field.
+// If Expiry field is empty/zero, function returns the time ExpiryDefaultDuration after the time in Received field.
+// If both Received and Expiry fields are empty/zero, function returns zero time.
+func (mNotificationInd *MNotificationInd) Expire() time.Time {
+	if mNotificationInd == nil {
+		return time.Time{}
+	}
+	if mNotificationInd.Expiry.IsZero() {
+		if mNotificationInd.Received.IsZero() {
+			return time.Time{}
+		}
+		return mNotificationInd.Received.Add(ExpiryDefaultDuration)
+	}
+	return mNotificationInd.Expiry
+}
+
+// Expiry returns if MNotificationInd is expired at the time of calling this function.
+// If both Received and Expiry fields are empty/zero, function returns false.
+func (mNotificationInd *MNotificationInd) Expired() bool {
+	if mNotificationInd == nil {
+		return false
+	}
+	expire := mNotificationInd.Expire()
+	if expire.IsZero() {
+		return false
+	}
+	return time.Now().After(expire)
 }
 
 func (mNotificationInd *MNotificationInd) NewMNotifyRespInd(status byte, deliveryReport bool) *MNotifyRespInd {
