@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	. "launchpad.net/gocheck"
 )
@@ -62,80 +63,87 @@ func (s *DecoderTestSuite) TestDecodeStringWithNullByteTerminator(c *C) {
 }
 
 func TestMMSDecoder_ReadExpiry(t *testing.T) {
+	time20000101 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	testCases := []struct {
 		name        string
 		bytes       []byte
 		offset      int
 		destination interface{}
-		wantExpiry  Expiry
+		received    time.Time
+		wantExpiry  time.Time
 		wantError   error
 		wantOffset  int
 		wantPanic   interface{}
 	}{
 		{
 			"relative-5minutes",
-			[]byte{0x88, 0x04, 0x81, 0x02, 0x01, 0x2c}, 0, &Expiry{},
-			Expiry{ExpiryTokenRelative, 300}, nil, 5, nil,
+			[]byte{0x88, 0x04, 0x81, 0x02, 0x01, 0x2c}, 0, &MNotificationInd{}, time20000101,
+			time20000101.Add(5 * time.Minute), nil, 5, nil,
 		},
 		{
 			"relative-5minutes-offset",
-			[]byte{0x00, 0x88, 0x04, 0x81, 0x02, 0x01, 0x2c}, 1, &Expiry{},
-			Expiry{ExpiryTokenRelative, 300}, nil, 6, nil,
+			[]byte{0x00, 0x88, 0x04, 0x81, 0x02, 0x01, 0x2c}, 1, &MNotificationInd{}, time20000101,
+			time20000101.Add(5 * time.Minute), nil, 6, nil,
 		},
 		{
 			"relative-1day",
-			[]byte{0x88, 0x05, 0x81, 0x03, 0x01, 0x51, 0x80}, 0, &Expiry{},
-			Expiry{ExpiryTokenRelative, 24 * 3600}, nil, 6, nil,
+			[]byte{0x88, 0x05, 0x81, 0x03, 0x01, 0x51, 0x80}, 0, &MNotificationInd{}, time20000101,
+			time20000101.Add(24 * time.Hour), nil, 6, nil,
 		},
 		{
 			"relative-2days",
-			[]byte{0x88, 0x05, 0x81, 0x03, 0x02, 0xA3, 0x00}, 0, &Expiry{},
-			Expiry{ExpiryTokenRelative, 2 * 24 * 3600}, nil, 6, nil,
+			[]byte{0x88, 0x05, 0x81, 0x03, 0x02, 0xA3, 0x00}, 0, &MNotificationInd{}, time20000101,
+			time20000101.Add(2 * 24 * time.Hour), nil, 6, nil,
 		},
 		{
 			"absolute-date",
-			[]byte{0x88, 0x06, 0x80, 0x04, 0x40, 0x19, 0xfe, 0x91}, 0, &Expiry{},
-			Expiry{ExpiryTokenAbsolute, 1075445393}, nil, 7, nil,
+			[]byte{0x88, 0x06, 0x80, 0x04, 0x40, 0x19, 0xfe, 0x91}, 0, &MNotificationInd{}, time20000101,
+			time.Unix(1075445393, 0), nil, 7, nil,
 		},
 		{
 			"error-expiry-length",
-			[]byte{0x88, 0x05, 0x81, 0x02, 0x01, 0x2c}, 0, &Expiry{},
-			Expiry{}, ErrorDecodeShortData{6, 6}, 1, nil,
+			[]byte{0x88, 0x05, 0x81, 0x02, 0x01, 0x2c}, 0, &MNotificationInd{}, time20000101,
+			time.Time{}, ErrorDecodeShortData{6, 6}, 1, nil,
 		},
 		{
 			"error-value-length",
-			[]byte{0x88, 0x04, 0x81, 0x03, 0x01, 0x2c}, 0, &Expiry{},
-			Expiry{}, ErrorDecodeShortData{4, 6}, 1, "runtime error: index out of range [6] with length 6",
+			[]byte{0x88, 0x04, 0x81, 0x03, 0x01, 0x2c}, 0, &MNotificationInd{}, time20000101,
+			time.Time{}, ErrorDecodeShortData{4, 6}, 1, "runtime error: index out of range [6] with length 6",
 		},
 		{
 			"error-unknown-token",
-			[]byte{0x88, 0x04, 0x82, 0x03, 0x01, 0x2c}, 0, &Expiry{},
-			Expiry{0x82, 0}, ErrorDecodeUnknownExpiryToken(0x82), 2, nil,
+			[]byte{0x88, 0x04, 0x82, 0x03, 0x01, 0x2c}, 0, &MNotificationInd{}, time20000101,
+			time.Time{}, ErrorDecodeUnknownExpiryToken(0x82), 2, nil,
 		},
 		{
 			"error-inconsistent-offset-lower",
-			[]byte{0x88, 0x05, 0x81, 0x02, 0x01, 0x2c, 0x00}, 0, &Expiry{},
-			Expiry{ExpiryTokenRelative, 300}, ErrorDecodeInconsistentOffset{5, 6}, 5, nil,
+			[]byte{0x88, 0x05, 0x81, 0x02, 0x01, 0x2c, 0x00}, 0, &MNotificationInd{}, time20000101,
+			time.Time{}, ErrorDecodeInconsistentOffset{5, 6}, 5, nil,
 		},
 		{
 			"error-inconsistent-offset-higher",
-			[]byte{0x88, 0x03, 0x81, 0x02, 0x01, 0x2c, 0x00}, 0, &Expiry{},
-			Expiry{ExpiryTokenRelative, 300}, ErrorDecodeInconsistentOffset{5, 4}, 5, nil,
+			[]byte{0x88, 0x03, 0x81, 0x02, 0x01, 0x2c, 0x00}, 0, &MNotificationInd{}, time20000101,
+			time.Time{}, ErrorDecodeInconsistentOffset{5, 4}, 5, nil,
 		},
 		{
-			"relative-5minutes-nodestination",
-			[]byte{0x88, 0x04, 0x81, 0x02, 0x01, 0x2c}, 0, nil,
-			Expiry{ExpiryTokenRelative, 300}, nil, 5, nil,
+			"absolute-nodestination-noreceived",
+			[]byte{0x88, 0x06, 0x80, 0x04, 0x40, 0x19, 0xfe, 0x91}, 0, nil, time.Time{},
+			time.Unix(1075445393, 0), nil, 7, nil,
 		},
 		{
-			"error-destination-token",
-			[]byte{0x88, 0x04, 0x81, 0x02, 0x01, 0x2c}, 0, &struct{}{},
-			Expiry{ExpiryTokenRelative, 300}, nil, 5, nil,
+			"relative-5minutes-nodestination-noreceived",
+			[]byte{0x88, 0x04, 0x81, 0x02, 0x01, 0x2c}, 0, nil, time.Time{},
+			time.Time{}.Add(5 * time.Minute), nil, 5, nil,
 		},
 		{
-			"error-destination-value",
-			[]byte{0x88, 0x04, 0x81, 0x02, 0x01, 0x2c}, 0, &struct{ Token uint8 }{},
-			Expiry{ExpiryTokenRelative, 300}, nil, 5, nil,
+			"relative-5minutes-destinationExpiryMissing",
+			[]byte{0x88, 0x04, 0x81, 0x02, 0x01, 0x2c}, 0, &struct{}{}, time20000101,
+			time20000101.Add(5 * time.Minute), nil, 5, nil,
+		},
+		{
+			"relative-5minutes-destinationExpiryWrongType",
+			[]byte{0x88, 0x04, 0x81, 0x02, 0x01, 0x2c}, 0, &struct{ Expiry uint64 }{}, time20000101,
+			time20000101.Add(5 * time.Minute), nil, 5, nil,
 		},
 	}
 
@@ -158,7 +166,7 @@ func TestMMSDecoder_ReadExpiry(t *testing.T) {
 				elem := reflect.ValueOf(tc.destination).Elem()
 				reflectedPdu = &elem
 			}
-			expiry, err := dec.ReadExpiry(reflectedPdu)
+			expiry, err := dec.ReadExpiry(reflectedPdu, tc.received)
 
 			if expiry != tc.wantExpiry || !reflect.DeepEqual(err, tc.wantError) {
 				t.Errorf("MMSDecoder.ReadExpiry(%T) = (%v, %v), want (%v, %v)", tc.destination, expiry, err, tc.wantExpiry, tc.wantError)
@@ -167,11 +175,8 @@ func TestMMSDecoder_ReadExpiry(t *testing.T) {
 				t.Errorf("After MMSDecoder.ReadExpiry(...), the MMSDecoder.Offset = %v, want %v", dec.Offset, tc.wantOffset)
 			}
 			if tc.destination != nil && err == nil {
-				if reflectedPdu.FieldByName("Token").IsValid() && expiry.Token != uint8(reflectedPdu.FieldByName("Token").Uint()) {
-					t.Errorf("Destination Token = %v, want %v", reflectedPdu.FieldByName("Token"), expiry.Token)
-				}
-				if reflectedPdu.FieldByName("Value").IsValid() && expiry.Value != uint64(reflectedPdu.FieldByName("Value").Uint()) {
-					t.Errorf("Destination Value = %v, want %v", reflectedPdu.FieldByName("Value"), expiry.Value)
+				if reflectedPdu.FieldByName("Expiry").IsValid() && reflectedPdu.FieldByName("Expiry").Type() == reflect.TypeOf(time.Time{}) && !expiry.Equal(reflectedPdu.FieldByName("Expiry").Interface().(time.Time)) {
+					t.Errorf("Destination Expiry = %v, want %v", reflectedPdu.FieldByName("Expiry"), expiry)
 				}
 			}
 		})

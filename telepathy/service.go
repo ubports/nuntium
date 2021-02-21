@@ -313,6 +313,11 @@ func (service *MMSService) MessageRemoved(objectPath dbus.ObjectPath) error {
 		return err
 	}
 
+	return service.SingnalMessageRemoved(objectPath)
+}
+
+// Sends messageRemovedSignal signal to MMS_SERVICE_DBUS_IFACE to indicate, that the message stopped being handled and was removed from nuntium storage.
+func (service *MMSService) SingnalMessageRemoved(objectPath dbus.ObjectPath) error {
 	signal := dbus.NewSignalMessage(service.payload.Path, MMS_SERVICE_DBUS_IFACE, messageRemovedSignal)
 	if err := signal.AppendArgs(objectPath); err != nil {
 		return err
@@ -356,15 +361,11 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 		allowRedownload = ari.AllowRedownload()
 	}
 
-	expire := ""
-	if mNotificationInd.Expiry.IsValid() {
-		expireTime := mNotificationInd.Received.Add(mNotificationInd.Expiry.DurationFrom(mNotificationInd.Received))
-		expire = expireTime.Format(time.RFC3339)
-		if allowRedownload && time.Now().After(expireTime) {
-			// Expired, don't allow redownload.
-			log.Printf("Message expired at %s", expireTime)
-			allowRedownload = false
-		}
+	expire := mNotificationInd.Expire().Format(time.RFC3339)
+	if allowRedownload && mNotificationInd.Expired() {
+		// Expired, don't allow redownload.
+		log.Printf("Message expired at %s", mNotificationInd.Expire())
+		allowRedownload = false
 	}
 
 	var mobileData *bool
@@ -395,6 +396,7 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 	}
 
 	payload := Payload{Path: service.GenMessagePath(mNotificationInd.UUID), Properties: params}
+	//TODO:jezek - if no redownload/expired, don't spawn listeners (or listen to delete?) & remove from storage...
 	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, service.msgRedownloadChan)
 	return service.MessageAdded(&payload)
 }
@@ -503,6 +505,8 @@ func (service *MMSService) MessageDestroy(uuid string) error {
 	if msgInterface, ok := service.messageHandlers[msgObjectPath]; ok {
 		msgInterface.Close()
 		delete(service.messageHandlers, msgObjectPath)
+		log.Printf("jezek - MessageDestroyed/unhandled(%v)", uuid)
+		return nil
 	}
 	return fmt.Errorf("no message interface handler for object path %s", msgObjectPath)
 }
@@ -533,15 +537,15 @@ func (service *MMSService) GenMessagePath(uuid string) dbus.ObjectPath {
 }
 
 // Creates handlers for message.
-// If already handled, prints log and returns.
-func (service *MMSService) HandleMessage(uuid string) {
+// If already handled, returns error.
+func (service *MMSService) MessageHandle(uuid string) error {
 	path := service.GenMessagePath(uuid)
 	if _, ok := service.messageHandlers[path]; ok {
-		log.Printf("Message %s already handled", uuid)
-		return
+		return fmt.Errorf("message is already handled")
 	}
-	log.Printf("jezek - HandleMessage(%v)", uuid)
+	log.Printf("jezek - MessageHandle(%v)", uuid)
 	service.messageHandlers[path] = NewMessageInterface(service.conn, path, service.msgDeleteChan, service.msgRedownloadChan)
+	return nil
 }
 
 // Returns if mobile data is enabled right now.
