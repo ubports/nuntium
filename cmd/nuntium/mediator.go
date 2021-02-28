@@ -153,6 +153,24 @@ func (mediator *Mediator) handleMNotificationInd(pushMsg *ofono.PushPDU, modemId
 		return
 	}
 
+	// Set received date to first push occurrence, if this is not a first time this transaction ID occurred.
+	if mNotificationInd.TransactionId != "" {
+		if uuid, ok := mediator.undownloaded[mNotificationInd.TransactionId]; ok {
+			log.Printf("Pushed transaction ID (%s) is in undownloaded pointing to UUID: %s", mNotificationInd.TransactionId, uuid)
+			if st, err := storage.GetMMSState(uuid); err == nil {
+				log.Printf("jezek - mmsState: %v", st)
+				if st.MNotificationInd != nil {
+					log.Printf("Changing recieved date to the first push date: %v", st.MNotificationInd.Received)
+					mNotificationInd.Received = st.MNotificationInd.Received
+				} else {
+					log.Printf("Error, no MNotificationInd in loaded mmsState for UUID %s", uuid)
+				}
+			} else {
+				log.Printf("Error, can't load mmsState for UUID %s: %v", uuid, err)
+			}
+		}
+	}
+
 	storage.Create(modemId, mNotificationInd)
 	mediator.NewMNotificationInd <- mNotificationInd
 }

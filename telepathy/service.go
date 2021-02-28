@@ -386,13 +386,14 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 		log.Printf("Error marshaling download error message to json: %v", err)
 		errorMessage = []byte("{}")
 	}
-	//TODO:jezek - merge Error & ErrorMessage
-	params["Error"] = dbus.Variant{true}
-	params["ErrorMessage"] = dbus.Variant{string(errorMessage)}
+	params["Error"] = dbus.Variant{string(errorMessage)}
 	params["AllowRedownload"] = dbus.Variant{allowRedownload}
 
 	if mNotificationInd.RedownloadOfUUID != "" {
 		params["DeleteEvent"] = dbus.Variant{string(service.GenMessagePath(mNotificationInd.RedownloadOfUUID))}
+	}
+	if !mNotificationInd.Received.IsZero() {
+		params["Received"] = dbus.Variant{uint32(mNotificationInd.Received.Unix())}
 	}
 
 	payload := Payload{Path: service.GenMessagePath(mNotificationInd.UUID), Properties: params}
@@ -411,6 +412,9 @@ func (service *MMSService) IncomingMessageAdded(mRetConf *mms.MRetrieveConf, mNo
 
 	if mNotificationInd.RedownloadOfUUID != "" {
 		payload.Properties["DeleteEvent"] = dbus.Variant{string(service.GenMessagePath(mNotificationInd.RedownloadOfUUID))}
+	}
+	if !mNotificationInd.Received.IsZero() {
+		payload.Properties["Received"] = dbus.Variant{mNotificationInd.Received.Unix()}
 	}
 
 	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, service.msgRedownloadChan)
