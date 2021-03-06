@@ -52,58 +52,36 @@ func Create(modemId string, mNotificationInd *mms.MNotificationInd) error {
 	return writeState(state, storePath)
 }
 
-type multierror []error
-
-func (me multierror) Error() string {
-	if len(me) == 0 {
-		panic("empty multierror")
-	}
-	if len(me) == 1 {
-		return me[0].Error()
-	}
-
-	return fmt.Sprintf("multiple errors: %v", me)
-}
-
-//TODO:jezek - Remove all possible stored files found for uuid.
-//data:
-// <uuid>.db
-// <uuid>.mms
-//cache:
-// <uuid>.m-notifyresp.ind
-// <uuid>.m-send.req
 func Destroy(uuid string) (err error) {
-	storePath, err := xdg.Data.Ensure(path.Join(SUBPATH, uuid+".db"))
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if remErr := os.Remove(storePath); remErr != nil {
-			if err == nil {
-				err = remErr
-				return
-			}
-			err = multierror{err, remErr}
-		}
-	}()
+	errs := Multierror{}
 
-	mmsState, err := GetMMSState(uuid)
-	if err != nil {
-		return fmt.Errorf("Error getting MMS state: %w", err)
-	}
-
-	if mmsState.State == NOTIFICATION {
-		return nil
-	}
-
-	if mmsPath, err := GetMMS(uuid); err == nil {
-		if err := os.Remove(mmsPath); err != nil {
-			return err
+	if path, err := xdg.Data.Find(path.Join(SUBPATH, uuid+".db")); err == nil {
+		if err := os.Remove(path); err != nil {
+			errs = append(errs, ErrorRemovingFile{path, err})
 		}
 	} else {
-		return err
+		errs = append(errs, err)
 	}
-	return nil
+
+	if path, err := GetMMS(uuid); err == nil {
+		if err := os.Remove(path); err != nil {
+			errs = append(errs, ErrorRemovingFile{path, err})
+		}
+	}
+
+	if path, err := xdg.Cache.Find(path.Join(SUBPATH, uuid+".m-notifyresp.ind")); err == nil {
+		if err := os.Remove(path); err != nil {
+			errs = append(errs, ErrorRemovingFile{path, err})
+		}
+	}
+
+	if path, err := xdg.Cache.Find(path.Join(SUBPATH, uuid+".m-send.req")); err == nil {
+		if err := os.Remove(path); err != nil {
+			errs = append(errs, ErrorRemovingFile{path, err})
+		}
+	}
+
+	return errs.Result()
 }
 
 func CreateResponseFile(uuid string) (*os.File, error) {
