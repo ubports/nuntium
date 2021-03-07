@@ -85,12 +85,12 @@ mediatorLoop:
 				log.Print("MMS is disabled")
 				continue
 			}
-			go mediator.handleMNotificationInd(push, mediator.modem.Identity())
+			go mediator.handlePushAgentNotification(push, mediator.modem.Identity())
 		case mNotificationInd := <-mediator.NewMNotificationInd:
 			if deferredDownload {
 				go mediator.handleDeferredDownload(mNotificationInd)
 			} else {
-				go mediator.getMRetrieveConf(mNotificationInd)
+				go mediator.handleMNotificationInd(mNotificationInd)
 			}
 		case msg := <-mediator.outMessage:
 			go mediator.handleOutgoingMessage(msg)
@@ -140,7 +140,7 @@ mediatorLoop:
 	log.Print("Ending mediator instance loop for modem")
 }
 
-func (mediator *Mediator) handleMNotificationInd(pushMsg *ofono.PushPDU, modemId string) {
+func (mediator *Mediator) handlePushAgentNotification(pushMsg *ofono.PushPDU, modemId string) {
 	if pushMsg == nil {
 		log.Print("Received nil push")
 		return
@@ -218,7 +218,7 @@ func (mediator *Mediator) activateMMSContext() (mmsContext ofono.OfonoContext, d
 	return
 }
 
-func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationInd) {
+func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotificationInd) {
 	mediator.contextLock.Lock()
 	defer mediator.contextLock.Unlock()
 
