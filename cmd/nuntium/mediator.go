@@ -200,7 +200,7 @@ type downloadError struct {
 	standartizedError
 }
 
-func (e standartizedError) AllowRedownload() bool { return true }
+func (e downloadError) AllowRedownload() bool { return true }
 
 func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationInd) {
 	mediator.contextLock.Lock()
@@ -666,7 +666,7 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 			// Spawn interface listener to listen for redownload requests.
 			if mediator.telepathyService != nil {
 				log.Printf("jezek - spawning handlers for message")
-				if err := mediator.telepathyService.MessageHandle(uuid); err != nil {
+				if err := mediator.telepathyService.MessageHandle(uuid, true); err != nil {
 					log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
 				}
 			}
@@ -687,10 +687,10 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 				log.Printf("jezek - adding message to undownloaded")
 				mediator.undownloaded[mmsState.MNotificationInd.TransactionId] = uuid
 			}
-			// Spawn interface listener to listen for redownload requests.
+			// Spawn interface listener to listen for read/delete requests.
 			if mediator.telepathyService != nil {
 				log.Printf("jezek - spawning handlers for message")
-				if err := mediator.telepathyService.MessageHandle(uuid); err != nil {
+				if err := mediator.telepathyService.MessageHandle(uuid, false); err != nil {
 					log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
 				}
 			}
@@ -715,7 +715,7 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 			// Spawn interface listener to listen for read/delete requests.
 			if mediator.telepathyService != nil {
 				log.Printf("jezek - spawning handlers for message")
-				if err := mediator.telepathyService.MessageHandle(uuid); err != nil {
+				if err := mediator.telepathyService.MessageHandle(uuid, false); err != nil {
 					log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
 				}
 			}
@@ -761,7 +761,7 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 			}
 			// Spawn interface listener to listen for read/delete requests.
 			log.Printf("jezek - spawning handlers for message")
-			if err := mediator.telepathyService.MessageHandle(uuid); err != nil {
+			if err := mediator.telepathyService.MessageHandle(uuid, false); err != nil {
 				log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
 			}
 			break

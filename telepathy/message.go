@@ -73,10 +73,11 @@ func (msgInterface *MessageInterface) watchDBusMethodCalls() {
 	for msg := range msgInterface.msgChan {
 		log.Printf("jezek - msgInterface %v: Received message: %v", msgInterface.objectPath, msg)
 		if msg.Interface != MMS_MESSAGE_DBUS_IFACE {
-			//TODO:jezek Distinguish between this and next "Received unknown ..." error in log.
-			log.Println("Received unkown method call on", msg.Interface, msg.Member)
+			log.Println("Received unknown method call on", msg.Interface, msg.Member)
 			reply = dbus.NewErrorMessage(msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method")
-			//TODO:jezek Send the reply?
+			if err := msgInterface.conn.Send(reply); err != nil {
+				log.Println("Could not send reply:", err)
+			}
 			continue
 		}
 		switch msg.Member {
@@ -87,6 +88,10 @@ func (msgInterface *MessageInterface) watchDBusMethodCalls() {
 			if err := msgInterface.conn.Send(reply); err != nil {
 				log.Println("Could not send reply:", err)
 			}
+			if msgInterface.deleteChan == nil {
+				log.Printf("Deletion of %s is not allowed", msg.Path)
+				continue
+			}
 			msgInterface.deleteChan <- msgInterface.objectPath
 		case "Redownload":
 			reply = dbus.NewMethodReturnMessage(msg)
@@ -94,9 +99,13 @@ func (msgInterface *MessageInterface) watchDBusMethodCalls() {
 			if err := msgInterface.conn.Send(reply); err != nil {
 				log.Println("Could not send reply:", err)
 			}
+			if msgInterface.redownloadChan == nil {
+				log.Printf("Redownload of %s is not allowed", msg.Path)
+				continue
+			}
 			msgInterface.redownloadChan <- msgInterface.objectPath
 		default:
-			log.Println("Received unkown method call on", msg.Interface, msg.Member)
+			log.Println("Received unknown method call on", msg.Interface, msg.Member)
 			reply = dbus.NewErrorMessage(msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method")
 			if err := msgInterface.conn.Send(reply); err != nil {
 				log.Println("Could not send reply:", err)

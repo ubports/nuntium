@@ -119,12 +119,12 @@ func (service *MMSService) watchMessageDeleteCalls() {
 		log.Printf("jezek - MMSService.watchMessageDeleteCalls: msgObjectPath: %v", msgObjectPath)
 
 		if mmsState, err := service.getMMSState(msgObjectPath); err == nil {
-			if mmsState.State == storage.NOTIFICATION {
-				log.Printf("jezek - MMSService.watchMessageDeleteCalls: Message not fully downloaded, not deleting.")
+			if mmsState.State == storage.NOTIFICATION && mmsState.MNotificationInd != nil && !mmsState.MNotificationInd.Expired() {
+				log.Printf("Message %s is not fully downloaded and not expired, not deleting.", string(msgObjectPath))
 				continue
 			}
 		} else {
-			log.Printf("jezek - MMSService.watchMessageRedownloadCalls: error retrieving message state: %v", err)
+			log.Printf("jezek - error retrieving message state: %v", err)
 		}
 
 		if err := service.MessageRemoved(msgObjectPath); err != nil {
@@ -397,8 +397,13 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 	}
 
 	payload := Payload{Path: service.GenMessagePath(mNotificationInd.UUID), Properties: params}
-	//TODO:jezek - if no redownload/expired, don't spawn listeners (or listen to delete?) & remove from storage...
-	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, service.msgRedownloadChan)
+
+	// Don't pass a redownload channel to NewMessageInterface if redownload not allowed.
+	redownloadChan := service.msgRedownloadChan
+	if !allowRedownload {
+		redownloadChan = nil
+	}
+	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, redownloadChan)
 	return service.MessageAdded(&payload)
 }
 
@@ -417,7 +422,7 @@ func (service *MMSService) IncomingMessageAdded(mRetConf *mms.MRetrieveConf, mNo
 		payload.Properties["Received"] = dbus.Variant{mNotificationInd.Received.Unix()}
 	}
 
-	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, service.msgRedownloadChan)
+	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, nil)
 	return service.MessageAdded(&payload)
 }
 
@@ -529,7 +534,7 @@ func (service *MMSService) ReplySendMessage(reply *dbus.Message, uuid string) (d
 	if err := service.conn.Send(reply); err != nil {
 		return "", err
 	}
-	msg := NewMessageInterface(service.conn, msgObjectPath, service.msgDeleteChan, service.msgRedownloadChan)
+	msg := NewMessageInterface(service.conn, msgObjectPath, service.msgDeleteChan, nil)
 	service.messageHandlers[msgObjectPath] = msg
 	service.MessageAdded(msg.GetPayload())
 	return msgObjectPath, nil
@@ -542,13 +547,18 @@ func (service *MMSService) GenMessagePath(uuid string) dbus.ObjectPath {
 
 // Creates handlers for message.
 // If already handled, returns error.
-func (service *MMSService) MessageHandle(uuid string) error {
+func (service *MMSService) MessageHandle(uuid string, allowRedownload bool) error {
 	path := service.GenMessagePath(uuid)
 	if _, ok := service.messageHandlers[path]; ok {
 		return fmt.Errorf("message is already handled")
 	}
 	log.Printf("jezek - MessageHandle(%v)", uuid)
-	service.messageHandlers[path] = NewMessageInterface(service.conn, path, service.msgDeleteChan, service.msgRedownloadChan)
+
+	redownloadChan := service.msgRedownloadChan
+	if !allowRedownload {
+		redownloadChan = nil
+	}
+	service.messageHandlers[path] = NewMessageInterface(service.conn, path, service.msgDeleteChan, redownloadChan)
 	return nil
 }
 
