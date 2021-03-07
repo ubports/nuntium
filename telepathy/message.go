@@ -70,11 +70,16 @@ func (msgInterface *MessageInterface) watchDBusMethodCalls() {
 	defer log.Printf("jezek - msgInterface %v: watchDBusMethodCalls(): end", msgInterface.objectPath)
 	var reply *dbus.Message
 
+	//TODO:issue - Expire interface listeners if failed download error and message expires at MMS provider.
 	for msg := range msgInterface.msgChan {
 		log.Printf("jezek - msgInterface %v: Received message: %v", msgInterface.objectPath, msg)
 		if msg.Interface != MMS_MESSAGE_DBUS_IFACE {
-			log.Println("Received unknown method call on", msg.Interface, msg.Member)
-			reply = dbus.NewErrorMessage(msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method")
+			log.Println("Received unknown interface call on", msg.Interface, msg.Member)
+			reply = dbus.NewErrorMessage(
+				msg,
+				"org.freedesktop.DBus.Error.UnknownInterface",
+				fmt.Sprintf("No such interface '%s' at object path '%s'", msg.Interface, msg.Path),
+			)
 			if err := msgInterface.conn.Send(reply); err != nil {
 				log.Println("Could not send reply:", err)
 			}
@@ -82,7 +87,7 @@ func (msgInterface *MessageInterface) watchDBusMethodCalls() {
 		}
 		switch msg.Member {
 		case "Delete":
-			//TODO:jezek - on some occasions (nuntium crash & restart) the telephony-service (or smthg. else) sends multiple read/delete requests. This crashes nuntium, when on first delete closing chanel whilst second del. req. is waiting in cannel.
+			//TODO:issue - on some occasions (nuntium crash & restart) the telephony-service (or smthg. else) sends multiple read/delete requests. This crashes nuntium, when on first delete closing chanel whilst second del. req. is waiting in cannel.
 			reply = dbus.NewMethodReturnMessage(msg)
 			//TODO implement store and forward
 			if err := msgInterface.conn.Send(reply); err != nil {
@@ -106,7 +111,11 @@ func (msgInterface *MessageInterface) watchDBusMethodCalls() {
 			msgInterface.redownloadChan <- msgInterface.objectPath
 		default:
 			log.Println("Received unknown method call on", msg.Interface, msg.Member)
-			reply = dbus.NewErrorMessage(msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method")
+			reply = dbus.NewErrorMessage(
+				msg,
+				"org.freedesktop.DBus.Error.UnknownMethod",
+				fmt.Sprintf("No such method '%s' at object path '%s'", msg.Member, msg.Path),
+			)
 			if err := msgInterface.conn.Send(reply); err != nil {
 				log.Println("Could not send reply:", err)
 			}

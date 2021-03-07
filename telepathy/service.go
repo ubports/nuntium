@@ -174,12 +174,15 @@ func (service *MMSService) watchDBusMethodCalls() {
 		log.Printf("jezek - service %v: watchDBusMethodCalls(): Received message: %s - %v", service.identity, msg.Member, msg)
 		var reply *dbus.Message
 		if msg.Interface != MMS_SERVICE_DBUS_IFACE {
-			log.Println("Received unkown method call on", msg.Interface, msg.Member)
+			log.Println("Received unknown interface call on", msg.Interface, msg.Member)
 			reply = dbus.NewErrorMessage(
 				msg,
 				"org.freedesktop.DBus.Error.UnknownInterface",
-				fmt.Sprintf("No such interface '%s' at object path '%s'", msg.Interface, msg.Path))
-			//TODO:jezek Send the reply?
+				fmt.Sprintf("No such interface '%s' at object path '%s'", msg.Interface, msg.Path),
+			)
+			if err := service.conn.Send(reply); err != nil {
+				log.Println("Could not send reply:", err)
+			}
 			continue
 		}
 		switch msg.Member {
@@ -232,11 +235,12 @@ func (service *MMSService) watchDBusMethodCalls() {
 				service.outMessage <- &outMessage
 			}
 		default:
-			log.Println("Received unkown method call on", msg.Interface, msg.Member)
+			log.Println("Received unknown method call on", msg.Interface, msg.Member)
 			reply = dbus.NewErrorMessage(
 				msg,
 				"org.freedesktop.DBus.Error.UnknownMethod",
-				fmt.Sprintf("No such method '%s' at object path '%s'", msg.Member, msg.Path))
+				fmt.Sprintf("No such method '%s' at object path '%s'", msg.Member, msg.Path),
+			)
 			if err := service.conn.Send(reply); err != nil {
 				log.Println("Could not send reply:", err)
 			}

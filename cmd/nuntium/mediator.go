@@ -424,8 +424,8 @@ func (mediator *Mediator) handleOutgoingMessage(msg *telepathy.OutgoingMessage) 
 
 func (mediator *Mediator) handleMSendReq(mSendReq *mms.MSendReq) {
 	log.Print("Encoding M-Send.Req")
-	//TODO:jezek - storage is created, but it seems it is not deleted anywhere. Ensure deletion.
-	//TODO:jezek - on initialize, handle undeleted send messages (also add modem id and on init delete old stored messages).
+	//TODO:issue - storage is created, but it seems it is not deleted anywhere. Ensure deletion.
+	//TODO:issue - on initialize, handle undeleted send messages (also add modem id and on init delete old stored messages).
 	f, err := storage.CreateSendFile(mSendReq.UUID)
 	if err != nil {
 		log.Print("Unable to create m-send.req file for ", mSendReq.UUID)
