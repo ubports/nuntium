@@ -202,6 +202,22 @@ type downloadError struct {
 
 func (e downloadError) AllowRedownload() bool { return true }
 
+func (mediator *Mediator) activateMMSContext() (mmsContext ofono.OfonoContext, deactivationFunc func(), err error) {
+	log.Printf("jezek - mediator.activateMMSContext start")
+	preferredContext, _ := mediator.telepathyService.GetPreferredContext()
+	mmsContext, err = mediator.modem.ActivateMMSContext(preferredContext)
+	if err != nil {
+		return
+	}
+	deactivationFunc = func() {
+		log.Printf("jezek - mediator.deactivationFunc start")
+		if err := mediator.modem.DeactivateMMSContext(mmsContext); err != nil {
+			log.Println("Issues while deactivating context:", err)
+		}
+	}
+	return
+}
+
 func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationInd) {
 	mediator.contextLock.Lock()
 	defer mediator.contextLock.Unlock()
@@ -211,20 +227,14 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 	if mNotificationInd.IsLocal() {
 		log.Print("This is a local test, skipping context activation and proxy settings")
 	} else {
-		//TODO:jezek - encapsulate into deactivateFunc, err := activateMMSContext(...); defer deactivateFunc();
 		var err error
-		preferredContext, _ := mediator.telepathyService.GetPreferredContext()
-		mmsContext, err = mediator.modem.ActivateMMSContext(preferredContext)
+		mmsContext, deactivateMMSContext, err := mediator.activateMMSContext()
 		if err != nil {
 			log.Print("Cannot activate ofono context: ", err)
 			mediator.handleMRetrieveConfDownloadError(mNotificationInd, downloadError{standartizedError{err, "x-ubports-nuntium-mms-error-activate-context"}})
 			return
 		}
-		defer func() {
-			if err := mediator.modem.DeactivateMMSContext(mmsContext); err != nil {
-				log.Println("Issues while deactivating context:", err)
-			}
-		}()
+		defer deactivateMMSContext()
 
 		if err := mediator.telepathyService.SetPreferredContext(mmsContext.ObjectPath); err != nil {
 			log.Println("Unable to store the preferred context for MMS:", err)
@@ -510,19 +520,15 @@ func (mediator *Mediator) uploadFile(filePath string) (string, error) {
 	mediator.contextLock.Lock()
 	defer mediator.contextLock.Unlock()
 
-	preferredContext, _ := mediator.telepathyService.GetPreferredContext()
-	mmsContext, err := mediator.modem.ActivateMMSContext(preferredContext)
+	mmsContext, deactivateMMSContext, err := mediator.activateMMSContext()
 	if err != nil {
 		return "", err
 	}
+	defer deactivateMMSContext()
+
 	if err := mediator.telepathyService.SetPreferredContext(mmsContext.ObjectPath); err != nil {
 		log.Println("Unable to store the preferred context for MMS:", err)
 	}
-	defer func() {
-		if err := mediator.modem.DeactivateMMSContext(mmsContext); err != nil {
-			log.Println("Issues while deactivating context:", err)
-		}
-	}()
 
 	proxy, err := mmsContext.GetProxy()
 	if err != nil {
