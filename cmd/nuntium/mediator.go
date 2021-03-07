@@ -253,6 +253,7 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 		mediator.handleMRetrieveConfDownloadError(mNotificationInd, downloadError{standartizedError{err, "x-ubports-nuntium-mms-error-download-content"}})
 		return
 	} else {
+		// Save message to storage and update state to DOWNLOADED.
 		if err := storage.UpdateDownloaded(mNotificationInd.UUID, filePath); err != nil {
 			log.Println("Error updating storage (UpdateDownloaded): ", err)
 			mediator.handleMRetrieveConfDownloadError(mNotificationInd, standartizedError{err, "x-ubports-nuntium-mms-error-storage"})
@@ -260,14 +261,14 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 		}
 	}
 
-	//TODO:jezek - split handleMRetrieveConf into getMRetrieveConf & handle...
 	// Forward message to telepathy-ofono service.
-	mRetrieveConf, err := mediator.handleMRetrieveConf(mNotificationInd)
+	mRetrieveConf, err := mediator.getAndHandleMRetrieveConf(mNotificationInd)
 	if err != nil {
 		log.Printf("Handling MRetrieveConf error: %v", err)
 		mediator.handleMRetrieveConfDownloadError(mNotificationInd, standartizedError{err, "x-ubports-nuntium-mms-error-forward"})
 		return
 	}
+	// Update message state in storage to RECEIVED.
 	if err := storage.UpdateReceived(mRetrieveConf.UUID); err != nil {
 		log.Println("Error updating storage (UpdateRetrieved): ", err)
 		return
@@ -286,6 +287,7 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 		log.Print("This is a local test, skipping m-notifyresp.ind")
 	}
 	//TODO:jezek - Add storage states to docs graph file docs/assets/receiving_success_deferral_disabled.msc
+	// Update message state in storage to RESPONDED.
 	if err := storage.UpdateResponded(mNotifyRespInd.UUID); err != nil {
 		log.Println("Error updating storage (UpdateResponded): ", err)
 		return
@@ -325,11 +327,10 @@ func (mediator *Mediator) handleMRetrieveConfDownloadError(mNotificationInd *mms
 	}
 }
 
-func (mediator *Mediator) handleMRetrieveConf(mNotificationInd *mms.MNotificationInd) (*mms.MRetrieveConf, error) {
-	var filePath string
-	if f, err := storage.GetMMS(mNotificationInd.UUID); err == nil {
-		filePath = f
-	} else {
+// Decodes previously stored message (using UpdateDownloaded) to MRetrieveConf structure.
+func (mediator *Mediator) getMRetrieveConf(uuid string) (*mms.MRetrieveConf, error) {
+	filePath, err := storage.GetMMS(uuid)
+	if err != nil {
 		return nil, fmt.Errorf("unable to retrieve MMS: %s", err)
 	}
 
@@ -338,10 +339,19 @@ func (mediator *Mediator) handleMRetrieveConf(mNotificationInd *mms.MNotificatio
 		return nil, fmt.Errorf("issues while reading from downloaded file: %s", err)
 	}
 
-	mRetrieveConf := mms.NewMRetrieveConf(mNotificationInd.UUID)
+	mRetrieveConf := mms.NewMRetrieveConf(uuid)
 	dec := mms.NewDecoder(mmsData)
 	if err := dec.Decode(mRetrieveConf); err != nil {
 		return nil, fmt.Errorf("unable to decode m-retrieve.conf: %s with log %s", err, dec.GetLog())
+	}
+
+	return mRetrieveConf, nil
+}
+
+func (mediator *Mediator) getAndHandleMRetrieveConf(mNotificationInd *mms.MNotificationInd) (*mms.MRetrieveConf, error) {
+	mRetrieveConf, err := mediator.getMRetrieveConf(mNotificationInd.UUID)
+	if err != nil {
+		return nil, err
 	}
 
 	if mediator.telepathyService == nil {
