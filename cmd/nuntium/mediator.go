@@ -228,13 +228,16 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 		log.Print("This is a local test, skipping context activation and proxy settings")
 	} else {
 		var err error
-		mmsContext, deactivateMMSContext, err := mediator.activateMMSContext()
+		var deactivateMMSContext func()
+		mmsContext, deactivateMMSContext, err = mediator.activateMMSContext()
 		if err != nil {
 			log.Print("Cannot activate ofono context: ", err)
 			mediator.handleMRetrieveConfDownloadError(mNotificationInd, downloadError{standartizedError{err, "x-ubports-nuntium-mms-error-activate-context"}})
 			return
 		}
-		defer deactivateMMSContext()
+		if deactivateMMSContext != nil {
+			defer deactivateMMSContext()
+		}
 
 		if err := mediator.telepathyService.SetPreferredContext(mmsContext.ObjectPath); err != nil {
 			log.Println("Unable to store the preferred context for MMS:", err)
