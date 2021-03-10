@@ -285,18 +285,21 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 		if filePath == "" {
 			return
 		}
-		mediator.sendMNotifyRespInd(filePath, &mmsContext)
+		if err := mediator.sendMNotifyRespInd(filePath, &mmsContext); err != nil {
+			log.Println("Error sending m-notifyresp.ind: ", err)
+			return
+		}
 	} else {
 		log.Print("This is a local test, skipping m-notifyresp.ind")
 	}
-	//TODO:jezek - Add storage states to docs graph file docs/assets/receiving_success_deferral_disabled.msc
+	// MMS center is notified, that the message was downloaded, we can remove the TransactionId from undownloaded.
+	delete(mediator.undownloaded, mNotificationInd.TransactionId)
 	// Update message state in storage to RESPONDED.
 	if err := storage.UpdateResponded(mNotifyRespInd.UUID); err != nil {
 		log.Println("Error updating storage (UpdateResponded): ", err)
 		return
 	}
-
-	delete(mediator.undownloaded, mNotificationInd.TransactionId)
+	//TODO:jezek - Add storage states to docs graph file docs/assets/receiving_success_deferral_disabled.msc
 }
 
 // Communicates the download error "err" of mNotificationInd to telepathy-ofono service.
@@ -407,23 +410,27 @@ func (mediator *Mediator) handleMNotifyRespInd(mNotifyRespInd *mms.MNotifyRespIn
 	return filePath
 }
 
-func (mediator *Mediator) sendMNotifyRespInd(filePath string, mmsContext *ofono.OfonoContext) {
-	defer os.Remove(filePath)
+func (mediator *Mediator) sendMNotifyRespInd(filePath string, mmsContext *ofono.OfonoContext) error {
+	defer func() {
+		if err := os.Remove(filePath); err != nil {
+			log.Printf("cannot remove m-notifyresp.ind encoded file %s: %s", filePath, err)
+		}
+	}()
 
 	proxy, err := mmsContext.GetProxy()
 	if err != nil {
-		log.Println("Cannot retrieve MMS proxy setting", err)
-		return
+		return fmt.Errorf("cannot retrieve MMS proxy setting: %w", err)
 	}
 	msc, err := mmsContext.GetMessageCenter()
 	if err != nil {
-		log.Println("Cannot retrieve MMSC setting", err)
-		return
+		return fmt.Errorf("cannot retrieve MMSC setting: %w", err)
 	}
 
 	if _, err := mms.Upload(filePath, msc, proxy.Host, int32(proxy.Port)); err != nil {
-		log.Printf("Cannot upload m-notifyresp.ind encoded file %s to message center: %s", filePath, err)
+		return fmt.Errorf("cannot upload m-notifyresp.ind encoded file %s to message center: %w", filePath, err)
 	}
+
+	return nil
 }
 
 func (mediator *Mediator) handleOutgoingMessage(msg *telepathy.OutgoingMessage) {
