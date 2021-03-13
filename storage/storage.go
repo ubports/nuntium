@@ -153,6 +153,21 @@ func UpdateResponded(uuid string) error {
 	return writeState(state, storePath)
 }
 
+func UpdateTelepathyNotified(uuid string) error {
+	state, err := GetMMSState(uuid)
+	if err != nil {
+		return fmt.Errorf("error retrieving message state: %w", err)
+	}
+
+	state.TelepathyNotified = true
+
+	storePath, err := xdg.Data.Find(path.Join(SUBPATH, uuid+".db"))
+	if err != nil {
+		return err
+	}
+	return writeState(state, storePath)
+}
+
 func CreateSendFile(uuid string) (*os.File, error) {
 	state := MMSState{
 		State: DRAFT,

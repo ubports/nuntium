@@ -333,9 +333,13 @@ func (service *MMSService) SingnalMessageRemoved(objectPath dbus.ObjectPath) err
 }
 
 func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotificationInd, downloadError error) error {
+	if service == nil {
+		return fmt.Errorf("Nil MMSService")
+	}
 	//just handle that mms as an empty MMS
 	params := make(map[string]dbus.Variant)
 
+	//TODO:jezek - delete
 	// Signal path:
 	// https://github.com/ubports/telepathy-ofono/blob/040321101e7bfe5950934a1b718875f3fe29c495/mmsdservice.cpp#L118
 	// https://github.com/ubports/telepathy-ofono/blob/040321101e7bfe5950934a1b718875f3fe29c495/connection.cpp#L518
