@@ -302,6 +302,10 @@ func (service *MMSService) setProperty(msg *dbus.Message) error {
 // MessageRemoved closes message handlers, removes message from storage and emits the MessageRemoved signal to mms service dbus interface for message identified by objectPath parameter in this order.
 // If message is not handled, removing from storage or sending signal fails, error is returned.
 func (service *MMSService) MessageRemoved(objectPath dbus.ObjectPath) error {
+	if service == nil {
+		return ErrorNilMMSService
+	}
+
 	if _, ok := service.messageHandlers[objectPath]; !ok {
 		return fmt.Errorf("message not handled")
 	}
@@ -322,6 +326,10 @@ func (service *MMSService) MessageRemoved(objectPath dbus.ObjectPath) error {
 
 // Sends messageRemovedSignal signal to MMS_SERVICE_DBUS_IFACE to indicate, that the message stopped being handled and was removed from nuntium storage.
 func (service *MMSService) SingnalMessageRemoved(objectPath dbus.ObjectPath) error {
+	if service == nil {
+		return ErrorNilMMSService
+	}
+
 	signal := dbus.NewSignalMessage(service.payload.Path, MMS_SERVICE_DBUS_IFACE, messageRemovedSignal)
 	if err := signal.AppendArgs(objectPath); err != nil {
 		return err
@@ -418,6 +426,10 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 //IncomingMessageAdded emits a MessageAdded with the path to the added message which
 //is taken as a parameter and creates an object path on the message interface.
 func (service *MMSService) IncomingMessageAdded(mRetConf *mms.MRetrieveConf, mNotificationInd *mms.MNotificationInd) error {
+	if service == nil {
+		return ErrorNilMMSService
+	}
+
 	payload, err := service.parseMessage(mRetConf)
 	if err != nil {
 		return err
@@ -550,12 +562,20 @@ func (service *MMSService) ReplySendMessage(reply *dbus.Message, uuid string) (d
 
 //TODO randomly creating a uuid until the download manager does this for us
 func (service *MMSService) GenMessagePath(uuid string) dbus.ObjectPath {
+	if service == nil {
+		return dbus.ObjectPath(MMS_DBUS_PATH + "//" + uuid)
+	}
+
 	return dbus.ObjectPath(MMS_DBUS_PATH + "/" + service.identity + "/" + uuid)
 }
 
 // Creates handlers for message.
 // If already handled, returns error.
 func (service *MMSService) MessageHandle(uuid string, allowRedownload bool) error {
+	if service == nil {
+		return ErrorNilMMSService
+	}
+
 	path := service.GenMessagePath(uuid)
 	if _, ok := service.messageHandlers[path]; ok {
 		return fmt.Errorf("message is already handled")
@@ -628,6 +648,9 @@ func (service *MMSService) GetSingleMessage(accountId, threadId, eventId string)
 func (service *MMSService) GetMessage(eventId string) (map[string]dbus.Variant, error) {
 	log.Printf("jezek - GetMessage(%s) - start", eventId)
 	defer log.Printf("jezek - GetMessage() - end")
+	if service == nil {
+		return nil, ErrorNilMMSService
+	}
 
 	//TODO:jezek - Pack into historyservice pkg.
 	// Get event view.

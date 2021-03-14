@@ -363,10 +363,6 @@ func (mediator *Mediator) getAndHandleMRetrieveConf(mNotificationInd *mms.MNotif
 		return nil, err
 	}
 
-	if mediator.telepathyService == nil {
-		return nil, fmt.Errorf("no telepathy-ofono service found")
-	}
-
 	// Check if there was some download error communicated for TransactionId before and no redownload was triggered (on redownload request, RedownloadOfUUID is filled and listener is stopped automatically).
 	if uuid, ok := mediator.undownloaded[mNotificationInd.TransactionId]; mNotificationInd.RedownloadOfUUID == "" && ok {
 		// There was an error message communicated to telepathy before, mark it to delete it by telepathy when communicating this message.
@@ -647,9 +643,6 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 		if mmsState.MNotificationInd.TransactionId == "" {
 			log.Printf("Stored message's MNotificationInd's TransactionId is empty")
 		}
-		if mediator.telepathyService == nil {
-			log.Printf("There is no telepathy service in mediator, will not spawn handlers for this message")
-		}
 
 		checkExpiredAndHandle := func() bool {
 			if !mmsState.MNotificationInd.Expired() {
@@ -661,21 +654,8 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 			if err := storage.Destroy(uuid); err != nil {
 				log.Printf("Error destroying expired message: %v", err)
 			}
-			if mediator.telepathyService != nil {
-				//TODO:jezek - Test status change seems not to work on restart. No error, but not working.
-				//if err := mediator.telepathyService.MessageHandle(uuid); err != nil {
-				//	log.Printf("Error starting message %s handlers to alter expired message", uuid)
-				//}
-				//if err := mediator.telepathyService.MessageStatusChanged(uuid, telepathy.PERMANENT_ERROR); err != nil {
-				//	log.Printf("Error changing message state: %v", err)
-				//}
-				//if err := mediator.telepathyService.MessageDestroy(uuid); err != nil {
-				//	log.Printf("Error destroying message handlers: %v", err)
-				//}
-
-				if err := mediator.telepathyService.SingnalMessageRemoved(mediator.telepathyService.GenMessagePath(uuid)); err != nil {
-					log.Printf("Error sending signal that message was removed: %v", err)
-				}
+			if err := mediator.telepathyService.SingnalMessageRemoved(mediator.telepathyService.GenMessagePath(uuid)); err != nil {
+				log.Printf("Error sending signal that message was removed: %v", err)
 			}
 			return true
 		}
@@ -711,11 +691,9 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 				mediator.undownloaded[mmsState.MNotificationInd.TransactionId] = uuid
 			}
 			// Spawn interface listener to listen for redownload requests.
-			if mediator.telepathyService != nil {
-				log.Printf("jezek - spawning handlers for message")
-				if err := mediator.telepathyService.MessageHandle(uuid, true); err != nil {
-					log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
-				}
+			log.Printf("jezek - spawning handlers for message")
+			if err := mediator.telepathyService.MessageHandle(uuid, true); err != nil {
+				log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
 			}
 			break
 
@@ -735,11 +713,9 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 				mediator.undownloaded[mmsState.MNotificationInd.TransactionId] = uuid
 			}
 			// Spawn interface listener to listen for read/delete requests.
-			if mediator.telepathyService != nil {
-				log.Printf("jezek - spawning handlers for message")
-				if err := mediator.telepathyService.MessageHandle(uuid, false); err != nil {
-					log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
-				}
+			log.Printf("jezek - spawning handlers for message")
+			if err := mediator.telepathyService.MessageHandle(uuid, false); err != nil {
+				log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
 			}
 			break
 
@@ -759,22 +735,15 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 				mediator.undownloaded[mmsState.MNotificationInd.TransactionId] = uuid
 			}
 			// Spawn interface listener to listen for read/delete requests.
-			if mediator.telepathyService != nil {
-				log.Printf("jezek - spawning handlers for message")
-				if err := mediator.telepathyService.MessageHandle(uuid, false); err != nil {
-					log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
-				}
+			log.Printf("jezek - spawning handlers for message")
+			if err := mediator.telepathyService.MessageHandle(uuid, false); err != nil {
+				log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
 			}
 			break
 
 		case storage.RESPONDED:
 			// Message download was successful, the message was decoded and forwarded to telepathy-ofono and MMS provider was notified.
 			// Get message from history service and if read or not exist, delete and don't spawn handlers.
-
-			if mediator.telepathyService == nil {
-				break
-			}
-
 			eventId := string(mediator.telepathyService.GenMessagePath(uuid))
 			hsMessage, err := mediator.telepathyService.GetMessage(eventId)
 			if err != nil {
