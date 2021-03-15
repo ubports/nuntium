@@ -26,6 +26,8 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"strconv"
+	"strings"
 	"time"
 
 	"launchpad.net/go-dbus/v1"
@@ -432,6 +434,19 @@ func (oContext OfonoContext) GetProxy() (proxyInfo ProxyInfo, err error) {
 	// we need to support empty proxies
 	if proxy == "" {
 		log.Println("No proxy in ofono settings")
+		return proxyInfo, nil
+	}
+
+	if strings.Contains(proxy, ":") {
+		v := strings.Split(proxy, ":")
+		host, port_str := v[0], v[1]
+		port, err := strconv.ParseUint(port_str, 10, 16)
+		if err != nil {
+			port = 80
+		}
+
+		proxyInfo.Host = host
+		proxyInfo.Port = uint64(port)
 		return proxyInfo, nil
 	}
 
