@@ -305,6 +305,7 @@ func NewMNotificationInd(received time.Time) *MNotificationInd {
 	return &MNotificationInd{Type: TYPE_NOTIFICATION_IND, UUID: GenUUID(), Received: received}
 }
 
+//TODO:jezek rename to IsDebug
 func (mNotificationInd *MNotificationInd) IsLocal() bool {
 	return strings.HasPrefix(mNotificationInd.ContentLocation, "http://localhost:9191/mms")
 }
