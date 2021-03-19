@@ -76,6 +76,7 @@ type OutgoingMessage struct {
 	Reply       *dbus.Message
 }
 
+//TODO:version - Change so we don't need to bump major version.
 func NewMMSService(conn *dbus.Connection, modemObjPath dbus.ObjectPath, identity string, outgoingChannel chan *OutgoingMessage, useDeliveryReports bool, mNotificationIndChan chan<- *mms.MNotificationInd) *MMSService {
 	properties := make(map[string]dbus.Variant)
 	properties[identityProperty] = dbus.Variant{identity}
@@ -340,6 +341,7 @@ func (service *MMSService) SingnalMessageRemoved(objectPath dbus.ObjectPath) err
 	return nil
 }
 
+//TODO:version - Change so we don't need to bump major version.
 func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotificationInd, downloadError error) error {
 	if service == nil {
 		return fmt.Errorf("Nil MMSService")
@@ -347,7 +349,7 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 	//just handle that mms as an empty MMS
 	params := make(map[string]dbus.Variant)
 
-	//TODO:jezek - delete
+	//TODO:jezek - delete or write somewhere
 	// Signal path:
 	// https://github.com/ubports/telepathy-ofono/blob/040321101e7bfe5950934a1b718875f3fe29c495/mmsdservice.cpp#L118
 	// https://github.com/ubports/telepathy-ofono/blob/040321101e7bfe5950934a1b718875f3fe29c495/connection.cpp#L518
@@ -423,6 +425,7 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 	return service.MessageAdded(&payload)
 }
 
+//TODO:version - Change so we don't need to bump major version.
 //IncomingMessageAdded emits a MessageAdded with the path to the added message which
 //is taken as a parameter and creates an object path on the message interface.
 func (service *MMSService) IncomingMessageAdded(mRetConf *mms.MRetrieveConf, mNotificationInd *mms.MNotificationInd) error {

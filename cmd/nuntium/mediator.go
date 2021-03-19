@@ -224,7 +224,7 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 
 	var proxy ofono.ProxyInfo
 	var mmsContext ofono.OfonoContext
-	if mNotificationInd.IsLocal() {
+	if mNotificationInd.IsDebug() {
 		log.Print("This is a local test, skipping context activation and proxy settings")
 	} else {
 		var err error
@@ -279,7 +279,7 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 
 	// Notify MMS service about successful download.
 	mNotifyRespInd := mRetrieveConf.NewMNotifyRespInd(useDeliveryReports)
-	if !mNotificationInd.IsLocal() {
+	if !mNotificationInd.IsDebug() {
 		// TODO deferred case
 		filePath := mediator.handleMNotifyRespInd(mNotifyRespInd)
 		if filePath == "" {
@@ -768,7 +768,7 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 				}
 				// Notify MMS service about successful download.
 				mNotifyRespInd := mRetrieveConf.NewMNotifyRespInd(useDeliveryReports)
-				if !mmsState.MNotificationInd.IsLocal() {
+				if !mmsState.MNotificationInd.IsDebug() {
 					mmsContext, deactivateMMSContext, err := mediator.activateMMSContext()
 					if err != nil {
 						return fmt.Errorf("error activating ofono context: %w", err)

@@ -45,6 +45,7 @@ type MessageInterface struct {
 	status         string
 }
 
+//TODO:version - Change so we don't need to bump major version.
 func NewMessageInterface(conn *dbus.Connection, objectPath dbus.ObjectPath, deleteChan chan dbus.ObjectPath, redownloadChan chan dbus.ObjectPath) *MessageInterface {
 	msgInterface := MessageInterface{
 		conn:           conn,

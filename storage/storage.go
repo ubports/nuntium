@@ -37,6 +37,7 @@ import (
 
 const SUBPATH = "nuntium/store"
 
+//TODO:version - change back to Create(uuid, contentLocation string) to increase only minor version instead of major (add ModemId, MNotificationInd after every Create)?
 func Create(modemId string, mNotificationInd *mms.MNotificationInd) error {
 	state := MMSState{
 		Id:               mNotificationInd.TransactionId,

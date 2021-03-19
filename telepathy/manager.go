@@ -93,6 +93,7 @@ func (manager *MMSManager) serviceAdded(payload *Payload) error {
 	return nil
 }
 
+//TODO:version - Change so we don't need to bump major version.
 func (manager *MMSManager) AddService(identity string, modemObjPath dbus.ObjectPath, outgoingChannel chan *OutgoingMessage, useDeliveryReports bool, mNotificationIndChan chan<- *mms.MNotificationInd) (*MMSService, error) {
 	for i := range manager.services {
 		if manager.services[i].isService(identity) {

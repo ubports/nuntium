@@ -230,8 +230,9 @@ type MNotificationInd struct {
 	ReplyChargingId                      string
 	TransactionId, ContentLocation       string
 	From, Subject                        string
-	Expiry                               time.Time
-	Size                                 uint64
+	//TODO:version - change back to unit64 to increase only minor version instead of major (Received could be also uint64)?
+	Expiry time.Time
+	Size   uint64
 }
 
 // MNotificationInd holds a m-notifyresp.ind message defined in
@@ -301,12 +302,17 @@ func NewMSendConf() *MSendConf {
 	}
 }
 
+//TODO:version - change back to NewMNotificationInd() to increase only minor version instead of major (add Received after every NewMNotificationInd)?
 func NewMNotificationInd(received time.Time) *MNotificationInd {
 	return &MNotificationInd{Type: TYPE_NOTIFICATION_IND, UUID: GenUUID(), Received: received}
 }
 
-//TODO:jezek rename to IsDebug
 func (mNotificationInd *MNotificationInd) IsLocal() bool {
+	log.Printf("MNotificationInd.IsLocal() is deprecated, use MNotificationInd.IsDebug() instead")
+	return mNotificationInd.IsDebug()
+}
+
+func (mNotificationInd *MNotificationInd) IsDebug() bool {
 	return strings.HasPrefix(mNotificationInd.ContentLocation, "http://localhost:9191/mms")
 }
 
