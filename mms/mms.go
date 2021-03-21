@@ -25,7 +25,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -235,7 +237,7 @@ type MNotificationInd struct {
 	Size   uint64
 }
 
-// MNotificationInd holds a m-notifyresp.ind message defined in
+// MNotifyRespInd holds a m-notifyresp.ind message defined in
 // OMA-WAP-MMS-ENC-v1.1 section 6.2
 type MNotifyRespInd struct {
 	UUID          string `encode:"no"`
@@ -314,6 +316,47 @@ func (mNotificationInd *MNotificationInd) IsLocal() bool {
 
 func (mNotificationInd *MNotificationInd) IsDebug() bool {
 	return strings.HasPrefix(mNotificationInd.ContentLocation, "http://localhost:9191/mms")
+}
+
+// When there is a 'name' parameter in ContentLocation URI with non zero positive integer as value,
+// the value is decreased and corresponding error is returned. Nil error is returned otherwise or if result of IsDebug method is false.
+func (mNotificationInd *MNotificationInd) PopDebugError(name string) error {
+	if mNotificationInd.IsDebug() == false {
+		return nil
+	}
+	uri, err := url.ParseRequestURI(mNotificationInd.ContentLocation)
+	if err != nil {
+		log.Printf("Parsing ContentLocation \"%s\" as URI error: %s", mNotificationInd.ContentLocation, err)
+		return nil
+	}
+	values := uri.Query()
+	defer func() {
+		uri.RawQuery = values.Encode()
+		mNotificationInd.ContentLocation = uri.String()
+	}()
+	value := values.Get(name)
+	if value == "" {
+		values.Del(name)
+		return nil
+	}
+	ui64, err := strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		log.Printf("Parsing ContentLocation query %s value %s as uint64 error: %s", name, value, err)
+		values.Del(name)
+		return nil
+	}
+	if ui64 == 0 {
+		values.Del(name)
+		return nil
+	}
+
+	values.Del(name)
+	ui64 -= 1
+	if ui64 > 0 {
+		values.Add(name, strconv.FormatUint(ui64, 10))
+	}
+
+	return ForcedDebugError(name)
 }
 
 // Default expire duration is 15 days.

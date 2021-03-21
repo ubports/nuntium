@@ -98,6 +98,22 @@ func CreateResponseFile(uuid string) (*os.File, error) {
 	return os.Create(filePath)
 }
 
+func UpdateMNotificationInd(mNotificationInd *mms.MNotificationInd) error {
+	log.Printf("jezek - UpdateMNotificationInd(%v)", mNotificationInd)
+	state, err := GetMMSState(mNotificationInd.UUID)
+	if err != nil {
+		return fmt.Errorf("error retrieving message state: %w", err)
+	}
+
+	state.MNotificationInd = mNotificationInd
+
+	storePath, err := xdg.Data.Find(path.Join(SUBPATH, mNotificationInd.UUID+".db"))
+	if err != nil {
+		return err
+	}
+	return writeState(state, storePath)
+}
+
 func UpdateDownloaded(uuid, filePath string) error {
 	log.Printf("jezek - UpdateDownloaded(%s, %s)", uuid, filePath)
 	state, err := GetMMSState(uuid)

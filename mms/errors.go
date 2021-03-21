@@ -23,3 +23,14 @@ type ErrorDecodeInconsistentOffset struct {
 func (e ErrorDecodeInconsistentOffset) Error() string {
 	return fmt.Sprintf("Decoder offset after read [%d] is other than expected [%d]", e.Offset, e.Expected)
 }
+
+const (
+	DebugErrorActivateContext = "error-activate-context"
+	DebugErrorGetProxy        = "error-get-proxy"
+	DebugErrorDownloadContent = "error-download-content"
+	DebugErrorDownloadStorage = "error-storage"
+)
+
+type ForcedDebugError string
+
+func (e ForcedDebugError) Error() string { return fmt.Sprintf("forced debug error: %s", string(e)) }

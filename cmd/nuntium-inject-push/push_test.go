@@ -1,7 +1,10 @@
 package main
 
 import (
+	"net/url"
 	"reflect"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,6 +23,11 @@ func TestGetMNotificationIndPayload(t *testing.T) {
 		{mainFlags{SenderNotification: "+543515924906"}, false},
 		{mainFlags{TransactionId: "12345abcde"}, true},
 		{mainFlags{TransactionId: ""}, false},
+		{mainFlags{ErrorActivateContext: 1}, true},
+		{mainFlags{ErrorGetProxy: 5}, true},
+		{mainFlags{ErrorDownloadContent: 10}, true},
+		{mainFlags{ErrorDownloadStorage: 9}, true},
+		{mainFlags{ErrorActivateContext: 1, ErrorGetProxy: 1, ErrorDownloadContent: 1, ErrorDownloadStorage: 1}, true},
 	}
 
 	for _, tc := range testCases {
@@ -50,6 +58,43 @@ func TestGetMNotificationIndPayload(t *testing.T) {
 
 		if mni.TransactionId != tc.args.TransactionId {
 			t.Errorf("Decoded MRetrieveConf.TransactionId \"%v\" should equal %v", mni.TransactionId, tc.args.TransactionId)
+		}
+
+		if cl, err := url.Parse(mni.ContentLocation); err != nil {
+			t.Errorf("Couldn't parse MRetrieveConf.ContentLocation \"%s\": %v", mni.ContentLocation, err)
+		} else {
+			wantCLPrefix := "http://localhost:9191/mms"
+			if !strings.HasPrefix(cl.String(), wantCLPrefix) {
+				t.Errorf("Decoded MNotificationInd.ContentLocation \"%s\" should start with \"%s\"", mni.ContentLocation, wantCLPrefix)
+			}
+			if tc.args.ErrorActivateContext > 0 {
+				if ui64, err := strconv.ParseUint(cl.Query().Get(mms.DebugErrorActivateContext), 10, 64); err != nil {
+					t.Errorf("Couldn't parse \"%s\": %s", mms.DebugErrorActivateContext, err)
+				} else if tc.args.ErrorActivateContext != ui64 {
+					t.Errorf("Decoded MNotificationInd.ContentLocation query parameter \"%s\" is %d, want %d", mms.DebugErrorActivateContext, ui64, tc.args.ErrorActivateContext)
+				}
+			}
+			if tc.args.ErrorGetProxy > 0 {
+				if ui64, err := strconv.ParseUint(cl.Query().Get(mms.DebugErrorGetProxy), 10, 64); err != nil {
+					t.Errorf("Couldn't parse \"%s\": %s", mms.DebugErrorGetProxy, err)
+				} else if tc.args.ErrorGetProxy != ui64 {
+					t.Errorf("Decoded MNotificationInd.ContentLocation query parameter \"%s\" is %d, want %d", mms.DebugErrorGetProxy, ui64, tc.args.ErrorGetProxy)
+				}
+			}
+			if tc.args.ErrorDownloadContent > 0 {
+				if ui64, err := strconv.ParseUint(cl.Query().Get(mms.DebugErrorDownloadContent), 10, 64); err != nil {
+					t.Errorf("Couldn't parse \"%s\": %s", mms.DebugErrorDownloadContent, err)
+				} else if tc.args.ErrorDownloadContent != ui64 {
+					t.Errorf("Decoded MNotificationInd.ContentLocation query parameter \"%s\" is %d, want %d", mms.DebugErrorDownloadContent, ui64, tc.args.ErrorDownloadContent)
+				}
+			}
+			if tc.args.ErrorDownloadStorage > 0 {
+				if ui64, err := strconv.ParseUint(cl.Query().Get(mms.DebugErrorDownloadStorage), 10, 64); err != nil {
+					t.Errorf("Couldn't parse \"%s\": %s", mms.DebugErrorDownloadStorage, err)
+				} else if tc.args.ErrorDownloadStorage != ui64 {
+					t.Errorf("Decoded MNotificationInd.ContentLocation query parameter \"%s\" is %d, want %d", mms.DebugErrorDownloadStorage, ui64, tc.args.ErrorDownloadStorage)
+				}
+			}
 		}
 	}
 }
