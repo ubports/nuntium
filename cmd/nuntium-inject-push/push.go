@@ -127,6 +127,18 @@ func getMNotificationIndPayload(args mainFlags) []byte {
 	if args.ErrorDownloadStorage > 0 {
 		params[mms.DebugErrorDownloadStorage] = args.ErrorDownloadStorage
 	}
+	if args.ErrorReceiveHandle > 0 {
+		params[mms.DebugErrorReceiveHandle] = args.ErrorReceiveHandle
+	}
+	if args.ErrorReceiveStorage > 0 {
+		params[mms.DebugErrorReceiveStorage] = args.ErrorReceiveStorage
+	}
+	if args.ErrorRespondHandle > 0 {
+		params[mms.DebugErrorRespondHandle] = args.ErrorRespondHandle
+	}
+	if args.ErrorRespondStorage > 0 {
+		params[mms.DebugErrorRespondStorage] = args.ErrorRespondStorage
+	}
 	if len(params) > 0 {
 		v := url.Values{}
 		for s, ui64 := range params {

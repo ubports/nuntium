@@ -26,7 +26,11 @@ func TestGetMNotificationIndPayload(t *testing.T) {
 		{mainFlags{ErrorActivateContext: 1}, true},
 		{mainFlags{ErrorGetProxy: 5}, true},
 		{mainFlags{ErrorDownloadStorage: 9}, true},
-		{mainFlags{ErrorActivateContext: 1, ErrorGetProxy: 1, ErrorDownloadStorage: 1}, true},
+		{mainFlags{ErrorReceiveHandle: 1}, true},
+		{mainFlags{ErrorReceiveStorage: 1}, true},
+		{mainFlags{ErrorRespondHandle: 1}, true},
+		{mainFlags{ErrorRespondStorage: 1}, true},
+		{mainFlags{ErrorActivateContext: 1, ErrorGetProxy: 1, ErrorDownloadStorage: 1, ErrorReceiveHandle: 1, ErrorReceiveStorage: 1, ErrorRespondHandle: 1, ErrorRespondStorage: 1}, true},
 	}
 
 	for _, tc := range testCases {
@@ -85,6 +89,34 @@ func TestGetMNotificationIndPayload(t *testing.T) {
 					t.Errorf("Couldn't parse \"%s\": %s", mms.DebugErrorDownloadStorage, err)
 				} else if tc.args.ErrorDownloadStorage != ui64 {
 					t.Errorf("Decoded MNotificationInd.ContentLocation query parameter \"%s\" is %d, want %d", mms.DebugErrorDownloadStorage, ui64, tc.args.ErrorDownloadStorage)
+				}
+			}
+			if tc.args.ErrorReceiveHandle > 0 {
+				if ui64, err := strconv.ParseUint(cl.Query().Get(mms.DebugErrorReceiveHandle), 10, 64); err != nil {
+					t.Errorf("Couldn't parse \"%s\": %s", mms.DebugErrorReceiveHandle, err)
+				} else if tc.args.ErrorReceiveHandle != ui64 {
+					t.Errorf("Decoded MNotificationInd.ContentLocation query parameter \"%s\" is %d, want %d", mms.DebugErrorReceiveHandle, ui64, tc.args.ErrorReceiveHandle)
+				}
+			}
+			if tc.args.ErrorReceiveStorage > 0 {
+				if ui64, err := strconv.ParseUint(cl.Query().Get(mms.DebugErrorReceiveStorage), 10, 64); err != nil {
+					t.Errorf("Couldn't parse \"%s\": %s", mms.DebugErrorReceiveStorage, err)
+				} else if tc.args.ErrorReceiveStorage != ui64 {
+					t.Errorf("Decoded MNotificationInd.ContentLocation query parameter \"%s\" is %d, want %d", mms.DebugErrorReceiveStorage, ui64, tc.args.ErrorReceiveStorage)
+				}
+			}
+			if tc.args.ErrorRespondHandle > 0 {
+				if ui64, err := strconv.ParseUint(cl.Query().Get(mms.DebugErrorRespondHandle), 10, 64); err != nil {
+					t.Errorf("Couldn't parse \"%s\": %s", mms.DebugErrorRespondHandle, err)
+				} else if tc.args.ErrorRespondHandle != ui64 {
+					t.Errorf("Decoded MNotificationInd.ContentLocation query parameter \"%s\" is %d, want %d", mms.DebugErrorRespondHandle, ui64, tc.args.ErrorRespondHandle)
+				}
+			}
+			if tc.args.ErrorRespondStorage > 0 {
+				if ui64, err := strconv.ParseUint(cl.Query().Get(mms.DebugErrorRespondStorage), 10, 64); err != nil {
+					t.Errorf("Couldn't parse \"%s\": %s", mms.DebugErrorRespondStorage, err)
+				} else if tc.args.ErrorRespondStorage != ui64 {
+					t.Errorf("Decoded MNotificationInd.ContentLocation query parameter \"%s\" is %d, want %d", mms.DebugErrorRespondStorage, ui64, tc.args.ErrorRespondStorage)
 				}
 			}
 		}

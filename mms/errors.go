@@ -27,7 +27,11 @@ func (e ErrorDecodeInconsistentOffset) Error() string {
 const (
 	DebugErrorActivateContext = "error-activate-context"
 	DebugErrorGetProxy        = "error-get-proxy"
-	DebugErrorDownloadStorage = "error-storage"
+	DebugErrorDownloadStorage = "error-storage-download"
+	DebugErrorReceiveHandle   = "error-handle-receive"
+	DebugErrorReceiveStorage  = "error-storage-receive"
+	DebugErrorRespondHandle   = "error-handle-respond"
+	DebugErrorRespondStorage  = "error-storage-respond"
 )
 
 type ForcedDebugError string

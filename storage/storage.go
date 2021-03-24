@@ -153,6 +153,13 @@ func UpdateReceived(uuid string) error {
 		return fmt.Errorf("error retrieving message state: %w", err)
 	}
 
+	// Debug error forcing if wanted.
+	if err := state.MNotificationInd.PopDebugError(mms.DebugErrorReceiveStorage); err != nil {
+		log.Printf("Forcing debug error: %#v", err)
+		UpdateMNotificationInd(state.MNotificationInd)
+		return err
+	}
+
 	state.State = RECEIVED
 	state.TelepathyNotified = true
 
@@ -167,6 +174,13 @@ func UpdateResponded(uuid string) error {
 	state, err := GetMMSState(uuid)
 	if err != nil {
 		return fmt.Errorf("error retrieving message state: %w", err)
+	}
+
+	// Debug error forcing if wanted.
+	if err := state.MNotificationInd.PopDebugError(mms.DebugErrorRespondStorage); err != nil {
+		log.Printf("Forcing debug error: %#v", err)
+		UpdateMNotificationInd(state.MNotificationInd)
+		return err
 	}
 
 	state.State = RESPONDED

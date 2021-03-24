@@ -267,12 +267,11 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 		}
 	}
 
-	//TODO:jezek - debug received error.
 	// Forward message to telepathy service.
 	mRetrieveConf, err := mediator.getAndHandleMRetrieveConf(mNotificationInd)
 	if err != nil {
 		log.Printf("Handling MRetrieveConf error: %v", err)
-		mediator.handleMessageDownloadError(mNotificationInd, standartizedError{err, "x-ubports-nuntium-mms-error-forward"})
+		mediator.handleMessageDownloadError(mNotificationInd, standartizedError{err, ErrorForward})
 		return
 	}
 	// Update message state in storage to RECEIVED.
@@ -295,7 +294,11 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 		}
 	} else {
 		log.Print("This is a local test, skipping m-notifyresp.ind")
-		//TODO:jezek - debug respond error.
+		if err := mNotificationInd.PopDebugError(mms.DebugErrorRespondHandle); err != nil {
+			log.Printf("Forcing debug error: %#v", err)
+			storage.UpdateMNotificationInd(mNotificationInd)
+			return
+		}
 	}
 	// MMS center is notified, that the message was downloaded, we can remove the TransactionId from undownloaded.
 	delete(mediator.undownloaded, mNotificationInd.TransactionId)
@@ -364,6 +367,11 @@ func (mediator *Mediator) getMRetrieveConf(uuid string) (*mms.MRetrieveConf, err
 }
 
 func (mediator *Mediator) getAndHandleMRetrieveConf(mNotificationInd *mms.MNotificationInd) (*mms.MRetrieveConf, error) {
+	if err := mNotificationInd.PopDebugError(mms.DebugErrorReceiveHandle); err != nil {
+		log.Printf("Forcing getAndHandleMRetrieveConf debug error: %#v", err)
+		storage.UpdateMNotificationInd(mNotificationInd)
+		return nil, err
+	}
 	mRetrieveConf, err := mediator.getMRetrieveConf(mNotificationInd.UUID)
 	if err != nil {
 		return nil, err
@@ -792,6 +800,11 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 					}
 				} else {
 					log.Print("This is a local test, skipping m-notifyresp.ind")
+					if err := mmsState.MNotificationInd.PopDebugError(mms.DebugErrorRespondHandle); err != nil {
+						log.Printf("Forcing debug error: %#v", err)
+						storage.UpdateMNotificationInd(mmsState.MNotificationInd)
+						return err
+					}
 				}
 				return nil
 			}(); err != nil {

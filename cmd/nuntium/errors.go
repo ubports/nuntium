@@ -5,6 +5,7 @@ const (
 	ErrorGetProxy        = "x-ubports-nuntium-mms-error-get-proxy"
 	ErrorDownloadContent = "x-ubports-nuntium-mms-error-download-content"
 	ErrorStorage         = "x-ubports-nuntium-mms-error-storage"
+	ErrorForward         = "x-ubports-nuntium-mms-error-forward"
 )
 
 type standartizedError struct {
