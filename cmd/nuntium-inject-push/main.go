@@ -29,10 +29,8 @@ type mainFlags struct {
 	ErrorActivateContext uint64 `long:"error-activate-context" description:"Number of activate context errors before message download attempt starts"`
 	// ErrorGetProxy indicates how many nuntium ErrorGetProxy errors will be thrown (and communicated to telepathy), before message download attempt starts.
 	ErrorGetProxy uint64 `long:"error-get-proxy" description:"Number of get proxy errors before message download attempt starts"`
-	// ErrorDownloadContent indicates how many nuntium ErrorDownloadContent errors will be thrown (and communicated to telepathy), before message download attempt starts.
-	ErrorDownloadContent uint64 `long:"error-download-content" description:"Number of download content errors before message download attempt starts"`
 	// ErrorDownloadStorage indicates how many nuntium ErrorDownloadStorage errors will be thrown (and communicated to telepathy), before message download attempt starts.
-	ErrorDownloadStorage uint64 `long:"error-storage" description:"Number of storage errors before message download attempt starts"`
+	ErrorDownloadStorage uint64 `long:"error-storage" description:"Number of storage errors after successful message download"`
 }
 
 func main() {

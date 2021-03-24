@@ -25,9 +25,8 @@ func TestGetMNotificationIndPayload(t *testing.T) {
 		{mainFlags{TransactionId: ""}, false},
 		{mainFlags{ErrorActivateContext: 1}, true},
 		{mainFlags{ErrorGetProxy: 5}, true},
-		{mainFlags{ErrorDownloadContent: 10}, true},
 		{mainFlags{ErrorDownloadStorage: 9}, true},
-		{mainFlags{ErrorActivateContext: 1, ErrorGetProxy: 1, ErrorDownloadContent: 1, ErrorDownloadStorage: 1}, true},
+		{mainFlags{ErrorActivateContext: 1, ErrorGetProxy: 1, ErrorDownloadStorage: 1}, true},
 	}
 
 	for _, tc := range testCases {
@@ -79,13 +78,6 @@ func TestGetMNotificationIndPayload(t *testing.T) {
 					t.Errorf("Couldn't parse \"%s\": %s", mms.DebugErrorGetProxy, err)
 				} else if tc.args.ErrorGetProxy != ui64 {
 					t.Errorf("Decoded MNotificationInd.ContentLocation query parameter \"%s\" is %d, want %d", mms.DebugErrorGetProxy, ui64, tc.args.ErrorGetProxy)
-				}
-			}
-			if tc.args.ErrorDownloadContent > 0 {
-				if ui64, err := strconv.ParseUint(cl.Query().Get(mms.DebugErrorDownloadContent), 10, 64); err != nil {
-					t.Errorf("Couldn't parse \"%s\": %s", mms.DebugErrorDownloadContent, err)
-				} else if tc.args.ErrorDownloadContent != ui64 {
-					t.Errorf("Decoded MNotificationInd.ContentLocation query parameter \"%s\" is %d, want %d", mms.DebugErrorDownloadContent, ui64, tc.args.ErrorDownloadContent)
 				}
 			}
 			if tc.args.ErrorDownloadStorage > 0 {

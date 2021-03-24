@@ -205,28 +205,14 @@ func (mediator *Mediator) activateMMSContext() (mmsContext ofono.OfonoContext, d
 	return
 }
 
-func (mediator *Mediator) debugDownloadError(mNotificationInd *mms.MNotificationInd) bool {
-	err := error(nil)
-	if err = mNotificationInd.PopDebugError(mms.DebugErrorActivateContext); err != nil {
-		err = downloadError{standartizedError{err, ErrorActivateContext}}
-	} else if err = mNotificationInd.PopDebugError(mms.DebugErrorGetProxy); err != nil {
-		err = downloadError{standartizedError{err, ErrorGetProxy}}
-	} else if err = mNotificationInd.PopDebugError(mms.DebugErrorDownloadContent); err != nil {
-		err = downloadError{standartizedError{err, ErrorDownloadContent}}
-	} else if err = mNotificationInd.PopDebugError(mms.DebugErrorDownloadStorage); err != nil {
-		err = standartizedError{err, ErrorStorage}
+func (mediator *Mediator) debugMMSContextError(mNotificationInd *mms.MNotificationInd) error {
+	if err := mNotificationInd.PopDebugError(mms.DebugErrorActivateContext); err != nil {
+		return downloadError{standartizedError{err, ErrorActivateContext}}
+	} else if err := mNotificationInd.PopDebugError(mms.DebugErrorGetProxy); err != nil {
+		return downloadError{standartizedError{err, ErrorGetProxy}}
 	}
 
-	if err != nil {
-		log.Printf("Forcing debug error: %#v", err)
-		if e := storage.UpdateMNotificationInd(mNotificationInd); e != nil {
-			log.Printf("Error updating storage MNotificationInd: %s", e)
-		}
-		mediator.handleMRetrieveConfDownloadError(mNotificationInd, err)
-		return true
-	}
-
-	return false
+	return nil
 }
 
 func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotificationInd) {
@@ -237,7 +223,10 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 	var mmsContext ofono.OfonoContext
 	if mNotificationInd.IsDebug() {
 		log.Print("This is a local test, skipping context activation and proxy settings")
-		if mediator.debugDownloadError(mNotificationInd) {
+		if err := mediator.debugMMSContextError(mNotificationInd); err != nil {
+			log.Printf("Forcing debug error: %#v", err)
+			storage.UpdateMNotificationInd(mNotificationInd)
+			mediator.handleMessageDownloadError(mNotificationInd, err)
 			return
 		}
 	} else {
@@ -246,7 +235,7 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 		mmsContext, deactivateMMSContext, err = mediator.activateMMSContext()
 		if err != nil {
 			log.Print("Cannot activate ofono context: ", err)
-			mediator.handleMRetrieveConfDownloadError(mNotificationInd, downloadError{standartizedError{err, ErrorActivateContext}})
+			mediator.handleMessageDownloadError(mNotificationInd, downloadError{standartizedError{err, ErrorActivateContext}})
 			return
 		}
 		if deactivateMMSContext != nil {
@@ -259,7 +248,7 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 		proxy, err = mmsContext.GetProxy()
 		if err != nil {
 			log.Print("Error retrieving proxy: ", err)
-			mediator.handleMRetrieveConfDownloadError(mNotificationInd, downloadError{standartizedError{err, ErrorGetProxy}})
+			mediator.handleMessageDownloadError(mNotificationInd, downloadError{standartizedError{err, ErrorGetProxy}})
 			return
 		}
 	}
@@ -267,13 +256,13 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 	// Download message content.
 	if filePath, err := mNotificationInd.DownloadContent(proxy.Host, int32(proxy.Port)); err != nil {
 		log.Print("Download issues: ", err)
-		mediator.handleMRetrieveConfDownloadError(mNotificationInd, downloadError{standartizedError{err, ErrorDownloadContent}})
+		mediator.handleMessageDownloadError(mNotificationInd, downloadError{standartizedError{err, ErrorDownloadContent}})
 		return
 	} else {
 		// Save message to storage and update state to DOWNLOADED.
 		if err := storage.UpdateDownloaded(mNotificationInd.UUID, filePath); err != nil {
 			log.Println("Error updating storage (UpdateDownloaded): ", err)
-			mediator.handleMRetrieveConfDownloadError(mNotificationInd, standartizedError{err, ErrorStorage})
+			mediator.handleMessageDownloadError(mNotificationInd, standartizedError{err, ErrorStorage})
 			return
 		}
 	}
@@ -283,7 +272,7 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 	mRetrieveConf, err := mediator.getAndHandleMRetrieveConf(mNotificationInd)
 	if err != nil {
 		log.Printf("Handling MRetrieveConf error: %v", err)
-		mediator.handleMRetrieveConfDownloadError(mNotificationInd, standartizedError{err, "x-ubports-nuntium-mms-error-forward"})
+		mediator.handleMessageDownloadError(mNotificationInd, standartizedError{err, "x-ubports-nuntium-mms-error-forward"})
 		return
 	}
 	// Update message state in storage to RECEIVED.
@@ -320,9 +309,10 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 
 // Communicates the download error "err" of mNotificationInd to telepathy service.
 // Some operators repeatedly push mNotificationInd with the same transaction id, if download not acknowledged by mNotifyRespInd. So we have to make sure, to communicate the download error just once.
-func (mediator *Mediator) handleMRetrieveConfDownloadError(mNotificationInd *mms.MNotificationInd, err error) {
+func (mediator *Mediator) handleMessageDownloadError(mNotificationInd *mms.MNotificationInd, err error) {
 	_, inUndownloaded := mediator.undownloaded[mNotificationInd.TransactionId]
 	if mNotificationInd.RedownloadOfUUID == "" && inUndownloaded && mNotificationInd.TransactionId != "" {
+		//TODO:jezek - look for mmsState.TelepathyNotified.
 		// This download error "err" happened not after redownload and not after first download fail of pushed mNotificationInd with the same transaction id.
 		log.Printf("Download error for MNotificationInd with TransactionId: \"%s\" was already communicated by UUID: \"%s\"", mNotificationInd.TransactionId, mediator.undownloaded[mNotificationInd.TransactionId])
 		// Delete the message from storage.
@@ -730,7 +720,7 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 				mRetrieveConf, err := mediator.getAndHandleMRetrieveConf(mmsState.MNotificationInd)
 				if err != nil {
 					log.Printf("Handling MRetrieveConf error: %v", err)
-					mediator.handleMRetrieveConfDownloadError(mmsState.MNotificationInd, standartizedError{err, "x-ubports-nuntium-mms-error-forward"})
+					mediator.handleMessageDownloadError(mmsState.MNotificationInd, standartizedError{err, "x-ubports-nuntium-mms-error-forward"})
 				} else {
 					// Update message state in storage to RECEIVED.
 					//TODO:jezek - should return mmsState.

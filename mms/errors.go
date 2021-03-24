@@ -27,7 +27,6 @@ func (e ErrorDecodeInconsistentOffset) Error() string {
 const (
 	DebugErrorActivateContext = "error-activate-context"
 	DebugErrorGetProxy        = "error-get-proxy"
-	DebugErrorDownloadContent = "error-download-content"
 	DebugErrorDownloadStorage = "error-storage"
 )
 

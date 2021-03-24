@@ -321,7 +321,7 @@ func (mNotificationInd *MNotificationInd) IsDebug() bool {
 // When there is a 'name' parameter in ContentLocation URI with non zero positive integer as value,
 // the value is decreased and corresponding error is returned. Nil error is returned otherwise or if result of IsDebug method is false.
 func (mNotificationInd *MNotificationInd) PopDebugError(name string) error {
-	if mNotificationInd.IsDebug() == false {
+	if mNotificationInd == nil || mNotificationInd.IsDebug() == false {
 		return nil
 	}
 	uri, err := url.ParseRequestURI(mNotificationInd.ContentLocation)

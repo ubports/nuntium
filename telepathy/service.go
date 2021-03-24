@@ -421,7 +421,9 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 	if !allowRedownload {
 		redownloadChan = nil
 	}
+	//TODO:jezek - add debug error telepathy notify.
 	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, redownloadChan)
+	//TODO:issue - if error encountered, you can stop handling message.
 	return service.MessageAdded(&payload)
 }
 
@@ -445,7 +447,9 @@ func (service *MMSService) IncomingMessageAdded(mRetConf *mms.MRetrieveConf, mNo
 		payload.Properties["Received"] = dbus.Variant{mNotificationInd.Received.Unix()}
 	}
 
+	//TODO:jezek - add debug error telepathy notify.
 	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, nil)
+	//TODO:issue - if error encountered, you can stop handling message.
 	return service.MessageAdded(&payload)
 }
 

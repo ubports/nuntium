@@ -124,9 +124,6 @@ func getMNotificationIndPayload(args mainFlags) []byte {
 	if args.ErrorGetProxy > 0 {
 		params[mms.DebugErrorGetProxy] = args.ErrorGetProxy
 	}
-	if args.ErrorDownloadContent > 0 {
-		params[mms.DebugErrorDownloadContent] = args.ErrorDownloadContent
-	}
 	if args.ErrorDownloadStorage > 0 {
 		params[mms.DebugErrorDownloadStorage] = args.ErrorDownloadStorage
 	}

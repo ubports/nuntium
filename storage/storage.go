@@ -121,6 +121,13 @@ func UpdateDownloaded(uuid, filePath string) error {
 		return fmt.Errorf("error retrieving message state: %w", err)
 	}
 
+	// Debug error forcing if wanted.
+	if err := state.MNotificationInd.PopDebugError(mms.DebugErrorDownloadStorage); err != nil {
+		log.Printf("Forcing debug error: %#v", err)
+		UpdateMNotificationInd(state.MNotificationInd)
+		return err
+	}
+
 	// Move downloaded file (filePath) to xdg data storage.
 	mmsPath, err := xdg.Data.Ensure(path.Join(SUBPATH, uuid+".mms"))
 	if err != nil {
