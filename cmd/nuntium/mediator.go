@@ -681,22 +681,29 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 
 			//TODO:jezek - test this
 			if mmsState.TelepathyNotified == false { // Telepathy service wasn't notified of the download error.
-				// Try to notify now (for now, lets pretend it was an activation error).
-				//TODO:jezek - Store error and notify with it.
-				if addErr := mediator.telepathyService.IncomingMessageFailAdded(mmsState.MNotificationInd, downloadError{standartizedError{fmt.Errorf("Made-up error on initialization, cause we forgot, what the error was"), ErrorActivateContext}}); addErr != nil {
-					// Couldn't inform telepathy about download fail.
-					log.Printf("Sending download error message to telepathy has failed with error: %v", addErr)
-				} else {
-					// Telepathy has been successfully notified of the error.
-					if err := storage.UpdateTelepathyNotified(uuid); err != nil {
-						log.Printf("Error updating storage for message %s that telepahy was notified", uuid)
-					}
-				}
+				//TODO:jezek - delete if tested
+				//// Try to notify now (for now, lets pretend it was an activation error).
+				////TODO:jezek - Store error and notify with it.
+				//if addErr := mediator.telepathyService.IncomingMessageFailAdded(mmsState.MNotificationInd, downloadError{standartizedError{fmt.Errorf("Made-up error on initialization, cause we forgot, what the error was"), ErrorActivateContext}}); addErr != nil {
+				//	// Couldn't inform telepathy about download fail.
+				//	log.Printf("Sending download error message to telepathy has failed with error: %v", addErr)
+				//} else {
+				//	// Telepathy has been successfully notified of the error.
+				//	if err := storage.UpdateTelepathyNotified(uuid); err != nil {
+				//		log.Printf("Error updating storage for message %s that telepahy was notified", uuid)
+				//	}
+				//}
 
-				if checkExpiredAndHandle() {
-					// Message is expired, don't continue.
-					break
-				}
+				//if checkExpiredAndHandle() {
+				//	// Message is expired, don't continue.
+				//	break
+				//}
+
+				// Handle as new MNotificationInd and send to NewMNotificationInd channel.
+				go func() {
+					mediator.NewMNotificationInd <- mmsState.MNotificationInd
+				}()
+				break
 			} else { // Telepathy was already notified of the error.
 				if checkExpiredAndHandle() {
 					// Message is expired, don't continue.
