@@ -278,7 +278,6 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 	mRetrieveConf, err := mediator.getAndHandleMRetrieveConf(mNotificationInd)
 	if err != nil {
 		log.Printf("Handling MRetrieveConf error: %v", err)
-		//TODO:jezek - if we send an error to telepathy and it was read, then the message was deleted from storage and lost forever.
 		mediator.handleMessageDownloadError(mNotificationInd, standartizedError{err, ErrorForward})
 		return
 	}

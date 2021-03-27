@@ -120,8 +120,8 @@ func (service *MMSService) watchMessageDeleteCalls() {
 		log.Printf("jezek - MMSService.watchMessageDeleteCalls: msgObjectPath: %v", msgObjectPath)
 
 		if mmsState, err := service.getMMSState(msgObjectPath); err == nil {
-			if mmsState.State == storage.NOTIFICATION && mmsState.MNotificationInd != nil && !mmsState.MNotificationInd.Expired() {
-				log.Printf("Message %s is not fully downloaded and not expired, not deleting.", string(msgObjectPath))
+			if mmsState.State != storage.RESPONDED && mmsState.MNotificationInd != nil && !mmsState.MNotificationInd.Expired() {
+				log.Printf("Message %s is not responded and not expired, not deleting.", string(msgObjectPath))
 				continue
 			}
 		} else {
