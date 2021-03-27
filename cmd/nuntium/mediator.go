@@ -38,16 +38,15 @@ import (
 )
 
 type Mediator struct {
-	modem               *ofono.Modem
-	telepathyService    *telepathy.MMSService
-	NewMNotificationInd chan *mms.MNotificationInd
-	NewMSendReq         chan *mms.MSendReq
-	NewMSendReqFile     chan struct{ filePath, uuid string }
-	outMessage          chan *telepathy.OutgoingMessage
-	terminate           chan bool
-	contextLock         sync.Mutex
-	//TODO:jezek - Rename to unrespondedTransactions and make it to be set on start of handleMNotificationInd and unset on end and respond in initialization.
-	undownloaded map[string]string // (transactionId: UUID) Messages with download error, which was successfully communicated to telepathyService.
+	modem                   *ofono.Modem
+	telepathyService        *telepathy.MMSService
+	NewMNotificationInd     chan *mms.MNotificationInd
+	NewMSendReq             chan *mms.MSendReq
+	NewMSendReqFile         chan struct{ filePath, uuid string }
+	outMessage              chan *telepathy.OutgoingMessage
+	terminate               chan bool
+	contextLock             sync.Mutex
+	unrespondedTransactions map[string]string // transactionId: UUID
 }
 
 //TODO these vars need a configuration location managed by system settings or
@@ -65,7 +64,7 @@ func NewMediator(modem *ofono.Modem) *Mediator {
 	mediator.NewMSendReqFile = make(chan struct{ filePath, uuid string })
 	mediator.outMessage = make(chan *telepathy.OutgoingMessage)
 	mediator.terminate = make(chan bool)
-	mediator.undownloaded = make(map[string]string)
+	mediator.unrespondedTransactions = make(map[string]string)
 	return mediator
 }
 
@@ -156,7 +155,7 @@ func (mediator *Mediator) handlePushAgentNotification(pushMsg *ofono.PushPDU, mo
 
 	// Set received date to first push occurrence, if this is not a first time this transaction ID occurred.
 	if mNotificationInd.TransactionId != "" {
-		if uuid, ok := mediator.undownloaded[mNotificationInd.TransactionId]; ok {
+		if uuid, ok := mediator.unrespondedTransactions[mNotificationInd.TransactionId]; ok {
 			log.Printf("Pushed transaction ID (%s) is in undownloaded pointing to UUID: %s", mNotificationInd.TransactionId, uuid)
 			if st, err := storage.GetMMSState(uuid); err == nil {
 				log.Printf("jezek - mmsState: %v", st)
@@ -219,6 +218,13 @@ func (mediator *Mediator) debugMMSContextError(mNotificationInd *mms.MNotificati
 func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotificationInd) {
 	mediator.contextLock.Lock()
 	defer mediator.contextLock.Unlock()
+
+	if mNotificationInd.TransactionId != "" {
+		if _, ok := mediator.unrespondedTransactions[mNotificationInd.TransactionId]; !ok {
+			// Add transaction to unresponded if not already in there.
+			mediator.unrespondedTransactions[mNotificationInd.TransactionId] = mNotificationInd.UUID
+		}
+	}
 
 	var proxy ofono.ProxyInfo
 	var mmsContext ofono.OfonoContext
@@ -302,8 +308,8 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 			return
 		}
 	}
-	// MMS center is notified, that the message was downloaded, we can remove the TransactionId from undownloaded.
-	delete(mediator.undownloaded, mNotificationInd.TransactionId)
+	// MMS center is notified, that the message was downloaded, we can remove the TransactionId from unrespondedTransactions.
+	delete(mediator.unrespondedTransactions, mNotificationInd.TransactionId)
 	// Update message state in storage to RESPONDED.
 	if err := storage.UpdateResponded(mNotifyRespInd.UUID); err != nil {
 		log.Println("Error updating storage (UpdateResponded): ", err)
@@ -315,11 +321,11 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 // Communicates the download error "err" of mNotificationInd to telepathy service.
 // Some operators repeatedly push mNotificationInd with the same transaction id, if download not acknowledged by mNotifyRespInd. So we have to make sure, to communicate the download error just once.
 func (mediator *Mediator) handleMessageDownloadError(mNotificationInd *mms.MNotificationInd, err error) {
-	_, inUndownloaded := mediator.undownloaded[mNotificationInd.TransactionId]
-	if mNotificationInd.RedownloadOfUUID == "" && inUndownloaded && mNotificationInd.TransactionId != "" {
-		//TODO:jezek - look for mmsState.TelepathyNotified.
+	_, inUnresponded := mediator.unrespondedTransactions[mNotificationInd.TransactionId]
+	if mNotificationInd.RedownloadOfUUID == "" && inUnresponded && mNotificationInd.TransactionId != "" {
+		//TODO:jezek - look for mmsState.TelepathyNotified. If not notified, delete old from storage, try to notify this.
 		// This download error "err" happened not after redownload and not after first download fail of pushed mNotificationInd with the same transaction id.
-		log.Printf("Download error for MNotificationInd with TransactionId: \"%s\" was already communicated by UUID: \"%s\"", mNotificationInd.TransactionId, mediator.undownloaded[mNotificationInd.TransactionId])
+		log.Printf("Download error for MNotificationInd with TransactionId: \"%s\" was already communicated by UUID: \"%s\"", mNotificationInd.TransactionId, mediator.unrespondedTransactions[mNotificationInd.TransactionId])
 		// Delete the message from storage.
 		if err := storage.Destroy(mNotificationInd.UUID); err != nil {
 			log.Printf("Error removing message %s from storage: %v", mNotificationInd.UUID, err)
@@ -335,11 +341,6 @@ func (mediator *Mediator) handleMessageDownloadError(mNotificationInd *mms.MNoti
 		// Couldn't inform telepathy about download fail.
 		log.Printf("Sending download error message to telepathy has failed with error: %v", addErr)
 		return
-	}
-
-	if mNotificationInd.TransactionId != "" {
-		// Mark that some download error for TransactionId occurred and was already successfully communicated to telepathy service.
-		mediator.undownloaded[mNotificationInd.TransactionId] = mNotificationInd.UUID
 	}
 
 	if err := storage.UpdateTelepathyNotified(mNotificationInd.UUID); err != nil {
@@ -380,10 +381,11 @@ func (mediator *Mediator) getAndHandleMRetrieveConf(mNotificationInd *mms.MNotif
 	}
 
 	// Check if there was some download error communicated for TransactionId before and no redownload was triggered (on redownload request, RedownloadOfUUID is filled and listener is stopped automatically).
-	if uuid, ok := mediator.undownloaded[mNotificationInd.TransactionId]; mNotificationInd.RedownloadOfUUID == "" && ok {
+	if uuid, ok := mediator.unrespondedTransactions[mNotificationInd.TransactionId]; mNotificationInd.RedownloadOfUUID == "" && ok {
 		// There was an error message communicated to telepathy before, mark it to delete it by telepathy when communicating this message.
 		mNotificationInd.RedownloadOfUUID = uuid
-		// Before return, close listener for redownload request.
+		//TODO:jezek - check if previous error was communicated to telepathy.
+		// Before return, close listener for the previous error message communicated to telepathy.
 		defer func() {
 			if err := mediator.telepathyService.MessageRemoved(mediator.telepathyService.GenMessagePath(uuid)); err != nil {
 				// Just log possible errors.
@@ -718,10 +720,11 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 				}
 			}
 
-			// Add to undownloaded, to not communicate possible error to telepathy again, on possible message notification from mobile provider.
+			// Add to undownloaded, to not communicate possible error to telepathy again, on possible message notification from MMS center.
 			if mmsState.MNotificationInd.TransactionId != "" {
 				log.Printf("jezek - adding message to undownloaded")
-				mediator.undownloaded[mmsState.MNotificationInd.TransactionId] = uuid
+				//TODO:jezek - if already in unrespondedTransactions, delete this message from storage (or the other? Leave the oldest?).
+				mediator.unrespondedTransactions[mmsState.MNotificationInd.TransactionId] = uuid
 			}
 			break
 
@@ -746,7 +749,8 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 						// Add to undownloaded, to not communicate possible error to telepathy again, on possible message notification from mobile provider.
 						if mmsState.MNotificationInd.TransactionId != "" {
 							log.Printf("jezek - adding message to undownloaded")
-							mediator.undownloaded[mmsState.MNotificationInd.TransactionId] = uuid
+							//TODO:jezek - if already in unrespondedTransactions, delete this message from storage (or the other? Leave the oldest?).
+							mediator.unrespondedTransactions[mmsState.MNotificationInd.TransactionId] = uuid
 						}
 					} else {
 						if mmsState, err = storage.GetMMSState(mRetrieveConf.UUID); err != nil {
@@ -754,7 +758,8 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 							// Add to undownloaded, to not communicate possible error to telepathy again, on possible message notification from mobile provider.
 							if mmsState.MNotificationInd.TransactionId != "" {
 								log.Printf("jezek - adding message to undownloaded")
-								mediator.undownloaded[mmsState.MNotificationInd.TransactionId] = uuid
+								//TODO:jezek - if already in unrespondedTransactions, delete this message from storage (or the other? Leave the oldest?).
+								mediator.unrespondedTransactions[mmsState.MNotificationInd.TransactionId] = uuid
 							}
 						} else {
 							// Message was forwarded to telepathy and state in storage was updated. Fallthrough to inform MMS center about successful download.
@@ -766,7 +771,8 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 				// Add to undownloaded, to not communicate possible error to telepathy again, on possible message notification from mobile provider.
 				if mmsState.MNotificationInd.TransactionId != "" {
 					log.Printf("jezek - adding message to undownloaded")
-					mediator.undownloaded[mmsState.MNotificationInd.TransactionId] = uuid
+					//TODO:jezek - if already in unrespondedTransactions, delete this message from storage (or the other? Leave the oldest?).
+					mediator.unrespondedTransactions[mmsState.MNotificationInd.TransactionId] = uuid
 				}
 				// Spawn interface listener to listen for read/delete requests.
 				log.Printf("jezek - spawning handlers for message")
@@ -821,7 +827,8 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 				// Add to undownloaded, to not communicate possible error to telepathy again, on possible message notification from mobile provider.
 				if mmsState.MNotificationInd.TransactionId != "" {
 					log.Printf("jezek - adding message to undownloaded")
-					mediator.undownloaded[mmsState.MNotificationInd.TransactionId] = uuid
+					//TODO:jezek - if already in unrespondedTransactions, delete this message from storage (or the other? Leave the oldest?).
+					mediator.unrespondedTransactions[mmsState.MNotificationInd.TransactionId] = uuid
 				}
 			} else {
 				if err := storage.UpdateResponded(mmsState.MNotificationInd.UUID); err != nil {
