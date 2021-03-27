@@ -46,7 +46,8 @@ type Mediator struct {
 	outMessage          chan *telepathy.OutgoingMessage
 	terminate           chan bool
 	contextLock         sync.Mutex
-	undownloaded        map[string]string // (transactionId: UUID) Messages with download error, which was successfully communicated to telepathyService.
+	//TODO:jezek - Rename to unrespondedTransactions and make it to be set on start of handleMNotificationInd and unset on end and respond in initialization.
+	undownloaded map[string]string // (transactionId: UUID) Messages with download error, which was successfully communicated to telepathyService.
 }
 
 //TODO these vars need a configuration location managed by system settings or
@@ -262,7 +263,7 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 		// Save message to storage and update state to DOWNLOADED.
 		if err := storage.UpdateDownloaded(mNotificationInd.UUID, filePath); err != nil {
 			log.Println("Error updating storage (UpdateDownloaded): ", err)
-			mediator.handleMessageDownloadError(mNotificationInd, standartizedError{err, ErrorStorage})
+			mediator.handleMessageDownloadError(mNotificationInd, downloadError{standartizedError{err, ErrorStorage}})
 			return
 		}
 	}
@@ -271,6 +272,7 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 	mRetrieveConf, err := mediator.getAndHandleMRetrieveConf(mNotificationInd)
 	if err != nil {
 		log.Printf("Handling MRetrieveConf error: %v", err)
+		//TODO:jezek - if we send an error to telepathy and it was read, then the message was deleted from storage and lost forever.
 		mediator.handleMessageDownloadError(mNotificationInd, standartizedError{err, ErrorForward})
 		return
 	}
