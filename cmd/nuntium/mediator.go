@@ -771,41 +771,7 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 			// Message download was successful, the message was decoded and forwarded to telepathy but MMS provider was not notified.
 			// There is a possibility, that a new notification with the same TransactionId arrives from MMS provider.
 
-			if func() error { // Responds to MMS center, that message was successfully downloaded.
-				//TODO:jezek - lock/unlock mutex
-				//TODO:issue - check if data enabled and if not, return error.
-				mRetrieveConf, err := mediator.getMRetrieveConf(mmsState.MNotificationInd.UUID)
-				if err != nil {
-					return err
-				}
-				// Notify MMS service about successful download.
-				mNotifyRespInd := mRetrieveConf.NewMNotifyRespInd(useDeliveryReports)
-				if !mmsState.MNotificationInd.IsDebug() {
-					mmsContext, deactivateMMSContext, err := mediator.activateMMSContext()
-					if err != nil {
-						return fmt.Errorf("error activating ofono context: %w", err)
-					}
-					if deactivateMMSContext != nil {
-						defer deactivateMMSContext()
-					}
-					// TODO deferred case
-					filePath := mediator.handleMNotifyRespInd(mNotifyRespInd)
-					if filePath == "" {
-						return fmt.Errorf("Getting file for m-notifyresp.ind failed")
-					}
-					if err := mediator.sendMNotifyRespInd(filePath, &mmsContext); err != nil {
-						return fmt.Errorf("error sending m-notifyresp.ind: %w", err)
-					}
-				} else {
-					log.Print("This is a local test, skipping m-notifyresp.ind")
-					if err := mmsState.MNotificationInd.PopDebugError(mms.DebugErrorRespondHandle); err != nil {
-						log.Printf("Forcing debug error: %#v", err)
-						storage.UpdateMNotificationInd(mmsState.MNotificationInd)
-						return err
-					}
-				}
-				return nil
-			}(); err != nil {
+			if err := mediator.respondMessage(mmsState); err != nil {
 				log.Printf("Error responding to MMS center: %s", err)
 			} else {
 				// Remove from unrespondedTransactions.
@@ -873,4 +839,43 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 		//TODO:jezek - Telepathy service should spawn dbus listeners for MarkRead/Delete requests for unread messages os startup.
 	}
 
+}
+
+// Responds to MMS center, that message was successfully downloaded.
+func (mediator *Mediator) respondMessage(mmsState storage.MMSState) error {
+	mediator.contextLock.Lock()
+	defer mediator.contextLock.Unlock()
+
+	//TODO:issue - check if data enabled and if not, return error.
+	mRetrieveConf, err := mediator.getMRetrieveConf(mmsState.MNotificationInd.UUID)
+	if err != nil {
+		return err
+	}
+	// Notify MMS service about successful download.
+	mNotifyRespInd := mRetrieveConf.NewMNotifyRespInd(useDeliveryReports)
+	if !mmsState.MNotificationInd.IsDebug() {
+		mmsContext, deactivateMMSContext, err := mediator.activateMMSContext()
+		if err != nil {
+			return fmt.Errorf("error activating ofono context: %w", err)
+		}
+		if deactivateMMSContext != nil {
+			defer deactivateMMSContext()
+		}
+		// TODO deferred case
+		filePath := mediator.handleMNotifyRespInd(mNotifyRespInd)
+		if filePath == "" {
+			return fmt.Errorf("Getting file for m-notifyresp.ind failed")
+		}
+		if err := mediator.sendMNotifyRespInd(filePath, &mmsContext); err != nil {
+			return fmt.Errorf("error sending m-notifyresp.ind: %w", err)
+		}
+	} else {
+		log.Print("This is a local test, skipping m-notifyresp.ind")
+		if err := mmsState.MNotificationInd.PopDebugError(mms.DebugErrorRespondHandle); err != nil {
+			log.Printf("Forcing debug error: %#v", err)
+			storage.UpdateMNotificationInd(mmsState.MNotificationInd)
+			return err
+		}
+	}
+	return nil
 }
