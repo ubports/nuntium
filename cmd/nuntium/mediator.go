@@ -617,6 +617,7 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 	log.Printf("jezek - Mediator.initializeMessages(%s): start", modemId)
 	defer log.Printf("jezek - Mediator.initializeMessages(%s): end", modemId)
 	uuids := storage.GetStoredUUIDs()
+	handledTransactions := map[string]string{}
 
 	log.Printf("Found %d messages in storage", len(uuids))
 	for _, uuid := range uuids {
@@ -661,6 +662,22 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 			log.Printf("Stored message's MNotificationInd's TransactionId is empty")
 		}
 
+		if mmsState.MNotificationInd.TransactionId != "" {
+			log.Printf("jezek - adding message to undownloaded")
+			if _, ok := handledTransactions[mmsState.MNotificationInd.TransactionId]; ok {
+				// TransactionId was already handled. This message is duplicate and obsolete. Delete and handle next.
+				log.Printf("Message %s is an duplicate incoming message with transaction ID %s that was already handled, no need to store, deleting", uuid, mmsState.MNotificationInd.TransactionId)
+				if err := storage.Destroy(uuid); err != nil {
+					log.Printf("Error destroying duplicate message: %v", err)
+				}
+				continue
+			}
+			// Mark TransactionId as handled, to not handle possible messages with the same TransactionId.
+			handledTransactions[mmsState.MNotificationInd.TransactionId] = uuid
+			// Add to unresponded, to not communicate possible error to telepathy again, on possible message notification from MMS center.
+			mediator.unrespondedTransactions[mmsState.MNotificationInd.TransactionId] = uuid
+		}
+
 		checkExpiredAndHandle := func() bool {
 			if !mmsState.MNotificationInd.Expired() {
 				return false
@@ -675,13 +692,6 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 				log.Printf("Error sending signal that message was removed: %v", err)
 			}
 			return true
-		}
-
-		// Add to unresponded, to not communicate possible error to telepathy again, on possible message notification from MMS center.
-		if mmsState.MNotificationInd.TransactionId != "" {
-			log.Printf("jezek - adding message to undownloaded")
-			//TODO:jezek - if already in unrespondedTransactions (or uninitialized?), delete this message from storage (or the other? Leave the oldest?).
-			mediator.unrespondedTransactions[mmsState.MNotificationInd.TransactionId] = uuid
 		}
 
 		switch mmsState.State {
