@@ -39,6 +39,8 @@ type mainFlags struct {
 	ErrorRespondHandle uint64 `long:"error-respond" description:"Number of respond handling errors after successful message forward"`
 	// ErrorRespondStorage indicates how many times will nuntium throw an storage error after message was successfully downloaded, forwarded to telepathy and responded to MMS center.
 	ErrorRespondStorage uint64 `long:"error-storage-respond" description:"Number of storage errors after successful message handling"`
+	// ErrorTelepathyErrorNotify indicates how many times will nuntium throw an error when message handling error is communicated to telepathy.
+	ErrorTelepathyErrorNotify uint64 `long:"error-telepathy-error-notify" description:"Number of telepathy notify errors after message handling error"`
 }
 
 func main() {

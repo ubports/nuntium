@@ -377,11 +377,6 @@ func (mediator *Mediator) getMRetrieveConf(uuid string) (*mms.MRetrieveConf, err
 }
 
 func (mediator *Mediator) getAndHandleMRetrieveConf(mNotificationInd *mms.MNotificationInd) (*mms.MRetrieveConf, error) {
-	if err := mNotificationInd.PopDebugError(mms.DebugErrorReceiveHandle); err != nil {
-		log.Printf("Forcing getAndHandleMRetrieveConf debug error: %#v", err)
-		storage.UpdateMNotificationInd(mNotificationInd)
-		return nil, err
-	}
 	mRetrieveConf, err := mediator.getMRetrieveConf(mNotificationInd.UUID)
 	if err != nil {
 		return nil, err

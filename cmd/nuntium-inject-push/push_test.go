@@ -30,7 +30,8 @@ func TestGetMNotificationIndPayload(t *testing.T) {
 		{mainFlags{ErrorReceiveStorage: 1}, true},
 		{mainFlags{ErrorRespondHandle: 1}, true},
 		{mainFlags{ErrorRespondStorage: 1}, true},
-		{mainFlags{ErrorActivateContext: 1, ErrorGetProxy: 1, ErrorDownloadStorage: 1, ErrorReceiveHandle: 1, ErrorReceiveStorage: 1, ErrorRespondHandle: 1, ErrorRespondStorage: 1}, true},
+		{mainFlags{ErrorTelepathyErrorNotify: 1}, true},
+		{mainFlags{ErrorActivateContext: 1, ErrorGetProxy: 1, ErrorDownloadStorage: 1, ErrorReceiveHandle: 1, ErrorReceiveStorage: 1, ErrorRespondHandle: 1, ErrorRespondStorage: 1, ErrorTelepathyErrorNotify: 2}, true},
 	}
 
 	for _, tc := range testCases {
@@ -117,6 +118,13 @@ func TestGetMNotificationIndPayload(t *testing.T) {
 					t.Errorf("Couldn't parse \"%s\": %s", mms.DebugErrorRespondStorage, err)
 				} else if tc.args.ErrorRespondStorage != ui64 {
 					t.Errorf("Decoded MNotificationInd.ContentLocation query parameter \"%s\" is %d, want %d", mms.DebugErrorRespondStorage, ui64, tc.args.ErrorRespondStorage)
+				}
+			}
+			if tc.args.ErrorTelepathyErrorNotify > 0 {
+				if ui64, err := strconv.ParseUint(cl.Query().Get(mms.DebugErrorTelepathyErrorNotify), 10, 64); err != nil {
+					t.Errorf("Couldn't parse \"%s\": %s", mms.DebugErrorTelepathyErrorNotify, err)
+				} else if tc.args.ErrorTelepathyErrorNotify != ui64 {
+					t.Errorf("Decoded MNotificationInd.ContentLocation query parameter \"%s\" is %d, want %d", mms.DebugErrorTelepathyErrorNotify, ui64, tc.args.ErrorTelepathyErrorNotify)
 				}
 			}
 		}

@@ -139,6 +139,9 @@ func getMNotificationIndPayload(args mainFlags) []byte {
 	if args.ErrorRespondStorage > 0 {
 		params[mms.DebugErrorRespondStorage] = args.ErrorRespondStorage
 	}
+	if args.ErrorTelepathyErrorNotify > 0 {
+		params[mms.DebugErrorTelepathyErrorNotify] = args.ErrorTelepathyErrorNotify
+	}
 	if len(params) > 0 {
 		v := url.Values{}
 		for s, ui64 := range params {

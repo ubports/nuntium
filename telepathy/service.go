@@ -346,7 +346,13 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 	if service == nil {
 		return fmt.Errorf("Nil MMSService")
 	}
-	//just handle that mms as an empty MMS
+
+	if err := mNotificationInd.PopDebugError(mms.DebugErrorTelepathyErrorNotify); err != nil {
+		log.Printf("Forcing IncomingMessageFailAdded debug error: %#v", err)
+		storage.UpdateMNotificationInd(mNotificationInd)
+		return err
+	}
+
 	params := make(map[string]dbus.Variant)
 
 	//TODO:jezek - delete or write somewhere
@@ -421,7 +427,6 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 	if !allowRedownload {
 		redownloadChan = nil
 	}
-	//TODO:jezek - add debug error telepathy notify.
 	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, redownloadChan)
 	//TODO:issue - if error encountered, you can stop handling message.
 	return service.MessageAdded(&payload)
@@ -433,6 +438,12 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 func (service *MMSService) IncomingMessageAdded(mRetConf *mms.MRetrieveConf, mNotificationInd *mms.MNotificationInd) error {
 	if service == nil {
 		return ErrorNilMMSService
+	}
+
+	if err := mNotificationInd.PopDebugError(mms.DebugErrorReceiveHandle); err != nil {
+		log.Printf("Forcing getAndHandleMRetrieveConf debug error: %#v", err)
+		storage.UpdateMNotificationInd(mNotificationInd)
+		return err
 	}
 
 	payload, err := service.parseMessage(mRetConf)
@@ -447,7 +458,6 @@ func (service *MMSService) IncomingMessageAdded(mRetConf *mms.MRetrieveConf, mNo
 		payload.Properties["Received"] = dbus.Variant{mNotificationInd.Received.Unix()}
 	}
 
-	//TODO:jezek - add debug error telepathy notify.
 	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, nil)
 	//TODO:issue - if error encountered, you can stop handling message.
 	return service.MessageAdded(&payload)
