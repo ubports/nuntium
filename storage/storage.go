@@ -164,7 +164,6 @@ func UpdateReceived(uuid string) error {
 	}
 
 	state.State = RECEIVED
-	state.TelepathyNotified = true
 
 	storePath, err := xdg.Data.Find(path.Join(SUBPATH, uuid+".db"))
 	if err != nil {
