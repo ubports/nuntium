@@ -677,6 +677,13 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 			return true
 		}
 
+		// Add to unresponded, to not communicate possible error to telepathy again, on possible message notification from MMS center.
+		if mmsState.MNotificationInd.TransactionId != "" {
+			log.Printf("jezek - adding message to undownloaded")
+			//TODO:jezek - if already in unrespondedTransactions (or uninitialized?), delete this message from storage (or the other? Leave the oldest?).
+			mediator.unrespondedTransactions[mmsState.MNotificationInd.TransactionId] = uuid
+		}
+
 		switch mmsState.State {
 		case storage.NOTIFICATION:
 			// Message download failed, error was probably communicated to telepathy.
@@ -718,13 +725,6 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 					log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
 				}
 			}
-
-			// Add to undownloaded, to not communicate possible error to telepathy again, on possible message notification from MMS center.
-			if mmsState.MNotificationInd.TransactionId != "" {
-				log.Printf("jezek - adding message to undownloaded")
-				//TODO:jezek - if already in unrespondedTransactions, delete this message from storage (or the other? Leave the oldest?).
-				mediator.unrespondedTransactions[mmsState.MNotificationInd.TransactionId] = uuid
-			}
 			break
 
 		case storage.DOWNLOADED:
@@ -739,27 +739,16 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 				mRetrieveConf, err := mediator.getAndHandleMRetrieveConf(mmsState.MNotificationInd)
 				if err != nil {
 					log.Printf("Handling MRetrieveConf error: %v", err)
-					mediator.handleMessageDownloadError(mmsState.MNotificationInd, standartizedError{err, "x-ubports-nuntium-mms-error-forward"})
+					mediator.handleMessageDownloadError(mmsState.MNotificationInd, standartizedError{err, ErrorForward})
 				} else {
 					// Update message state in storage to RECEIVED.
 					//TODO:jezek - should return mmsState.
 					if err := storage.UpdateReceived(mRetrieveConf.UUID); err != nil {
 						log.Println("Error updating storage (UpdateRetrieved): ", err)
-						// Add to undownloaded, to not communicate possible error to telepathy again, on possible message notification from mobile provider.
-						if mmsState.MNotificationInd.TransactionId != "" {
-							log.Printf("jezek - adding message to undownloaded")
-							//TODO:jezek - if already in unrespondedTransactions, delete this message from storage (or the other? Leave the oldest?).
-							mediator.unrespondedTransactions[mmsState.MNotificationInd.TransactionId] = uuid
-						}
 					} else {
+						// Update current mmsState variable.
 						if mmsState, err = storage.GetMMSState(mRetrieveConf.UUID); err != nil {
 							log.Printf("Error checking state of message stored under UUID: %s : %v", uuid, err)
-							// Add to undownloaded, to not communicate possible error to telepathy again, on possible message notification from mobile provider.
-							if mmsState.MNotificationInd.TransactionId != "" {
-								log.Printf("jezek - adding message to undownloaded")
-								//TODO:jezek - if already in unrespondedTransactions, delete this message from storage (or the other? Leave the oldest?).
-								mediator.unrespondedTransactions[mmsState.MNotificationInd.TransactionId] = uuid
-							}
 						} else {
 							// Message was forwarded to telepathy and state in storage was updated. Fallthrough to inform MMS center about successful download.
 							fallThrough = true
@@ -767,12 +756,6 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 					}
 				}
 			} else { // Telepathy was already notified of the error.
-				// Add to undownloaded, to not communicate possible error to telepathy again, on possible message notification from mobile provider.
-				if mmsState.MNotificationInd.TransactionId != "" {
-					log.Printf("jezek - adding message to undownloaded")
-					//TODO:jezek - if already in unrespondedTransactions, delete this message from storage (or the other? Leave the oldest?).
-					mediator.unrespondedTransactions[mmsState.MNotificationInd.TransactionId] = uuid
-				}
 				// Spawn interface listener to listen for read/delete requests.
 				log.Printf("jezek - spawning handlers for message")
 				if err := mediator.telepathyService.MessageHandle(uuid, false); err != nil {
@@ -789,6 +772,7 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 			// There is a possibility, that a new notification with the same TransactionId arrives from MMS provider.
 
 			if func() error { // Responds to MMS center, that message was successfully downloaded.
+				//TODO:jezek - lock/unlock mutex
 				//TODO:issue - check if data enabled and if not, return error.
 				mRetrieveConf, err := mediator.getMRetrieveConf(mmsState.MNotificationInd.UUID)
 				if err != nil {
@@ -823,13 +807,10 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 				return nil
 			}(); err != nil {
 				log.Printf("Error responding to MMS center: %s", err)
-				// Add to undownloaded, to not communicate possible error to telepathy again, on possible message notification from mobile provider.
-				if mmsState.MNotificationInd.TransactionId != "" {
-					log.Printf("jezek - adding message to undownloaded")
-					//TODO:jezek - if already in unrespondedTransactions, delete this message from storage (or the other? Leave the oldest?).
-					mediator.unrespondedTransactions[mmsState.MNotificationInd.TransactionId] = uuid
-				}
 			} else {
+				// Remove from unrespondedTransactions.
+				delete(mediator.unrespondedTransactions, mmsState.MNotificationInd.TransactionId)
+				// Store that message was responded.
 				if err := storage.UpdateResponded(mmsState.MNotificationInd.UUID); err != nil {
 					log.Println("Error updating storage (UpdateResponded): ", err)
 				}
@@ -844,6 +825,8 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 
 		case storage.RESPONDED:
 			// Message download was successful, the message was decoded and forwarded to telepathy and MMS provider was notified.
+			// Remove from unrespondedTransactions.
+			delete(mediator.unrespondedTransactions, mmsState.MNotificationInd.TransactionId)
 			// Get message from history service and if read or not exist, delete and don't spawn handlers.
 			eventId := string(mediator.telepathyService.GenMessagePath(uuid))
 			hsMessage, err := mediator.telepathyService.GetMessage(eventId)

@@ -288,6 +288,7 @@ func writeState(state MMSState, storePath string) error {
 
 // Returns list of UUID strings stored in storage.
 func GetStoredUUIDs() []string {
+	//TODO:jezek - Sort by created date ascending.
 	// Search for all *.db files in xdg data directory in SUBPATH subfolder and extract UUID from filenames.
 
 	storeDir, err := xdg.Data.Find(SUBPATH)
