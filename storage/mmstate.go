@@ -56,15 +56,15 @@ type SendInfo map[string]string
 //
 // MNotificationInd holds the received m-Notify.Ind until PDU downloaded (is not nil when State is "notification").
 //
-// TelepathyNotified holds information whether telepathy-ofono was notified of some message handling error.
+// TelepathyErrorNotified holds information whether telepathy-ofono was notified of some message handling error.
 type MMSState struct {
-	Id                string
-	State             string
-	ContentLocation   string
-	SendState         SendInfo
-	ModemId           string
-	MNotificationInd  *mms.MNotificationInd
-	TelepathyNotified bool
+	Id                     string
+	State                  string
+	ContentLocation        string
+	SendState              SendInfo
+	ModemId                string
+	MNotificationInd       *mms.MNotificationInd
+	TelepathyErrorNotified bool
 }
 
 func (m MMSState) IsIncoming() bool {
