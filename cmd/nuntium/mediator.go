@@ -220,9 +220,16 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 	defer mediator.contextLock.Unlock()
 
 	if mNotificationInd.TransactionId != "" {
-		// Add transaction to unresponded if not already in there.
-		if _, ok := mediator.unrespondedTransactions[mNotificationInd.TransactionId]; !ok {
+		// Add transaction to unresponded if not already in there or unresponded not in storage.
+		if uuid, ok := mediator.unrespondedTransactions[mNotificationInd.TransactionId]; !ok {
 			mediator.unrespondedTransactions[mNotificationInd.TransactionId] = mNotificationInd.UUID
+		} else {
+			if _, err := storage.GetMMSState(uuid); err != nil {
+				// This is not an error and happens after redownload is triggered by user.
+				// In MMSService if the redownload request is handled, the listeners for old message are closed and the message gets deleted from storage.
+				// If this happens, replace the UUID in unrespondedTransactions for this transaction.
+				mediator.unrespondedTransactions[mNotificationInd.TransactionId] = mNotificationInd.UUID
+			}
 		}
 	}
 
@@ -619,9 +626,6 @@ func mmsEnabled() bool {
 	return mms.Value.(bool)
 }
 
-// For messages storage with corresponding 'modemId' do:
-// - Spawns message handlers.
-// - Fills undownloaded map.
 func (mediator *Mediator) initializeMessages(modemId string) {
 	log.Printf("jezek - Mediator.initializeMessages(%s): start", modemId)
 	defer log.Printf("jezek - Mediator.initializeMessages(%s): end", modemId)
@@ -672,7 +676,7 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 		}
 
 		if mmsState.MNotificationInd.TransactionId != "" {
-			log.Printf("jezek - adding message to undownloaded")
+			log.Printf("jezek - adding message to unresponded")
 			if _, ok := handledTransactions[mmsState.MNotificationInd.TransactionId]; ok {
 				// TransactionId was already handled. This message is duplicate and obsolete. Delete and handle next.
 				log.Printf("Message %s is an duplicate incoming message with transaction ID %s that was already handled, no need to store, deleting", uuid, mmsState.MNotificationInd.TransactionId)
