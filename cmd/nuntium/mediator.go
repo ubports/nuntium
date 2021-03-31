@@ -754,37 +754,38 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 			// Message download was successful, but there was some decoding or forwarding to telepathy error, which was probably communicated to telepathy.
 			// The user has no possibility to initiate redownload and there is a possibility, that a new notification with the same TransactionId arrives from MMS provider.
 
-			fallThrough := false
 			//TODO:jezek - test this
-			// Try to communicate and acknowledge if needed.
-			if mmsState.TelepathyErrorNotified == false {
-				// Forward message to telepathy service.
-				mRetrieveConf, err := mediator.getAndHandleMRetrieveConf(mmsState.MNotificationInd)
-				if err != nil {
-					log.Printf("Handling MRetrieveConf error: %v", err)
-					mediator.handleMessageDownloadError(mmsState.MNotificationInd, standartizedError{err, ErrorForward})
+			//if mmsState.TelepathyErrorNotified {
+			//	// Telepathy was already notified of the error, so pretend this is a redownload of the error message.
+			//	mmsState.MNotificationInd.RedownloadOfUUID = mmsState.MNotificationInd.UUID
+			//}
+
+			forwarded := false
+			// Try to forward the downloaded and stored message to telepathy again.
+			mRetrieveConf, err := mediator.getAndHandleMRetrieveConf(mmsState.MNotificationInd)
+			if err != nil {
+				log.Printf("Handling MRetrieveConf error: %v", err)
+			} else {
+				// Update message state in storage to RECEIVED.
+				if err := storage.UpdateReceived(mRetrieveConf.UUID); err != nil {
+					log.Println("Error updating storage (UpdateRetrieved): ", err)
 				} else {
-					// Update message state in storage to RECEIVED.
-					if err := storage.UpdateReceived(mRetrieveConf.UUID); err != nil {
-						log.Println("Error updating storage (UpdateRetrieved): ", err)
+					// Update current mmsState variable.
+					if mmsState, err = storage.GetMMSState(mRetrieveConf.UUID); err != nil {
+						log.Printf("Error checking state of message stored under UUID: %s : %v", uuid, err)
 					} else {
-						// Update current mmsState variable.
-						if mmsState, err = storage.GetMMSState(mRetrieveConf.UUID); err != nil {
-							log.Printf("Error checking state of message stored under UUID: %s : %v", uuid, err)
-						} else {
-							// Message was forwarded to telepathy and state in storage was updated. Fallthrough to inform MMS center about successful download.
-							fallThrough = true
-						}
+						// Message was forwarded to telepathy and state in storage was updated.
+						forwarded = true
 					}
 				}
-			} else { // Telepathy was already notified of the error.
+			}
+
+			if !forwarded {
 				// Spawn interface listener to listen for read/delete requests.
 				log.Printf("jezek - spawning handlers for message")
 				if err := mediator.telepathyService.MessageHandle(uuid, false); err != nil {
 					log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
 				}
-			}
-			if !fallThrough {
 				break
 			}
 			fallthrough
