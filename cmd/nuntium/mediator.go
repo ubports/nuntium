@@ -667,9 +667,9 @@ func mmsEnabled() bool {
 func (mediator *Mediator) initializeMessages(modemId string) {
 	log.Printf("jezek - Mediator.initializeMessages(%s): start", modemId)
 	defer log.Printf("jezek - Mediator.initializeMessages(%s): end", modemId)
-	uuids := storage.GetStoredUUIDs()
+	historyService := mediator.telepathyService.HistoryService()
 	handledTransactions := map[string]string{}
-
+	uuids := storage.GetStoredUUIDs()
 	log.Printf("Found %d messages in storage", len(uuids))
 	for _, uuid := range uuids {
 		log.Printf("jezek - checking uuid: %s", uuid)
@@ -831,7 +831,7 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 			delete(mediator.unrespondedTransactions, mmsState.MNotificationInd.TransactionId)
 			// Get message from history service and if read or not exist, delete and don't spawn handlers.
 			eventId := string(mediator.telepathyService.GenMessagePath(uuid))
-			hsMessage, err := mediator.telepathyService.GetMessage(eventId)
+			hsMessage, err := historyService.GetMessage(eventId)
 			if err != nil {
 				log.Printf("Error getting message %s from HistoryService: %v", eventId, err)
 				break
