@@ -827,39 +827,40 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 
 		case storage.RESPONDED:
 			// Message download was successful, the message was decoded and forwarded to telepathy and MMS provider was notified.
+
 			// Remove from unrespondedTransactions.
 			delete(mediator.unrespondedTransactions, mmsState.MNotificationInd.TransactionId)
+
 			// Get message from history service and if read or not exist, delete and don't spawn handlers.
 			eventId := string(mediator.telepathyService.GenMessagePath(uuid))
 			hsMessage, err := historyService.GetMessage(eventId)
 			if err != nil {
 				log.Printf("Error getting message %s from HistoryService: %v", eventId, err)
 				break
-			}
-			log.Printf("jezek - hsMessage: %v", hsMessage)
-
-			// If message is doesn't exist, break (don't spawn handlers).
-			if len(hsMessage) == 0 {
-				log.Printf("Message %s doesn't exist in HistoryService, no need to store, deleting.", uuid)
-				if err := storage.Destroy(uuid); err != nil {
-					log.Printf("Error destroying message missing in HistoryService: %v", err)
-				}
-				break
-			}
-
-			// If message is marked as read, break (don't spawn handlers).
-			if unread, ok := hsMessage["newEvent"].Value.(bool); !ok {
-				log.Printf("HistoryService returned a message %s with unusual newEvent field (expecting bool): %#v", eventId, hsMessage["newEvent"])
-				break
 			} else {
-				if unread == false {
+				log.Printf("jezek - hsMessage: %v", hsMessage)
+
+				// If message is doesn't exist, break (don't spawn handlers).
+				if !hsMessage.Exists() {
+					log.Printf("Message %s doesn't exist in HistoryService, no need to store, deleting.", uuid)
+					if err := storage.Destroy(uuid); err != nil {
+						log.Printf("Error destroying message: %v", err)
+					}
+					break
+				}
+
+				// If message is marked as read (is not new), break (don't spawn handlers).
+				if isnew, err := hsMessage.IsNew(); err != nil {
+					log.Printf("Error checking if message is new in HistoryService: %s", err)
+				} else if isnew == false {
 					log.Printf("Message %s is marked as read in HistoryService, no need to store, deleting.", uuid)
 					if err := storage.Destroy(uuid); err != nil {
-						log.Printf("Error destroying message read in HistoryService: %v", err)
+						log.Printf("Error destroying message: %v", err)
 					}
 					break
 				}
 			}
+
 			// Spawn interface listener to listen for read/delete requests.
 			log.Printf("jezek - spawning handlers for message")
 			if err := mediator.telepathyService.MessageHandle(uuid, false); err != nil {

@@ -17,7 +17,7 @@ func NewHistoryService(conn *dbus.Connection) *HistoryService {
 }
 
 // Returns message identified by parameters from HistoryService.
-func (service *HistoryService) GetSingleMessage(accountId, threadId, eventId string) (map[string]dbus.Variant, error) {
+func (service *HistoryService) GetSingleMessage(accountId, threadId, eventId string) (Message, error) {
 	call := dbus.NewMethodCallMessage("com.canonical.HistoryService", "/com/canonical/HistoryService", "com.canonical.HistoryService", "GetSingleEvent")
 	eventType := int32(0) // History::EventTypeText
 	call.AppendArgs(eventType, accountId, threadId, eventId)
@@ -34,13 +34,13 @@ func (service *HistoryService) GetSingleMessage(accountId, threadId, eventId str
 		return nil, fmt.Errorf("reply decoding error: %w", err)
 	}
 
-	return msg, nil
+	return Message(msg), nil
 }
 
 var ErrorNilHistoryService = fmt.Errorf("nil HistoryService pointer")
 
 // Returns first message identified by eventId from HistoryService.
-func (service *HistoryService) GetMessage(eventId string) (map[string]dbus.Variant, error) {
+func (service *HistoryService) GetMessage(eventId string) (Message, error) {
 	log.Printf("jezek - GetMessage(%s) - start", eventId)
 	defer log.Printf("jezek - GetMessage() - end")
 	if service == nil {
@@ -129,10 +129,10 @@ func (service *HistoryService) GetMessage(eventId string) (map[string]dbus.Varia
 	}
 	log.Printf("Messages: %#v", msgs)
 	if len(msgs) > 1 {
-		return nil, fmt.Errorf("Too many meesages found: %d", len(msgs))
+		return nil, fmt.Errorf("Too many messages found: %d", len(msgs))
 	}
 	if len(msgs) == 0 {
-		return nil, nil
+		return Message(nil), nil
 	}
-	return msgs[0], nil
+	return Message(msgs[0]), nil
 }
