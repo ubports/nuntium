@@ -758,10 +758,12 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 				break
 			} else { // Telepathy was already notified of the error.
 				if checkExpiredAndHandle() {
-					// Message is expired, don't continue.
+					// Message is expired (and was deleted from storage), don't continue.
+					// Remove from unrespondedTransactions.
+					delete(mediator.unrespondedTransactions, mmsState.MNotificationInd.TransactionId)
 					break
 				}
-				//TODO:jezek - if the error notification is deleted, you can delete this message too.
+
 				// Spawn interface listener to listen for redownload requests.
 				log.Printf("jezek - spawning handlers for message")
 				if err := mediator.telepathyService.MessageHandle(uuid, true); err != nil {
