@@ -770,7 +770,6 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 					log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
 				}
 			}
-			break
 
 		case storage.DOWNLOADED:
 			// Message download was successful, but there was some decoding or forwarding to telepathy error, which was probably communicated to telepathy.
@@ -845,7 +844,6 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 			hsMessage, err := historyService.GetMessage(eventId)
 			if err != nil {
 				log.Printf("Error getting message %s from HistoryService: %v", eventId, err)
-				break
 			} else {
 				log.Printf("jezek - hsMessage: %v", hsMessage)
 
@@ -875,7 +873,6 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 			if err := mediator.telepathyService.MessageHandle(uuid, false); err != nil {
 				log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
 			}
-			break
 
 		default:
 			log.Printf("Unknown MMSState.State: %s", mmsState.State)
