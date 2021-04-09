@@ -41,7 +41,9 @@ import (
 const SUBPATH = "nuntium/store"
 
 //TODO:version - change back to Create(uuid, contentLocation string) to increase only minor version instead of major (add ModemId, MNotificationInd after every Create)?
-func Create(modemId string, mNotificationInd *mms.MNotificationInd) error {
+// Creates an .db file in storage with message state stored.
+// Returns an empty state and not nil error if message not stored successfully.
+func Create(modemId string, mNotificationInd *mms.MNotificationInd) (MMSState, error) {
 	state := MMSState{
 		Id:               mNotificationInd.TransactionId,
 		State:            NOTIFICATION,
@@ -51,11 +53,17 @@ func Create(modemId string, mNotificationInd *mms.MNotificationInd) error {
 	}
 	storePath, err := xdg.Data.Ensure(path.Join(SUBPATH, mNotificationInd.UUID+".db"))
 	if err != nil {
-		return err
+		return MMSState{}, err
 	}
-	return writeState(state, storePath)
+	if err := writeState(state, storePath); err != nil {
+		return MMSState{}, err
+	}
+	return state, nil
 }
 
+// Removes message with UUID from storage.
+// Returns a not nil error if any/more of the stored files are failed to remove.
+// The returned error (if not nil) is always an Multierror type.
 func Destroy(uuid string) (err error) {
 	errs := Multierror{}
 
@@ -88,6 +96,9 @@ func Destroy(uuid string) (err error) {
 	return errs.Result()
 }
 
+// Creates an empty .m-notifyresp.ind file in storage for message with provided uuid.
+// Returns a nil file descriptor and a non nil error if no message stored uuid or file creation failed.
+// On success returns an open file descriptor and nil error.
 func CreateResponseFile(uuid string) (*os.File, error) {
 	_, err := GetMMSState(uuid)
 	if err != nil {
@@ -101,114 +112,163 @@ func CreateResponseFile(uuid string) (*os.File, error) {
 	return os.Create(filePath)
 }
 
-func UpdateMNotificationInd(mNotificationInd *mms.MNotificationInd) error {
+// Updates MNotificationInd field in stored MMSState.
+// Returns the stored message state and a nil error on success.
+// If message not in storage or other fail it returns empty or previous state and a non nil error.
+func UpdateMNotificationInd(mNotificationInd *mms.MNotificationInd) (MMSState, error) {
 	log.Printf("jezek - UpdateMNotificationInd(%v)", mNotificationInd)
-	state, err := GetMMSState(mNotificationInd.UUID)
+	oldState, err := GetMMSState(mNotificationInd.UUID)
 	if err != nil {
-		return fmt.Errorf("error retrieving message state: %w", err)
+		return oldState, fmt.Errorf("error retrieving message state: %w", err)
 	}
 
-	state.MNotificationInd = mNotificationInd
+	newState := oldState
+	newState.MNotificationInd = mNotificationInd
 
 	storePath, err := xdg.Data.Find(path.Join(SUBPATH, mNotificationInd.UUID+".db"))
 	if err != nil {
-		return err
+		return oldState, err
 	}
-	return writeState(state, storePath)
+	if err := writeState(newState, storePath); err != nil {
+		return oldState, err
+	}
+
+	return newState, nil
 }
 
-func UpdateDownloaded(uuid, filePath string) error {
+// Copies the provided file to storage into an .mms file and updates the stored message (identified by uuid) state to DOWNLOADED.
+// Returns the stored message state and a nil error on success.
+// If message not in storage or other error occurs, it returns empty or previous state and a non nil error.
+// Note: Can return a forced debug error if MNotificationInd has the right ContentLocation parameters.
+func UpdateDownloaded(uuid, filePath string) (MMSState, error) {
 	log.Printf("jezek - UpdateDownloaded(%s, %s)", uuid, filePath)
-	state, err := GetMMSState(uuid)
+	oldState, err := GetMMSState(uuid)
 	if err != nil {
-		return fmt.Errorf("error retrieving message state: %w", err)
+		return oldState, fmt.Errorf("error retrieving message state: %w", err)
 	}
 
 	// Debug error forcing if wanted.
-	if err := state.MNotificationInd.PopDebugError(mms.DebugErrorDownloadStorage); err != nil {
+	if err := oldState.MNotificationInd.PopDebugError(mms.DebugErrorDownloadStorage); err != nil {
 		log.Printf("Forcing debug error: %#v", err)
-		UpdateMNotificationInd(state.MNotificationInd)
-		return err
+		UpdateMNotificationInd(oldState.MNotificationInd)
+		return oldState, err
 	}
 
 	// Move downloaded file (filePath) to xdg data storage.
 	mmsPath, err := xdg.Data.Ensure(path.Join(SUBPATH, uuid+".mms"))
 	if err != nil {
-		return err
+		return oldState, err
 	}
 	if err := os.Rename(filePath, mmsPath); err != nil {
-		//TODO delete file
-		return err
+		if err := os.Remove(mmsPath); err != nil {
+			log.Printf("Error removing file \"%s\": %s", mmsPath, err)
+		}
+		return oldState, err
 	}
 
-	state.State = DOWNLOADED
+	newState := oldState
+	newState.State = DOWNLOADED
 
 	storePath, err := xdg.Data.Find(path.Join(SUBPATH, uuid+".db"))
 	if err != nil {
-		return err
+		return oldState, err
 	}
-	return writeState(state, storePath)
+	if err := writeState(newState, storePath); err != nil {
+		return oldState, err
+	}
+
+	return newState, nil
 }
 
-func UpdateReceived(uuid string) error {
-	state, err := GetMMSState(uuid)
+// Updates the stored message (identified by uuid) state to RECEIVED.
+// Returns the stored message state and a nil error on success.
+// If message not in storage or other error occurs, it returns empty or previous state and a non nil error.
+// Note: Can return a forced debug error if MNotificationInd has the right ContentLocation parameters.
+func UpdateReceived(uuid string) (MMSState, error) {
+	oldState, err := GetMMSState(uuid)
 	if err != nil {
-		return fmt.Errorf("error retrieving message state: %w", err)
+		return oldState, fmt.Errorf("error retrieving message state: %w", err)
 	}
 
 	// Debug error forcing if wanted.
-	if err := state.MNotificationInd.PopDebugError(mms.DebugErrorReceiveStorage); err != nil {
+	if err := oldState.MNotificationInd.PopDebugError(mms.DebugErrorReceiveStorage); err != nil {
 		log.Printf("Forcing debug error: %#v", err)
-		UpdateMNotificationInd(state.MNotificationInd)
-		return err
+		UpdateMNotificationInd(oldState.MNotificationInd)
+		return oldState, err
 	}
 
-	state.State = RECEIVED
+	newState := oldState
+	newState.State = RECEIVED
 
 	storePath, err := xdg.Data.Find(path.Join(SUBPATH, uuid+".db"))
 	if err != nil {
-		return err
+		return oldState, err
 	}
-	return writeState(state, storePath)
+	if err := writeState(newState, storePath); err != nil {
+		return oldState, err
+	}
+
+	return newState, nil
 }
 
-func UpdateResponded(uuid string) error {
-	state, err := GetMMSState(uuid)
+// Updates the stored message (identified by uuid) state to RESPONDED.
+// Returns the stored message state and a nil error on success.
+// If message not in storage or other error occurs, it returns empty or previous state and a non nil error.
+// Note: Can return a forced debug error if MNotificationInd has the right ContentLocation parameters.
+func UpdateResponded(uuid string) (MMSState, error) {
+	oldState, err := GetMMSState(uuid)
 	if err != nil {
-		return fmt.Errorf("error retrieving message state: %w", err)
+		return oldState, fmt.Errorf("error retrieving message state: %w", err)
 	}
 
 	// Debug error forcing if wanted.
-	if err := state.MNotificationInd.PopDebugError(mms.DebugErrorRespondStorage); err != nil {
+	if err := oldState.MNotificationInd.PopDebugError(mms.DebugErrorRespondStorage); err != nil {
 		log.Printf("Forcing debug error: %#v", err)
-		UpdateMNotificationInd(state.MNotificationInd)
-		return err
+		UpdateMNotificationInd(oldState.MNotificationInd)
+		return oldState, err
 	}
 
-	state.State = RESPONDED
+	newState := oldState
+	newState.State = RESPONDED
 
 	storePath, err := xdg.Data.Find(path.Join(SUBPATH, uuid+".db"))
 	if err != nil {
-		return err
+		return oldState, err
 	}
-	return writeState(state, storePath)
+	if err := writeState(newState, storePath); err != nil {
+		return oldState, err
+	}
+
+	return newState, nil
 }
 
-func SetTelepathyErrorNotified(uuid string) error {
-	state, err := GetMMSState(uuid)
+// Updates the stored message (identified by uuid) TelepathyErrorNotified to true.
+// Returns the stored message state and a nil error on success.
+// If message not in storage or other error occurs, it returns empty or previous state and a non nil error.
+func SetTelepathyErrorNotified(uuid string) (MMSState, error) {
+	oldState, err := GetMMSState(uuid)
 	if err != nil {
-		return fmt.Errorf("error retrieving message state: %w", err)
+		return oldState, fmt.Errorf("error retrieving message state: %w", err)
 	}
 
-	state.TelepathyErrorNotified = true
+	newState := oldState
+	newState.TelepathyErrorNotified = true
 
 	storePath, err := xdg.Data.Find(path.Join(SUBPATH, uuid+".db"))
 	if err != nil {
-		return err
+		return oldState, err
 	}
-	return writeState(state, storePath)
+	if err := writeState(newState, storePath); err != nil {
+		return oldState, err
+	}
+
+	return newState, nil
 }
 
+// Saves an message with DRAFT state to storage and creates an empty .m-send.req file in storage for message with provided uuid.
+// Returns a nil file descriptor and a non nil error if message store error or send file creation failed.
+// On success returns an open file descriptor to the send file and nil error.
+// Note: If there is an message stored under uuid, the message is rewritten.
 func CreateSendFile(uuid string) (*os.File, error) {
 	state := MMSState{
 		State: DRAFT,
@@ -228,16 +288,18 @@ func CreateSendFile(uuid string) (*os.File, error) {
 	return os.Create(filePath)
 }
 
+// Returns .mms file path to message identified by uuid.
+// If file doesn't exists, a non nil error is returned.
 func GetMMS(uuid string) (string, error) {
 	return xdg.Data.Find(path.Join(SUBPATH, uuid+".mms"))
 }
 
-// Gets MMSState from strorage stored under uuid.
+// Gets message state from storage stored under uuid.
+// Returns empty state and a non nil error if message not stored or load failed.
 func GetMMSState(uuid string) (MMSState, error) {
-	mmsState := MMSState{}
 	storePath, err := xdg.Data.Find(path.Join(SUBPATH, uuid+".db"))
 	if err != nil {
-		return mmsState, err
+		return MMSState{}, err
 	}
 
 	f, err := os.Open(storePath)
@@ -246,13 +308,17 @@ func GetMMSState(uuid string) (MMSState, error) {
 	}
 	defer f.Close()
 
+	mmsState := MMSState{}
 	jsonReader := json.NewDecoder(f)
 	if err := jsonReader.Decode(&mmsState); err != nil {
-		return mmsState, err
+		return MMSState{}, err
 	}
 
 	return mmsState, nil
 }
+
+// Returns stored MNotificationInd for message identified by uuid.
+// If message not in storage or message state is not NOTIFICATION, nil is returned.
 func GetMNotificationInd(uuid string) *mms.MNotificationInd {
 	mmsState, err := GetMMSState(uuid)
 	if err != nil {
@@ -288,7 +354,7 @@ func writeState(state MMSState, storePath string) error {
 	return nil
 }
 
-// Returns list of UUID strings stored in storage, sorted by creation date.
+// Returns list of UUID strings stored in storage, sorted by creation date ascending.
 // Note: If creation date is not supported by filesystem, UUIDs are sorted by modificatin date.
 func GetStoredUUIDs() []string {
 	// Search for all *.db files in xdg data directory in SUBPATH subfolder and extract UUID from filenames.

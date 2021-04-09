@@ -274,7 +274,7 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 		return
 	} else {
 		// Save message to storage and update state to DOWNLOADED.
-		if err := storage.UpdateDownloaded(mNotificationInd.UUID, filePath); err != nil {
+		if _, err := storage.UpdateDownloaded(mNotificationInd.UUID, filePath); err != nil {
 			log.Println("Error updating storage (UpdateDownloaded): ", err)
 			mediator.handleMessageDownloadError(mNotificationInd, downloadError{standartizedError{err, ErrorStorage}})
 			return
@@ -289,7 +289,7 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 		return
 	}
 	// Update message state in storage to RECEIVED.
-	if err := storage.UpdateReceived(mRetrieveConf.UUID); err != nil {
+	if _, err := storage.UpdateReceived(mRetrieveConf.UUID); err != nil {
 		log.Println("Error updating storage (UpdateRetrieved): ", err)
 		return
 	}
@@ -317,7 +317,7 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 	// MMS center is notified, that the message was downloaded, we can remove the TransactionId from unrespondedTransactions.
 	delete(mediator.unrespondedTransactions, mNotificationInd.TransactionId)
 	// Update message state in storage to RESPONDED.
-	if err := storage.UpdateResponded(mNotifyRespInd.UUID); err != nil {
+	if _, err := storage.UpdateResponded(mNotifyRespInd.UUID); err != nil {
 		log.Println("Error updating storage (UpdateResponded): ", err)
 		return
 	}
@@ -366,7 +366,7 @@ func (mediator *Mediator) handleMessageDownloadError(mNotificationInd *mms.MNoti
 		return
 	}
 
-	if err := storage.SetTelepathyErrorNotified(mNotificationInd.UUID); err != nil {
+	if _, err := storage.SetTelepathyErrorNotified(mNotificationInd.UUID); err != nil {
 		log.Printf("Error updating storage for message %s that telepahy was notified", mNotificationInd.UUID)
 		if mNotificationInd.TransactionId != "" && mNotificationInd.RedownloadOfUUID == "" && inUnresponded && unrespondedUUID != mNotificationInd.UUID {
 			// This is not after redownload and not after first download fail (there was another mNotificationInd with the same transaction id before).
@@ -783,16 +783,11 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 				log.Printf("Handling MRetrieveConf error: %v", err)
 			} else {
 				// Update message state in storage to RECEIVED.
-				if err := storage.UpdateReceived(mRetrieveConf.UUID); err != nil {
+				if mmsState, err = storage.UpdateReceived(mRetrieveConf.UUID); err != nil {
 					log.Println("Error updating storage (UpdateRetrieved): ", err)
 				} else {
-					// Update current mmsState variable.
-					if mmsState, err = storage.GetMMSState(mRetrieveConf.UUID); err != nil {
-						log.Printf("Error checking state of message stored under UUID: %s : %v", uuid, err)
-					} else {
-						// Message was forwarded to telepathy and state in storage was updated.
-						forwarded = true
-					}
+					// Message was forwarded to telepathy and state in storage was updated.
+					forwarded = true
 				}
 			}
 
@@ -803,6 +798,11 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 					log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
 				}
 				break
+			}
+
+			// Update current mmsState variable.
+			if mmsState, err = storage.GetMMSState(mRetrieveConf.UUID); err != nil {
+				log.Printf("Error checking state of message stored under UUID: %s : %v", uuid, err)
 			}
 			fallthrough
 
@@ -816,7 +816,7 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 				// Remove from unrespondedTransactions.
 				delete(mediator.unrespondedTransactions, mmsState.MNotificationInd.TransactionId)
 				// Store that message was responded.
-				if err := storage.UpdateResponded(mmsState.MNotificationInd.UUID); err != nil {
+				if mmsState, err = storage.UpdateResponded(mmsState.MNotificationInd.UUID); err != nil {
 					log.Println("Error updating storage (UpdateResponded): ", err)
 				}
 			}
