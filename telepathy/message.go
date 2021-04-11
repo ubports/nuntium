@@ -89,6 +89,8 @@ func (msgInterface *MessageInterface) watchDBusMethodCalls() {
 		switch msg.Member {
 		case "Delete":
 			//TODO:issue - on some occasions (nuntium crash & restart) the telephony-service (or smthg. else) sends multiple read/delete requests. This crashes nuntium, when on first delete closing chanel whilst second del. req. is waiting in cannel.
+			//TODO:issue - Here is telepaty-ofono registering MMSD service, try to check if already added and just call getmessages if yes. https://github.com/ubports/telepathy-ofono/blob/040321101e7bfe5950934a1b718875f3fe29c495/connection.cpp#L341
+
 			reply = dbus.NewMethodReturnMessage(msg)
 			//TODO implement store and forward
 			if err := msgInterface.conn.Send(reply); err != nil {

@@ -609,6 +609,44 @@ func (service *MMSService) MessageHandle(uuid string, allowRedownload bool) erro
 	return nil
 }
 
+// Sends handle request message to telepathy.
+func (service *MMSService) MessageHandleRequest(mRetConf *mms.MRetrieveConf, mNotificationInd *mms.MNotificationInd) error {
+	// Sends a message with state "handle" to telepathy.
+
+	if service == nil {
+		return ErrorNilMMSService
+	}
+
+	if mNotificationInd == nil {
+		return ErrorNilMNotificationInd
+	}
+
+	payload := Payload{Path: service.GenMessagePath(mNotificationInd.UUID), Properties: map[string]dbus.Variant{}}
+	log.Printf("jezek - MessageHandleRequest - %v", payload.Path)
+	if mRetConf != nil {
+		if pl, err := service.parseMessage(mRetConf); err == nil {
+			payload = pl
+		} else {
+			log.Printf("jezek - error parsing mRetConf: %v", err)
+		}
+	}
+	payload.Properties["Status"] = dbus.Variant{"handle"}
+	if _, ok := payload.Properties["Date"]; !ok {
+		payload.Properties["Date"] = dbus.Variant{time.Now().Format(time.RFC3339)}
+	}
+	if _, ok := payload.Properties["Sender"]; !ok {
+		sender := mNotificationInd.From
+		if strings.HasSuffix(mNotificationInd.From, PLMN) {
+			payload.Properties["Sender"] = dbus.Variant{sender[:len(sender)-len(PLMN)]}
+		}
+	}
+	if !mNotificationInd.Received.IsZero() {
+		payload.Properties["Received"] = dbus.Variant{mNotificationInd.Received.Unix()}
+	}
+
+	return service.MessageAdded(&payload)
+}
+
 // Returns if mobile data is enabled right now.
 // Under the hood, DBus service property is read, if something fails, error is returned.
 //

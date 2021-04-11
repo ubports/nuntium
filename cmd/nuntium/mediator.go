@@ -745,6 +745,7 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 			return true
 		}
 
+		startTelepathyHandlers := false
 		switch mmsState.State {
 		case storage.NOTIFICATION:
 			// Message download failed, error was probably communicated to telepathy.
@@ -764,11 +765,7 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 					break
 				}
 
-				// Spawn interface listener to listen for redownload requests.
-				log.Printf("jezek - spawning handlers for message")
-				if err := mediator.telepathyService.MessageHandle(uuid, true); err != nil {
-					log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
-				}
+				startTelepathyHandlers = true
 			}
 
 		case storage.DOWNLOADED:
@@ -791,11 +788,7 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 			}
 
 			if !forwardedUpdated {
-				// Spawn interface listener to listen for read/delete requests.
-				log.Printf("jezek - spawning handlers for message")
-				if err := mediator.telepathyService.MessageHandle(uuid, false); err != nil {
-					log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
-				}
+				startTelepathyHandlers = true
 				break
 			}
 
@@ -824,11 +817,7 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 			}
 
 			if !respondedUpdated {
-				// Spawn interface listener to listen for read/delete requests.
-				log.Printf("jezek - spawning handlers for message")
-				if err := mediator.telepathyService.MessageHandle(uuid, false); err != nil {
-					log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
-				}
+				startTelepathyHandlers = true
 				break
 			}
 
@@ -868,18 +857,27 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 				}
 			}
 
-			// Spawn interface listener to listen for read/delete requests.
-			log.Printf("jezek - spawning handlers for message")
-			if err := mediator.telepathyService.MessageHandle(uuid, false); err != nil {
-				log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
-			}
+			startTelepathyHandlers = true
 
 		default:
 			log.Printf("Unknown MMSState.State: %s", mmsState.State)
 			break
 		}
 
-		//TODO:jezek - Telepathy service should spawn dbus listeners for MarkRead/Delete requests for unread messages os startup.
+		if startTelepathyHandlers {
+			// Spawn interface listener to listen for redownload requests.
+			log.Printf("jezek - spawning handlers for message")
+			if err := mediator.telepathyService.MessageHandle(uuid, true); err != nil {
+				log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
+				continue
+			}
+
+			log.Printf("jezek - sending telepathy handle request for message")
+			mRetrieveConf, _ := mediator.getMRetrieveConf(uuid)
+			if err := mediator.telepathyService.MessageHandleRequest(mRetrieveConf, mmsState.MNotificationInd); err != nil {
+				log.Printf("Error requesting telepathy message %s handlers of message with state %v", uuid, mmsState.State)
+			}
+		}
 	}
 
 }
