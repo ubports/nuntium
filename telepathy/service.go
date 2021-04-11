@@ -365,14 +365,8 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 	// https://github.com/TelepathyIM/telepathy-qt/blob/7cf3e35fdf6cf7ea7d8fc301eae04fe43930b17f/TelepathyQt/base-channel.cpp#L460
 	// https://github.com/ubports/history-service/blob/8285a4a3174b84a04f00d600fff99905aec6c4e2/daemon/historydaemon.cpp#L1023
 	params["Status"] = dbus.Variant{"received"}
-
-	date := time.Now().Format(time.RFC3339)
-	params["Date"] = dbus.Variant{date}
-
-	sender := mNotificationInd.From
-	if strings.HasSuffix(mNotificationInd.From, PLMN) {
-		params["Sender"] = dbus.Variant{sender[:len(sender)-len(PLMN)]}
-	}
+	params["Date"] = dbus.Variant{time.Now().Format(time.RFC3339)}
+	params["Sender"] = dbus.Variant{strings.TrimSuffix(mNotificationInd.From, PLMN)}
 
 	errorCode := "x-ubports-nuntium-mms-error-unknown"
 	if eci, ok := downloadError.(interface{ Code() string }); ok {
@@ -495,14 +489,10 @@ func (service *MMSService) parseMessage(mRetConf *mms.MRetrieveConf) (Payload, e
 	params := make(map[string]dbus.Variant)
 	params["Status"] = dbus.Variant{"received"}
 	//TODO retrieve date correctly
-	date := parseDate(mRetConf.Date)
-	params["Date"] = dbus.Variant{date}
+	params["Date"] = dbus.Variant{parseDate(mRetConf.Date)}
+	params["Sender"] = dbus.Variant{strings.TrimSuffix(mRetConf.From, PLMN)}
 	if mRetConf.Subject != "" {
 		params["Subject"] = dbus.Variant{mRetConf.Subject}
-	}
-	sender := mRetConf.From
-	if strings.HasSuffix(mRetConf.From, PLMN) {
-		params["Sender"] = dbus.Variant{sender[:len(sender)-len(PLMN)]}
 	}
 
 	params["Recipients"] = dbus.Variant{parseRecipients(strings.Join(mRetConf.To, ","))}
@@ -631,18 +621,15 @@ func (service *MMSService) MessageHandleRequest(mRetConf *mms.MRetrieveConf, mNo
 		}
 	}
 	payload.Properties["Status"] = dbus.Variant{"handle"}
-	if _, ok := payload.Properties["Date"]; !ok {
-		payload.Properties["Date"] = dbus.Variant{time.Now().Format(time.RFC3339)}
-	}
+	//if _, ok := payload.Properties["Date"]; !ok {
+	//	payload.Properties["Date"] = dbus.Variant{time.Now().Format(time.RFC3339)}
+	//}
 	if _, ok := payload.Properties["Sender"]; !ok {
-		sender := mNotificationInd.From
-		if strings.HasSuffix(mNotificationInd.From, PLMN) {
-			payload.Properties["Sender"] = dbus.Variant{sender[:len(sender)-len(PLMN)]}
-		}
+		payload.Properties["Sender"] = dbus.Variant{strings.TrimSuffix(mNotificationInd.From, PLMN)}
 	}
-	if !mNotificationInd.Received.IsZero() {
-		payload.Properties["Received"] = dbus.Variant{mNotificationInd.Received.Unix()}
-	}
+	//if !mNotificationInd.Received.IsZero() {
+	//	payload.Properties["Received"] = dbus.Variant{mNotificationInd.Received.Unix()}
+	//}
 
 	return service.MessageAdded(&payload)
 }
