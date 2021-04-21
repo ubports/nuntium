@@ -865,17 +865,9 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 		}
 
 		if startTelepathyHandlers {
-			// Spawn interface listener to listen for redownload requests.
-			log.Printf("jezek - spawning handlers for message")
-			if err := mediator.telepathyService.MessageHandle(uuid, true); err != nil {
-				log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
-				continue
-			}
-
-			log.Printf("jezek - sending telepathy handle request for message")
 			mRetrieveConf, _ := mediator.getMRetrieveConf(uuid)
-			if err := mediator.telepathyService.MessageHandleRequest(mRetrieveConf, mmsState.MNotificationInd); err != nil {
-				log.Printf("Error requesting telepathy message %s handlers of message with state %v", uuid, mmsState.State)
+			if err := mediator.telepathyService.InitializationMessageAdded(mRetrieveConf, mmsState.MNotificationInd); err != nil {
+				log.Printf("Error adding initialization message for message %s: %v", uuid, err)
 			}
 		}
 	}

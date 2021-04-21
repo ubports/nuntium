@@ -459,6 +459,51 @@ func (service *MMSService) IncomingMessageAdded(mRetConf *mms.MRetrieveConf, mNo
 	return service.MessageAdded(&payload)
 }
 
+func (service *MMSService) InitializationMessageAdded(mRetConf *mms.MRetrieveConf, mNotificationInd *mms.MNotificationInd) error {
+	log.Printf("jezek - InitializationMessageAdded(%v, %v)", mRetConf, mNotificationInd)
+	if service == nil {
+		return ErrorNilMMSService
+	}
+
+	if mNotificationInd == nil {
+		return ErrorNilMNotificationInd
+	}
+
+	path := service.GenMessagePath(mNotificationInd.UUID)
+	if _, ok := service.messageHandlers[path]; ok {
+		return fmt.Errorf("message is already handled")
+	}
+
+	// Initialization message only needs these properties to spawn proper handles in telepathy.
+	payload := Payload{Path: path, Properties: map[string]dbus.Variant{
+		"Status":  dbus.Variant{"received"},
+		"Sender":  dbus.Variant{strings.TrimSuffix(mNotificationInd.From, PLMN)},
+		"Rescued": dbus.Variant{true},
+		"Silent":  dbus.Variant{true},
+	}}
+
+	// Extract "Sender" and "Recipients" property from mRetConf, if any.
+	if mRetConf != nil {
+		if pl, err := service.parseMessage(mRetConf); err == nil {
+			if _, ok := pl.Properties["Sender"]; !ok {
+				payload.Properties["Sender"] = pl.Properties["Sender"]
+			} else {
+				log.Printf("jezek - No \"Sender\" property in mRetConf for initialization message %s", path)
+			}
+			if _, ok := pl.Properties["Recipients"]; !ok {
+				payload.Properties["Recipients"] = pl.Properties["Recipients"]
+			} else {
+				log.Printf("jezek - No \"Recipients\" property in mRetConf for initialization message %s", path)
+			}
+		} else {
+			log.Printf("Error parsing mRetConf for initialization message %s: %v", path, err)
+		}
+	}
+
+	service.messageHandlers[path] = NewMessageInterface(service.conn, path, service.msgDeleteChan, service.msgRedownloadChan)
+	return service.MessageAdded(&payload)
+}
+
 //MessageAdded emits a MessageAdded with the path to the added message which
 //is taken as a parameter
 func (service *MMSService) MessageAdded(msgPayload *Payload) error {
@@ -576,62 +621,6 @@ func (service *MMSService) GenMessagePath(uuid string) dbus.ObjectPath {
 	}
 
 	return dbus.ObjectPath(MMS_DBUS_PATH + "/" + service.identity + "/" + uuid)
-}
-
-// Creates handlers for message.
-// If already handled, returns error.
-func (service *MMSService) MessageHandle(uuid string, allowRedownload bool) error {
-	if service == nil {
-		return ErrorNilMMSService
-	}
-
-	path := service.GenMessagePath(uuid)
-	if _, ok := service.messageHandlers[path]; ok {
-		return fmt.Errorf("message is already handled")
-	}
-	log.Printf("jezek - MessageHandle(%v)", uuid)
-
-	redownloadChan := service.msgRedownloadChan
-	if !allowRedownload {
-		redownloadChan = nil
-	}
-	service.messageHandlers[path] = NewMessageInterface(service.conn, path, service.msgDeleteChan, redownloadChan)
-	return nil
-}
-
-// Sends handle request message to telepathy.
-func (service *MMSService) MessageHandleRequest(mRetConf *mms.MRetrieveConf, mNotificationInd *mms.MNotificationInd) error {
-	// Sends a message with state "handle" to telepathy.
-
-	if service == nil {
-		return ErrorNilMMSService
-	}
-
-	if mNotificationInd == nil {
-		return ErrorNilMNotificationInd
-	}
-
-	payload := Payload{Path: service.GenMessagePath(mNotificationInd.UUID), Properties: map[string]dbus.Variant{}}
-	log.Printf("jezek - MessageHandleRequest - %v", payload.Path)
-	if mRetConf != nil {
-		if pl, err := service.parseMessage(mRetConf); err == nil {
-			payload = pl
-		} else {
-			log.Printf("jezek - error parsing mRetConf: %v", err)
-		}
-	}
-	payload.Properties["Status"] = dbus.Variant{"handle"}
-	//if _, ok := payload.Properties["Date"]; !ok {
-	//	payload.Properties["Date"] = dbus.Variant{time.Now().Format(time.RFC3339)}
-	//}
-	if _, ok := payload.Properties["Sender"]; !ok {
-		payload.Properties["Sender"] = dbus.Variant{strings.TrimSuffix(mNotificationInd.From, PLMN)}
-	}
-	//if !mNotificationInd.Received.IsZero() {
-	//	payload.Properties["Received"] = dbus.Variant{mNotificationInd.Received.Unix()}
-	//}
-
-	return service.MessageAdded(&payload)
 }
 
 // Returns if mobile data is enabled right now.
