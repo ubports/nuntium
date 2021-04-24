@@ -42,7 +42,6 @@ var ErrorNilHistoryService = fmt.Errorf("nil HistoryService pointer")
 // Returns first message identified by eventId from HistoryService.
 func (service *HistoryService) GetMessage(eventId string) (Message, error) {
 	log.Printf("jezek - GetMessage(%s) - start", eventId)
-	defer log.Printf("jezek - GetMessage() - end")
 	if service == nil {
 		return nil, ErrorNilHistoryService
 	}
@@ -60,19 +59,15 @@ func (service *HistoryService) GetMessage(eventId string) (Message, error) {
 	call.AppendArgs(eventType, sort, filter)
 	reply, err := service.conn.SendWithReply(call)
 	if err != nil {
-		log.Printf("QueryEvents send error: %s - %#v", err.Error(), err)
-		return nil, err
+		return nil, fmt.Errorf("QueryEvents send error: %w", err)
 	}
 	if reply.Type == dbus.TypeError {
-		log.Printf("QueryEvents reply is error: %v", reply.AsError())
-		return nil, reply.AsError()
+		return nil, fmt.Errorf("QueryEvents reply error: %v", reply.AsError())
 	}
-	log.Printf("QueryEvents reply: %#v", reply.AllArgs())
 	eventView := ""
 	if err := reply.Args(&eventView); err != nil {
 		return nil, err
 	}
-	log.Printf("Event View: %s", eventView)
 
 	// Destroy event view at end.
 	// dbus-send --session --print-reply --dest=com.canonical.HistoryService /com/canonical/HistoryService/eventview2413609620210130164828892 com.canonical.HistoryService.EventView.Destroy
@@ -80,28 +75,24 @@ func (service *HistoryService) GetMessage(eventId string) (Message, error) {
 		destroyCall := dbus.NewMethodCallMessage("com.canonical.HistoryService", dbus.ObjectPath(eventView), "com.canonical.HistoryService.EventView", "Destroy")
 		destroyReply, err := service.conn.SendWithReply(destroyCall)
 		if err != nil {
-			log.Printf("Destroy send error: %s - %#v", err.Error(), err)
+			log.Printf("HistoryService.GetMessage: Destroy send error: %v", err)
 			return
 		}
 		if destroyReply.Type == dbus.TypeError {
-			log.Printf("Destroy reply is error: %v", destroyReply.AsError())
+			log.Printf("HistoryService.GetMessage: Destroy reply error: %v", destroyReply.AsError())
 			return
 		}
-		log.Printf("Destroy reply: %#v", destroyReply.AllArgs())
 	}()
 
 	// Check if query is valid.
 	validCall := dbus.NewMethodCallMessage("com.canonical.HistoryService", dbus.ObjectPath(eventView), "com.canonical.HistoryService.EventView", "IsValid")
 	validReply, err := service.conn.SendWithReply(validCall)
 	if err != nil {
-		log.Printf("Is valid send error: %s - %#v", err.Error(), err)
-		return nil, err
+		return nil, fmt.Errorf("Request validation send error: %w", err)
 	}
 	if validReply.Type == dbus.TypeError {
-		log.Printf("Is valid reply is error: %v", validReply.AsError())
-		return nil, validReply.AsError()
+		return nil, fmt.Errorf("Request validation reply error: %w", validReply.AsError())
 	}
-	log.Printf("Is valid reply: %#v", validReply.AllArgs())
 	isValid := false
 	if err := validReply.Args(&isValid); err != nil {
 		return nil, err
@@ -109,25 +100,20 @@ func (service *HistoryService) GetMessage(eventId string) (Message, error) {
 	if !isValid {
 		return nil, fmt.Errorf("QueryEvents got invalid query")
 	}
-	log.Printf("Is valid: %v", isValid)
 
 	// Get message.
 	nextCall := dbus.NewMethodCallMessage("com.canonical.HistoryService", dbus.ObjectPath(eventView), "com.canonical.HistoryService.EventView", "NextPage")
 	nextReply, err := service.conn.SendWithReply(nextCall)
 	if err != nil {
-		log.Printf("Next page reply error: %s - %#v", err.Error(), err)
-		return nil, err
+		return nil, fmt.Errorf("Next page send error: %w", err)
 	}
 	if nextReply.Type == dbus.TypeError {
-		log.Printf("Next page reply is error: %v", nextReply.AsError())
-		return nil, nextReply.AsError()
+		return nil, fmt.Errorf("Next page reply error: %w", nextReply.AsError())
 	}
-	log.Printf("Next page reply: %#v", nextReply.AllArgs())
 	msgs := []map[string]dbus.Variant(nil)
 	if err := nextReply.Args(&msgs); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Next page reply arguments error: %w", err)
 	}
-	log.Printf("Messages: %#v", msgs)
 	if len(msgs) > 1 {
 		return nil, fmt.Errorf("Too many messages found: %d", len(msgs))
 	}
