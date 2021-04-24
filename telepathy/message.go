@@ -45,7 +45,6 @@ type MessageInterface struct {
 	status         string
 }
 
-//TODO:version - Change so we don't need to bump major version.
 func NewMessageInterface(conn *dbus.Connection, objectPath dbus.ObjectPath, deleteChan chan dbus.ObjectPath, redownloadChan chan dbus.ObjectPath) *MessageInterface {
 	msgInterface := MessageInterface{
 		conn:           conn,
@@ -71,7 +70,6 @@ func (msgInterface *MessageInterface) watchDBusMethodCalls() {
 	defer log.Printf("jezek - msgInterface %v: watchDBusMethodCalls(): end", msgInterface.objectPath)
 	var reply *dbus.Message
 
-	//TODO:issue - Expire interface listeners if failed download error and message expires at MMS provider.
 	for msg := range msgInterface.msgChan {
 		log.Printf("jezek - msgInterface %v: Received message: %v", msgInterface.objectPath, msg)
 		if msg.Interface != MMS_MESSAGE_DBUS_IFACE {
@@ -88,9 +86,6 @@ func (msgInterface *MessageInterface) watchDBusMethodCalls() {
 		}
 		switch msg.Member {
 		case "Delete":
-			//TODO:issue - on some occasions (nuntium crash & restart) the telephony-service (or smthg. else) sends multiple read/delete requests. This crashes nuntium, when on first delete closing chanel whilst second del. req. is waiting in cannel.
-			//TODO:issue - Here is telepaty-ofono registering MMSD service, try to check if already added and just call getmessages if yes. https://github.com/ubports/telepathy-ofono/blob/040321101e7bfe5950934a1b718875f3fe29c495/connection.cpp#L341
-
 			reply = dbus.NewMethodReturnMessage(msg)
 			//TODO implement store and forward
 			if err := msgInterface.conn.Send(reply); err != nil {

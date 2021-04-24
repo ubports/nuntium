@@ -40,7 +40,6 @@ import (
 
 const SUBPATH = "nuntium/store"
 
-//TODO:version - change back to Create(uuid, contentLocation string) to increase only minor version instead of major (add ModemId, MNotificationInd after every Create)?
 // Creates an .db file in storage with message state stored.
 // Returns an empty state and not nil error if message not stored successfully.
 func Create(modemId string, mNotificationInd *mms.MNotificationInd) (MMSState, error) {

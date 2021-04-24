@@ -321,7 +321,6 @@ func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotifica
 		log.Println("Error updating storage (UpdateResponded): ", err)
 		return
 	}
-	//TODO:jezek - Add storage states to docs graph file docs/assets/receiving_success_deferral_disabled.msc
 }
 
 // Communicates the download error "err" of mNotificationInd to telepathy service.
@@ -524,8 +523,6 @@ func (mediator *Mediator) handleOutgoingMessage(msg *telepathy.OutgoingMessage) 
 
 func (mediator *Mediator) handleMSendReq(mSendReq *mms.MSendReq) {
 	log.Print("Encoding M-Send.Req")
-	//TODO:issue - storage is created, but it seems it is not deleted anywhere. Ensure deletion.
-	//TODO:issue - on initialize, handle undeleted send messages (also add modem id and on init delete old stored messages).
 	f, err := storage.CreateSendFile(mSendReq.UUID)
 	if err != nil {
 		log.Print("Unable to create m-send.req file for ", mSendReq.UUID)
@@ -886,7 +883,6 @@ func (mediator *Mediator) respondMessage(mmsState storage.MMSState) error {
 	mediator.contextLock.Lock()
 	defer mediator.contextLock.Unlock()
 
-	//TODO:issue - check if data enabled and if not, return error.
 	mRetrieveConf, err := mediator.getMRetrieveConf(mmsState.MNotificationInd.UUID)
 	if err != nil {
 		return err
