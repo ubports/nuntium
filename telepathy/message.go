@@ -66,12 +66,9 @@ func (msgInterface *MessageInterface) Close() {
 }
 
 func (msgInterface *MessageInterface) watchDBusMethodCalls() {
-	log.Printf("jezek - msgInterface %v: watchDBusMethodCalls(): start", msgInterface.objectPath)
-	defer log.Printf("jezek - msgInterface %v: watchDBusMethodCalls(): end", msgInterface.objectPath)
 	var reply *dbus.Message
 
 	for msg := range msgInterface.msgChan {
-		log.Printf("jezek - msgInterface %v: Received message: %v", msgInterface.objectPath, msg)
 		if msg.Interface != MMS_MESSAGE_DBUS_IFACE {
 			log.Println("Received unknown interface call on", msg.Interface, msg.Member)
 			reply = dbus.NewErrorMessage(

@@ -41,7 +41,6 @@ var ErrorNilHistoryService = fmt.Errorf("nil HistoryService pointer")
 
 // Returns first message identified by eventId from HistoryService.
 func (service *HistoryService) GetMessage(eventId string) (Message, error) {
-	log.Printf("jezek - GetMessage(%s) - start", eventId)
 	if service == nil {
 		return nil, ErrorNilHistoryService
 	}

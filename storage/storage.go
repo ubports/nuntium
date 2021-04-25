@@ -115,7 +115,6 @@ func CreateResponseFile(uuid string) (*os.File, error) {
 // Returns the stored message state and a nil error on success.
 // If message not in storage or other fail it returns empty or previous state and a non nil error.
 func UpdateMNotificationInd(mNotificationInd *mms.MNotificationInd) (MMSState, error) {
-	log.Printf("jezek - UpdateMNotificationInd(%v)", mNotificationInd)
 	oldState, err := GetMMSState(mNotificationInd.UUID)
 	if err != nil {
 		return oldState, fmt.Errorf("error retrieving message state: %w", err)
@@ -140,7 +139,6 @@ func UpdateMNotificationInd(mNotificationInd *mms.MNotificationInd) (MMSState, e
 // If message not in storage or other error occurs, it returns empty or previous state and a non nil error.
 // Note: Can return a forced debug error if MNotificationInd has the right ContentLocation parameters.
 func UpdateDownloaded(uuid, filePath string) (MMSState, error) {
-	log.Printf("jezek - UpdateDownloaded(%s, %s)", uuid, filePath)
 	oldState, err := GetMMSState(uuid)
 	if err != nil {
 		return oldState, fmt.Errorf("error retrieving message state: %w", err)
