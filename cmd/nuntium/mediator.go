@@ -38,15 +38,15 @@ import (
 )
 
 type Mediator struct {
-	modem               *ofono.Modem
-	telepathyService    *telepathy.MMSService
-	NewMNotificationInd chan *mms.MNotificationInd
-	NewMSendReq         chan *mms.MSendReq
-	NewMSendReqFile     chan struct{ filePath, uuid string }
-	outMessage          chan *telepathy.OutgoingMessage
-	terminate           chan bool
-	contextLock         sync.Mutex
-	undownloaded        map[string]string // (transactionId: UUID) Messages with download error, which was successfully communicated to telepathyService.
+	modem                   *ofono.Modem
+	telepathyService        *telepathy.MMSService
+	NewMNotificationInd     chan *mms.MNotificationInd
+	NewMSendReq             chan *mms.MSendReq
+	NewMSendReqFile         chan struct{ filePath, uuid string }
+	outMessage              chan *telepathy.OutgoingMessage
+	terminate               chan bool
+	contextLock             sync.Mutex
+	unrespondedTransactions map[string]string // transactionId: UUID
 }
 
 //TODO these vars need a configuration location managed by system settings or
@@ -64,7 +64,7 @@ func NewMediator(modem *ofono.Modem) *Mediator {
 	mediator.NewMSendReqFile = make(chan struct{ filePath, uuid string })
 	mediator.outMessage = make(chan *telepathy.OutgoingMessage)
 	mediator.terminate = make(chan bool)
-	mediator.undownloaded = make(map[string]string)
+	mediator.unrespondedTransactions = make(map[string]string)
 	return mediator
 }
 
@@ -85,12 +85,12 @@ mediatorLoop:
 				log.Print("MMS is disabled")
 				continue
 			}
-			go mediator.handleMNotificationInd(push, mediator.modem.Identity())
+			go mediator.handlePushAgentNotification(push, mediator.modem.Identity())
 		case mNotificationInd := <-mediator.NewMNotificationInd:
 			if deferredDownload {
 				go mediator.handleDeferredDownload(mNotificationInd)
 			} else {
-				go mediator.getMRetrieveConf(mNotificationInd)
+				go mediator.handleMNotificationInd(mNotificationInd)
 			}
 		case msg := <-mediator.outMessage:
 			go mediator.handleOutgoingMessage(msg)
@@ -140,7 +140,7 @@ mediatorLoop:
 	log.Print("Ending mediator instance loop for modem")
 }
 
-func (mediator *Mediator) handleMNotificationInd(pushMsg *ofono.PushPDU, modemId string) {
+func (mediator *Mediator) handlePushAgentNotification(pushMsg *ofono.PushPDU, modemId string) {
 	if pushMsg == nil {
 		log.Print("Received nil push")
 		return
@@ -155,10 +155,9 @@ func (mediator *Mediator) handleMNotificationInd(pushMsg *ofono.PushPDU, modemId
 
 	// Set received date to first push occurrence, if this is not a first time this transaction ID occurred.
 	if mNotificationInd.TransactionId != "" {
-		if uuid, ok := mediator.undownloaded[mNotificationInd.TransactionId]; ok {
+		if uuid, ok := mediator.unrespondedTransactions[mNotificationInd.TransactionId]; ok {
 			log.Printf("Pushed transaction ID (%s) is in undownloaded pointing to UUID: %s", mNotificationInd.TransactionId, uuid)
 			if st, err := storage.GetMMSState(uuid); err == nil {
-				log.Printf("jezek - mmsState: %v", st)
 				if st.MNotificationInd != nil {
 					log.Printf("Changing recieved date to the first push date: %v", st.MNotificationInd.Received)
 					mNotificationInd.Received = st.MNotificationInd.Received
@@ -189,42 +188,70 @@ func (mediator *Mediator) handleDeferredDownload(mNotificationInd *mms.MNotifica
 
 }
 
-type standartizedError struct {
-	error
-	code string
+func (mediator *Mediator) activateMMSContext() (mmsContext ofono.OfonoContext, deactivationFunc func(), err error) {
+	preferredContext, _ := mediator.telepathyService.GetPreferredContext()
+	mmsContext, err = mediator.modem.ActivateMMSContext(preferredContext)
+	if err != nil {
+		return
+	}
+	deactivationFunc = func() {
+		if err := mediator.modem.DeactivateMMSContext(mmsContext); err != nil {
+			log.Println("Issues while deactivating context:", err)
+		}
+	}
+	return
 }
 
-func (e standartizedError) Code() string { return e.code }
+func (mediator *Mediator) debugMMSContextError(mNotificationInd *mms.MNotificationInd) error {
+	if err := mNotificationInd.PopDebugError(mms.DebugErrorActivateContext); err != nil {
+		return downloadError{standartizedError{err, ErrorActivateContext}}
+	} else if err := mNotificationInd.PopDebugError(mms.DebugErrorGetProxy); err != nil {
+		return downloadError{standartizedError{err, ErrorGetProxy}}
+	}
 
-type downloadError struct {
-	standartizedError
+	return nil
 }
 
-func (e standartizedError) AllowRedownload() bool { return true }
-
-func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationInd) {
+func (mediator *Mediator) handleMNotificationInd(mNotificationInd *mms.MNotificationInd) {
 	mediator.contextLock.Lock()
 	defer mediator.contextLock.Unlock()
 
+	if mNotificationInd.TransactionId != "" {
+		// Add transaction to unresponded if not already in there or unresponded not in storage.
+		if uuid, ok := mediator.unrespondedTransactions[mNotificationInd.TransactionId]; !ok {
+			mediator.unrespondedTransactions[mNotificationInd.TransactionId] = mNotificationInd.UUID
+		} else {
+			if _, err := storage.GetMMSState(uuid); err != nil {
+				// This is not an error and happens after redownload is triggered by user.
+				// In MMSService if the redownload request is handled, the listeners for old message are closed and the message gets deleted from storage.
+				// If this happens, replace the UUID in unrespondedTransactions for this transaction.
+				mediator.unrespondedTransactions[mNotificationInd.TransactionId] = mNotificationInd.UUID
+			}
+		}
+	}
+
 	var proxy ofono.ProxyInfo
 	var mmsContext ofono.OfonoContext
-	if mNotificationInd.IsLocal() {
+	if mNotificationInd.IsDebug() {
 		log.Print("This is a local test, skipping context activation and proxy settings")
-	} else {
-		//TODO:jezek - encapsulate into deactivateFunc, err := activateMMSContext(...); defer deactivateFunc();
-		var err error
-		preferredContext, _ := mediator.telepathyService.GetPreferredContext()
-		mmsContext, err = mediator.modem.ActivateMMSContext(preferredContext)
-		if err != nil {
-			log.Print("Cannot activate ofono context: ", err)
-			mediator.handleMRetrieveConfDownloadError(mNotificationInd, downloadError{standartizedError{err, "x-ubports-nuntium-mms-error-activate-context"}})
+		if err := mediator.debugMMSContextError(mNotificationInd); err != nil {
+			log.Printf("Forcing debug error: %#v", err)
+			storage.UpdateMNotificationInd(mNotificationInd)
+			mediator.handleMessageDownloadError(mNotificationInd, err)
 			return
 		}
-		defer func() {
-			if err := mediator.modem.DeactivateMMSContext(mmsContext); err != nil {
-				log.Println("Issues while deactivating context:", err)
-			}
-		}()
+	} else {
+		var err error
+		var deactivateMMSContext func()
+		mmsContext, deactivateMMSContext, err = mediator.activateMMSContext()
+		if err != nil {
+			log.Print("Cannot activate ofono context: ", err)
+			mediator.handleMessageDownloadError(mNotificationInd, downloadError{standartizedError{err, ErrorActivateContext}})
+			return
+		}
+		if deactivateMMSContext != nil {
+			defer deactivateMMSContext()
+		}
 
 		if err := mediator.telepathyService.SetPreferredContext(mmsContext.ObjectPath); err != nil {
 			log.Println("Unable to store the preferred context for MMS:", err)
@@ -232,7 +259,7 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 		proxy, err = mmsContext.GetProxy()
 		if err != nil {
 			log.Print("Error retrieving proxy: ", err)
-			mediator.handleMRetrieveConfDownloadError(mNotificationInd, downloadError{standartizedError{err, "x-ubports-nuntium-mms-error-get-proxy"}})
+			mediator.handleMessageDownloadError(mNotificationInd, downloadError{standartizedError{err, ErrorGetProxy}})
 			return
 		}
 	}
@@ -240,86 +267,136 @@ func (mediator *Mediator) getMRetrieveConf(mNotificationInd *mms.MNotificationIn
 	// Download message content.
 	if filePath, err := mNotificationInd.DownloadContent(proxy.Host, int32(proxy.Port)); err != nil {
 		log.Print("Download issues: ", err)
-		mediator.handleMRetrieveConfDownloadError(mNotificationInd, downloadError{standartizedError{err, "x-ubports-nuntium-mms-error-download-content"}})
+		mediator.handleMessageDownloadError(mNotificationInd, downloadError{standartizedError{err, ErrorDownloadContent}})
 		return
 	} else {
-		if err := storage.UpdateDownloaded(mNotificationInd.UUID, filePath); err != nil {
+		// Save message to storage and update state to DOWNLOADED.
+		if _, err := storage.UpdateDownloaded(mNotificationInd.UUID, filePath); err != nil {
 			log.Println("Error updating storage (UpdateDownloaded): ", err)
-			mediator.handleMRetrieveConfDownloadError(mNotificationInd, standartizedError{err, "x-ubports-nuntium-mms-error-storage"})
+			mediator.handleMessageDownloadError(mNotificationInd, downloadError{standartizedError{err, ErrorStorage}})
 			return
 		}
 	}
 
-	//TODO:jezek - split handleMRetrieveConf into getMRetrieveConf & handle...
-	// Forward message to telepathy-ofono service.
-	mRetrieveConf, err := mediator.handleMRetrieveConf(mNotificationInd)
+	// Forward message to telepathy service.
+	mRetrieveConf, err := mediator.getAndHandleMRetrieveConf(mNotificationInd)
 	if err != nil {
 		log.Printf("Handling MRetrieveConf error: %v", err)
-		mediator.handleMRetrieveConfDownloadError(mNotificationInd, standartizedError{err, "x-ubports-nuntium-mms-error-forward"})
+		mediator.handleMessageDownloadError(mNotificationInd, standartizedError{err, ErrorForward})
 		return
 	}
-	if err := storage.UpdateReceived(mRetrieveConf.UUID); err != nil {
+	// Update message state in storage to RECEIVED.
+	if _, err := storage.UpdateReceived(mRetrieveConf.UUID); err != nil {
 		log.Println("Error updating storage (UpdateRetrieved): ", err)
 		return
 	}
 
-	// Notify MMS service about successful download.
+	// Notify MMS center about successful download.
 	mNotifyRespInd := mRetrieveConf.NewMNotifyRespInd(useDeliveryReports)
-	if !mNotificationInd.IsLocal() {
+	if !mNotificationInd.IsDebug() {
 		// TODO deferred case
 		filePath := mediator.handleMNotifyRespInd(mNotifyRespInd)
 		if filePath == "" {
 			return
 		}
-		mediator.sendMNotifyRespInd(filePath, &mmsContext)
+		if err := mediator.sendMNotifyRespInd(filePath, &mmsContext); err != nil {
+			log.Println("Error sending m-notifyresp.ind: ", err)
+			return
+		}
 	} else {
 		log.Print("This is a local test, skipping m-notifyresp.ind")
+		if err := mNotificationInd.PopDebugError(mms.DebugErrorRespondHandle); err != nil {
+			log.Printf("Forcing debug error: %#v", err)
+			storage.UpdateMNotificationInd(mNotificationInd)
+			return
+		}
 	}
-	//TODO:jezek - Add storage states to docs graph file docs/assets/receiving_success_deferral_disabled.msc
-	if err := storage.UpdateResponded(mNotifyRespInd.UUID); err != nil {
+	// MMS center is notified, that the message was downloaded, we can remove the TransactionId from unrespondedTransactions.
+	delete(mediator.unrespondedTransactions, mNotificationInd.TransactionId)
+	// Update message state in storage to RESPONDED.
+	if _, err := storage.UpdateResponded(mNotifyRespInd.UUID); err != nil {
 		log.Println("Error updating storage (UpdateResponded): ", err)
 		return
 	}
-
-	delete(mediator.undownloaded, mNotificationInd.TransactionId)
 }
 
-// Communicates the download error "err" of mNotificationInd to telepathy-ofono service.
+// Communicates the download error "err" of mNotificationInd to telepathy service.
 // Some operators repeatedly push mNotificationInd with the same transaction id, if download not acknowledged by mNotifyRespInd. So we have to make sure, to communicate the download error just once.
-func (mediator *Mediator) handleMRetrieveConfDownloadError(mNotificationInd *mms.MNotificationInd, err error) {
-	_, inUndownloaded := mediator.undownloaded[mNotificationInd.TransactionId]
-	if mNotificationInd.RedownloadOfUUID == "" && inUndownloaded && mNotificationInd.TransactionId != "" {
-		// This download error "err" happened not after redownload and not after first download fail of pushed mNotificationInd with the same transaction id.
-		log.Printf("Download error for MNotificationInd with TransactionId: \"%s\" was already communicated by UUID: \"%s\"", mNotificationInd.TransactionId, mediator.undownloaded[mNotificationInd.TransactionId])
-		// Delete the message from storage.
-		if err := storage.Destroy(mNotificationInd.UUID); err != nil {
-			log.Printf("Error removing message %s from storage: %v", mNotificationInd.UUID, err)
-			return
+func (mediator *Mediator) handleMessageDownloadError(mNotificationInd *mms.MNotificationInd, err error) {
+	unrespondedUUID, inUnresponded := mediator.unrespondedTransactions[mNotificationInd.TransactionId]
+
+	if mNotificationInd.TransactionId != "" && mNotificationInd.RedownloadOfUUID == "" && inUnresponded && unrespondedUUID != mNotificationInd.UUID {
+		// This download error "err" happened not after redownload and not after first download fail (there was another mNotificationInd with the same transaction id before).
+		// See if telepathy was notified (with error or message) before and if yes, don't send this error to telepathy and delete this message from storage.
+		if unrespondedState, err := storage.GetMMSState(unrespondedUUID); err == nil {
+			if unrespondedState.TelepathyErrorNotified || unrespondedState.State == storage.RECEIVED || unrespondedState.State == storage.RESPONDED {
+				log.Printf("Message or handling error for MNotificationInd with TransactionId: \"%s\" was already communicated by UUID: \"%s\"", mNotificationInd.TransactionId, unrespondedUUID)
+				// Delete this message from storage.
+				if err := storage.Destroy(mNotificationInd.UUID); err != nil {
+					log.Printf("Error removing message %s from storage: %v", mNotificationInd.UUID, err)
+					return
+				}
+				log.Printf("Message %s was removed from storage", mNotificationInd.UUID)
+				return
+			}
+		} else {
+			log.Printf("Error getting MMSState of unresponded message %s: %v", unrespondedUUID, err)
 		}
-		log.Printf("Message %s was removed from storage", mNotificationInd.UUID)
-		return
+
 	}
 
-	// Error occurred after redownload requested or this is the first time the same download error for TransactionId occurred (or is empty, but this shouldn't happen)
-	// Send error message to telepathy-ofono service.
+	// Error occurred after redownload requested or this is the first time the same download error for TransactionId occurred or there was a previous message with the same TransactionId, but telepathy was not notified (with error or message) or TransactionId is empty (this shouldn't happen).
+	// Send error message to telepathy service.
 	if addErr := mediator.telepathyService.IncomingMessageFailAdded(mNotificationInd, err); addErr != nil {
-		// Couldn't inform telepathy-ofono about download fail.
-		//TODO Store into storage & re-try on initilization.
-		log.Printf("Sending download error message to telepathy-ofono has failed with error: %v", addErr)
+		// Couldn't inform telepathy about download fail.
+		log.Printf("Sending download error message to telepathy has failed with error: %v", addErr)
+		if mNotificationInd.TransactionId != "" && mNotificationInd.RedownloadOfUUID == "" && inUnresponded && unrespondedUUID != mNotificationInd.UUID {
+			// This is not after redownload and not after first download fail (there was another mNotificationInd with the same transaction id before).
+			// Delete this message from storage.
+			if err := storage.Destroy(mNotificationInd.UUID); err != nil {
+				log.Printf("Error removing message %s from storage: %v", mNotificationInd.UUID, err)
+				return
+			}
+			log.Printf("Message %s was removed from storage", mNotificationInd.UUID)
+		}
 		return
 	}
 
-	if mNotificationInd.TransactionId != "" {
-		// Mark that some download error for TransactionId occurred and was already successfully communicated to telepathy-ofono service.
-		mediator.undownloaded[mNotificationInd.TransactionId] = mNotificationInd.UUID
+	if _, err := storage.SetTelepathyErrorNotified(mNotificationInd.UUID); err != nil {
+		log.Printf("Error updating storage for message %s that telepahy was notified", mNotificationInd.UUID)
+		if mNotificationInd.TransactionId != "" && mNotificationInd.RedownloadOfUUID == "" && inUnresponded && unrespondedUUID != mNotificationInd.UUID {
+			// This is not after redownload and not after first download fail (there was another mNotificationInd with the same transaction id before).
+			// Delete this message from storage.
+			if err := storage.Destroy(mNotificationInd.UUID); err != nil {
+				log.Printf("Error removing message %s from storage: %v", mNotificationInd.UUID, err)
+				return
+			}
+			log.Printf("Message %s was removed from storage", mNotificationInd.UUID)
+		}
+		return
+	}
+
+	// Stop listeners and delete the old unhandled message from storage and make this message unhandled.
+	if mNotificationInd.TransactionId != "" && inUnresponded && unrespondedUUID != mNotificationInd.UUID {
+		// Close listener and delete the previous message communicated to telepathy.
+		if err := mediator.telepathyService.MessageRemoved(mediator.telepathyService.GenMessagePath(unrespondedUUID)); err != nil {
+			// Just log possible errors.
+			log.Printf("Error closing meesage %s handlers: %v", unrespondedUUID, err)
+		} else {
+			// Delete this message from storage for sure.
+			if err := storage.Destroy(mNotificationInd.UUID); err != nil {
+				log.Printf("Error removing message %s from storage: %v", mNotificationInd.UUID, err)
+			}
+		}
+		// Force this message to be unhandled.
+		mediator.unrespondedTransactions[mNotificationInd.TransactionId] = mNotificationInd.UUID
 	}
 }
 
-func (mediator *Mediator) handleMRetrieveConf(mNotificationInd *mms.MNotificationInd) (*mms.MRetrieveConf, error) {
-	var filePath string
-	if f, err := storage.GetMMS(mNotificationInd.UUID); err == nil {
-		filePath = f
-	} else {
+// Decodes previously stored message (using UpdateDownloaded) to MRetrieveConf structure.
+func (mediator *Mediator) getMRetrieveConf(uuid string) (*mms.MRetrieveConf, error) {
+	filePath, err := storage.GetMMS(uuid)
+	if err != nil {
 		return nil, fmt.Errorf("unable to retrieve MMS: %s", err)
 	}
 
@@ -328,32 +405,47 @@ func (mediator *Mediator) handleMRetrieveConf(mNotificationInd *mms.MNotificatio
 		return nil, fmt.Errorf("issues while reading from downloaded file: %s", err)
 	}
 
-	mRetrieveConf := mms.NewMRetrieveConf(mNotificationInd.UUID)
+	mRetrieveConf := mms.NewMRetrieveConf(uuid)
 	dec := mms.NewDecoder(mmsData)
 	if err := dec.Decode(mRetrieveConf); err != nil {
 		return nil, fmt.Errorf("unable to decode m-retrieve.conf: %s with log %s", err, dec.GetLog())
 	}
 
-	if mediator.telepathyService == nil {
-		return nil, fmt.Errorf("no telepathy-ofono service found")
+	return mRetrieveConf, nil
+}
+
+func (mediator *Mediator) getAndHandleMRetrieveConf(mNotificationInd *mms.MNotificationInd) (*mms.MRetrieveConf, error) {
+	mRetrieveConf, err := mediator.getMRetrieveConf(mNotificationInd.UUID)
+	if err != nil {
+		return nil, err
 	}
 
-	// Check if there was some download error communicated for TransactionId before and no redownload was triggered (on redownload request, RedownloadOfUUID is filled and listener is stopped automatically).
-	if uuid, ok := mediator.undownloaded[mNotificationInd.TransactionId]; mNotificationInd.RedownloadOfUUID == "" && ok {
-		// There was an error message communicated to telepathy before, mark it to delete it by telepathy when communicating this message.
-		mNotificationInd.RedownloadOfUUID = uuid
-		// Before return, close listener for redownload request.
-		defer func() {
-			if err := mediator.telepathyService.MessageRemoved(mediator.telepathyService.GenMessagePath(uuid)); err != nil {
-				// Just log possible errors.
-				log.Printf("Error closing meesage %s handlers: %v", uuid, err)
+	unrespondedUUID, inUnresponded := mediator.unrespondedTransactions[mNotificationInd.TransactionId]
+	removeUnresponded := false
+	// Check if there was some download error communicated for TransactionId before and no redownload was triggered.
+	if mNotificationInd.TransactionId != "" && mNotificationInd.RedownloadOfUUID == "" && inUnresponded && unrespondedUUID != mNotificationInd.UUID {
+		if unrespondedState, err := storage.GetMMSState(unrespondedUUID); err == nil {
+			if unrespondedState.TelepathyErrorNotified {
+				// There was an error message communicated to telepathy before, mark it to delete it by telepathy when communicating this message.
+				mNotificationInd.RedownloadOfUUID = unrespondedUUID
+				removeUnresponded = true
 			}
-		}()
+		} else {
+			log.Printf("Error getting MMSState of unresponded message %s: %v", unrespondedUUID, err)
+		}
 	}
 
-	// Forward message to telepathy-ofono service.
+	// Forward message to telepathy service.
 	if err := mediator.telepathyService.IncomingMessageAdded(mRetrieveConf, mNotificationInd); err != nil {
-		return nil, fmt.Errorf("cannot notify telepathy-ofono about new message: %v", err)
+		return nil, fmt.Errorf("cannot notify telepathy about new message: %v", err)
+	}
+
+	if removeUnresponded {
+		// Close listener and delete the previous message communicated to telepathy.
+		if err := mediator.telepathyService.MessageRemoved(mediator.telepathyService.GenMessagePath(unrespondedUUID)); err != nil {
+			// Just log possible errors.
+			log.Printf("Error closing meesage %s handlers: %v", unrespondedUUID, err)
+		}
 	}
 
 	return mRetrieveConf, nil
@@ -384,23 +476,27 @@ func (mediator *Mediator) handleMNotifyRespInd(mNotifyRespInd *mms.MNotifyRespIn
 	return filePath
 }
 
-func (mediator *Mediator) sendMNotifyRespInd(filePath string, mmsContext *ofono.OfonoContext) {
-	defer os.Remove(filePath)
+func (mediator *Mediator) sendMNotifyRespInd(filePath string, mmsContext *ofono.OfonoContext) error {
+	defer func() {
+		if err := os.Remove(filePath); err != nil {
+			log.Printf("cannot remove m-notifyresp.ind encoded file %s: %s", filePath, err)
+		}
+	}()
 
 	proxy, err := mmsContext.GetProxy()
 	if err != nil {
-		log.Println("Cannot retrieve MMS proxy setting", err)
-		return
+		return fmt.Errorf("cannot retrieve MMS proxy setting: %w", err)
 	}
 	msc, err := mmsContext.GetMessageCenter()
 	if err != nil {
-		log.Println("Cannot retrieve MMSC setting", err)
-		return
+		return fmt.Errorf("cannot retrieve MMSC setting: %w", err)
 	}
 
 	if _, err := mms.Upload(filePath, msc, proxy.Host, int32(proxy.Port)); err != nil {
-		log.Printf("Cannot upload m-notifyresp.ind encoded file %s to message center: %s", filePath, err)
+		return fmt.Errorf("cannot upload m-notifyresp.ind encoded file %s to message center: %w", filePath, err)
 	}
+
+	return nil
 }
 
 func (mediator *Mediator) handleOutgoingMessage(msg *telepathy.OutgoingMessage) {
@@ -424,8 +520,6 @@ func (mediator *Mediator) handleOutgoingMessage(msg *telepathy.OutgoingMessage) 
 
 func (mediator *Mediator) handleMSendReq(mSendReq *mms.MSendReq) {
 	log.Print("Encoding M-Send.Req")
-	//TODO:jezek - storage is created, but it seems it is not deleted anywhere. Ensure deletion.
-	//TODO:jezek - on initialize, handle undeleted send messages (also add modem id and on init delete old stored messages).
 	f, err := storage.CreateSendFile(mSendReq.UUID)
 	if err != nil {
 		log.Print("Unable to create m-send.req file for ", mSendReq.UUID)
@@ -510,19 +604,15 @@ func (mediator *Mediator) uploadFile(filePath string) (string, error) {
 	mediator.contextLock.Lock()
 	defer mediator.contextLock.Unlock()
 
-	preferredContext, _ := mediator.telepathyService.GetPreferredContext()
-	mmsContext, err := mediator.modem.ActivateMMSContext(preferredContext)
+	mmsContext, deactivateMMSContext, err := mediator.activateMMSContext()
 	if err != nil {
 		return "", err
 	}
+	defer deactivateMMSContext()
+
 	if err := mediator.telepathyService.SetPreferredContext(mmsContext.ObjectPath); err != nil {
 		log.Println("Unable to store the preferred context for MMS:", err)
 	}
-	defer func() {
-		if err := mediator.modem.DeactivateMMSContext(mmsContext); err != nil {
-			log.Println("Issues while deactivating context:", err)
-		}
-	}()
 
 	proxy, err := mmsContext.GetProxy()
 	if err != nil {
@@ -568,17 +658,12 @@ func mmsEnabled() bool {
 	return mms.Value.(bool)
 }
 
-// For messages storage with corresponding 'modemId' do:
-// - Spawns message handlers.
-// - Fills undownloaded map.
 func (mediator *Mediator) initializeMessages(modemId string) {
-	log.Printf("jezek - Mediator.initializeMessages(%s): start", modemId)
-	defer log.Printf("jezek - Mediator.initializeMessages(%s): end", modemId)
+	historyService := mediator.telepathyService.HistoryService()
+	handledTransactions := map[string]string{}
 	uuids := storage.GetStoredUUIDs()
-
-	log.Printf("Found %d messages in storage", len(uuids))
+	log.Printf("Initializing %d messages from storage", len(uuids))
 	for _, uuid := range uuids {
-		log.Printf("jezek - checking uuid: %s", uuid)
 		mmsState, err := storage.GetMMSState(uuid)
 		if err != nil {
 			log.Printf("Error checking state of message stored under UUID: %s : %v", uuid, err)
@@ -587,7 +672,6 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 			}
 			continue
 		}
-		log.Printf("jezek - %#v", mmsState)
 
 		if !mmsState.IsIncoming() {
 			log.Printf("Message %s is not an incoming message. State: %s", uuid, mmsState.State)
@@ -596,7 +680,7 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 
 		// Housekeeping. Delete all old stored incoming messages, which are missing the ModemId.
 		if mmsState.ModemId == "" {
-			log.Printf("Message %s is an old incoming message with state %s, no need to store, deleting.", uuid, mmsState.State)
+			log.Printf("Message %s is an old incoming message with state %s, no need to store, deleting", uuid, mmsState.State)
 			if err := storage.Destroy(uuid); err != nil {
 				log.Printf("Error destroying old message: %v", err)
 			}
@@ -604,174 +688,216 @@ func (mediator *Mediator) initializeMessages(modemId string) {
 		}
 
 		if modemId != mmsState.ModemId {
-			log.Printf("jezek - message modem id (%s) doesn't match added modem (%s)", mmsState.ModemId, modemId)
 			continue
 		}
 		// Just log any irregularities here.
 		if mmsState.MNotificationInd == nil {
-			log.Printf("Stored message doesn't contain MNotificationInd")
+			log.Printf("Stored message doesn't contain MNotificationInd, can't do anything with it, deleting")
+			if err := storage.Destroy(uuid); err != nil {
+				log.Printf("Error destroying faulty message: %v", err)
+			}
+			continue
 		}
 		if mmsState.MNotificationInd.TransactionId == "" {
 			log.Printf("Stored message's MNotificationInd's TransactionId is empty")
 		}
-		if mediator.telepathyService == nil {
-			log.Printf("There is no telepathy service in mediator, will not spawn handlers for this message.")
+
+		if mmsState.MNotificationInd.TransactionId != "" {
+			if _, ok := handledTransactions[mmsState.MNotificationInd.TransactionId]; ok {
+				// TransactionId was already handled. This message is duplicate and obsolete. Delete and handle next.
+				log.Printf("Message %s is an duplicate incoming message with transaction ID %s that was already handled, no need to store, deleting", uuid, mmsState.MNotificationInd.TransactionId)
+				if err := storage.Destroy(uuid); err != nil {
+					log.Printf("Error destroying duplicate message: %v", err)
+				}
+				continue
+			}
+			// Mark TransactionId as handled, to not handle possible messages with the same TransactionId.
+			handledTransactions[mmsState.MNotificationInd.TransactionId] = uuid
+			// Add to unresponded, to not communicate possible error to telepathy again, on possible message notification from MMS center.
+			mediator.unrespondedTransactions[mmsState.MNotificationInd.TransactionId] = uuid
 		}
 
 		checkExpiredAndHandle := func() bool {
-			if mmsState.MNotificationInd == nil || !mmsState.MNotificationInd.Expired() {
+			if !mmsState.MNotificationInd.Expired() {
 				return false
 			}
 
-			log.Printf("jezek - mNotificationInd is expired")
-			// MNotificationInd is expired, destroy in storage & notify telepathy-ofono service.
+			// MNotificationInd is expired, destroy in storage & notify telepathy service.
 			if err := storage.Destroy(uuid); err != nil {
 				log.Printf("Error destroying expired message: %v", err)
 			}
-			if mediator.telepathyService != nil {
-				//TODO:jezek - Test status change seems not to work on restart. No error, but not working.
-				//if err := mediator.telepathyService.MessageHandle(uuid); err != nil {
-				//	log.Printf("Error starting message %s handlers to alter expired message", uuid)
-				//}
-				//if err := mediator.telepathyService.MessageStatusChanged(uuid, telepathy.PERMANENT_ERROR); err != nil {
-				//	log.Printf("Error changing message state: %v", err)
-				//}
-				//if err := mediator.telepathyService.MessageDestroy(uuid); err != nil {
-				//	log.Printf("Error destroying message handlers: %v", err)
-				//}
-
-				if err := mediator.telepathyService.SingnalMessageRemoved(mediator.telepathyService.GenMessagePath(uuid)); err != nil {
-					log.Printf("Error sending signal that message was removed: %v", err)
-				}
+			if err := mediator.telepathyService.SingnalMessageRemoved(mediator.telepathyService.GenMessagePath(uuid)); err != nil {
+				log.Printf("Error sending signal that message was removed: %v", err)
 			}
 			return true
 		}
 
+		startTelepathyHandlers := false
+		checkInHistoryService := true
 		switch mmsState.State {
 		case storage.NOTIFICATION:
-			// Message download failed, error was probably communicated to telepathy-ofono.
-			// It is now up to user to initiate redownload or there is a possibility, that a new notification with the same TransactionId arrives from MMS provider.
-			//TODO:jezek - Store more info to be sure if error was communicated and act according.
+			// Message download failed, error was probably communicated to telepathy.
+			// It is now up to user to initiate redownload or there is a possibility, that a new notification with the same TransactionId arrives from MMS center.
 
-			if checkExpiredAndHandle() {
-				// Message is expired, don't continue.
+			if mmsState.TelepathyErrorNotified == false { // Telepathy service wasn't notified of the download error.
+				// Handle as new MNotificationInd and send to NewMNotificationInd channel.
+				go func() {
+					mediator.NewMNotificationInd <- mmsState.MNotificationInd
+				}()
 				break
-			}
-
-			// Add to undownloaded, to not communicate possible error to telepathy-ofono again, on possible message notification from mobile provider.
-			if mmsState.MNotificationInd != nil && mmsState.MNotificationInd.TransactionId != "" {
-				log.Printf("jezek - adding message to undownloaded")
-				mediator.undownloaded[mmsState.MNotificationInd.TransactionId] = uuid
-			}
-			// Spawn interface listener to listen for redownload requests.
-			if mediator.telepathyService != nil {
-				log.Printf("jezek - spawning handlers for message")
-				if err := mediator.telepathyService.MessageHandle(uuid); err != nil {
-					log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
-				}
-			}
-			break
-
-		case storage.DOWNLOADED:
-			// Message download was successful, but there was some decoding error, which was probably communicated to telepathy-ofono.
-			// It is now up to user to initiate redownload (if he has the choice) or there is a possibility, that a new notification with the same TransactionId arrives from MMS provider.
-			//TODO:jezek - Store more info to be sure if error was communicated and act according.
-
-			if checkExpiredAndHandle() {
-				// Message is expired, don't continue.
-				break
-			}
-
-			// Add to undownloaded, to not communicate possible error to telepathy-ofono again, on possible message notification from mobile provider.
-			if mmsState.MNotificationInd != nil && mmsState.MNotificationInd.TransactionId != "" {
-				log.Printf("jezek - adding message to undownloaded")
-				mediator.undownloaded[mmsState.MNotificationInd.TransactionId] = uuid
-			}
-			// Spawn interface listener to listen for redownload requests.
-			if mediator.telepathyService != nil {
-				log.Printf("jezek - spawning handlers for message")
-				if err := mediator.telepathyService.MessageHandle(uuid); err != nil {
-					log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
-				}
-			}
-			//TODO:jezek - Try communicate and acknowledge DOWNLOADED message.
-			break
-
-		case storage.RECEIVED:
-			// Message download was successful, the message was decoded and forwarded to telepathy-ofono, but MMS provider was not notified.
-			// There is a possibility, that a new notification with the same TransactionId arrives from MMS provider.
-			//TODO:jezek - Try to notify MMS provider and if it fails, add to undownloaded, to not communicate possible error to telepathy-ofono again, on possible message notification from mobile provider.
-
-			if checkExpiredAndHandle() {
-				// Message is expired, don't continue.
-				break
-			}
-
-			// Add to undownloaded, to not communicate possible error to telepathy-ofono again, on possible message notification from mobile provider.
-			if mmsState.MNotificationInd != nil && mmsState.MNotificationInd.TransactionId != "" {
-				log.Printf("jezek - adding message to undownloaded")
-				mediator.undownloaded[mmsState.MNotificationInd.TransactionId] = uuid
-			}
-			// Spawn interface listener to listen for read/delete requests.
-			if mediator.telepathyService != nil {
-				log.Printf("jezek - spawning handlers for message")
-				if err := mediator.telepathyService.MessageHandle(uuid); err != nil {
-					log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
-				}
-			}
-			break
-
-		case storage.RESPONDED:
-			// Message download was successful, the message was decoded and forwarded to telepathy-ofono and MMS provider was notified.
-			// Get message from history service and if read or not exist, delete and don't spawn handlers.
-
-			if mediator.telepathyService == nil {
-				break
-			}
-
-			eventId := string(mediator.telepathyService.GenMessagePath(uuid))
-			hsMessage, err := mediator.telepathyService.GetMessage(eventId)
-			if err != nil {
-				log.Printf("Error getting message %s from HistoryService: %v", eventId, err)
-				break
-			}
-			log.Printf("jezek - hsMessage: %v", hsMessage)
-
-			// If message is doesn't exist, break (don't spawn handlers).
-			if len(hsMessage) == 0 {
-				log.Printf("Message %s doesn't exist in HistoryService, no need to store, deleting.", uuid)
-				if err := storage.Destroy(uuid); err != nil {
-					log.Printf("Error destroying message missing in HistoryService: %v", err)
-				}
-				break
-			}
-
-			// If message is marked as read, break (don't spawn handlers).
-			if unread, ok := hsMessage["newEvent"].Value.(bool); !ok {
-				log.Printf("HistoryService returned a message %s with unusual newEvent field (expecting bool): %#v", eventId, hsMessage["newEvent"])
-				break
-			} else {
-				if unread == false {
-					log.Printf("Message %s is marked as read in HistoryService, no need to store, deleting.", uuid)
-					if err := storage.Destroy(uuid); err != nil {
-						log.Printf("Error destroying message read in HistoryService: %v", err)
-					}
+			} else { // Telepathy was already notified of the error.
+				if checkExpiredAndHandle() {
+					// Message is expired (and was deleted from storage), don't continue.
+					// Remove from unrespondedTransactions.
+					delete(mediator.unrespondedTransactions, mmsState.MNotificationInd.TransactionId)
 					break
 				}
+
+				startTelepathyHandlers = true
 			}
-			// Spawn interface listener to listen for read/delete requests.
-			log.Printf("jezek - spawning handlers for message")
-			if err := mediator.telepathyService.MessageHandle(uuid); err != nil {
-				log.Printf("Error starting message %s handlers of message with state %v", uuid, mmsState.State)
+
+		case storage.DOWNLOADED:
+			// Message download was successful, but there was some decoding or forwarding to telepathy error, which was probably communicated to telepathy.
+			// The user has no possibility to initiate redownload and there is a possibility, that a new notification with the same TransactionId arrives from MMS center.
+
+			forwardedUpdated := false
+			// Try to forward the downloaded and stored message to telepathy again.
+			mRetrieveConf, err := mediator.getAndHandleMRetrieveConf(mmsState.MNotificationInd)
+			if err != nil {
+				log.Printf("Handling MRetrieveConf error: %v", err)
+			} else {
+				// Update message state in storage to RECEIVED.
+				if mmsState, err = storage.UpdateReceived(mRetrieveConf.UUID); err != nil {
+					log.Println("Error updating storage (UpdateReceived): ", err)
+				} else {
+					// Message was forwarded to telepathy and state in storage was updated.
+					forwardedUpdated = true
+					// If this message falls through to RESPONDED, don't check if message is in history service, cause it probably hasn't arrived there yet.
+					checkInHistoryService = false
+				}
 			}
-			break
+
+			if !forwardedUpdated {
+				startTelepathyHandlers = true
+				break
+			}
+
+			fallthrough
+		case storage.RECEIVED:
+			// Message download was successful, the message was decoded and forwarded to telepathy but MMS center was not notified.
+			// There is a possibility, that a new notification with the same TransactionId arrives from MMS center.
+
+			respondErr := error(nil)
+			// If message is expired, no need to respond.
+			if !mmsState.MNotificationInd.Expired() {
+				// Try to respond to the MMS center, that the message was downloaded.
+				respondErr = mediator.respondMessage(mmsState)
+			}
+
+			respondedUpdated := false
+			if respondErr != nil {
+				log.Printf("Error responding to MMS center: %s", err)
+			} else {
+				// Store that message was responded.
+				if mmsState, err = storage.UpdateResponded(mmsState.MNotificationInd.UUID); err != nil {
+					log.Println("Error updating storage (UpdateResponded): ", err)
+				} else {
+					respondedUpdated = true
+				}
+			}
+
+			if !respondedUpdated {
+				startTelepathyHandlers = true
+				break
+			}
+
+			fallthrough
+		case storage.RESPONDED:
+			// Message download was successful, the message was decoded and forwarded to telepathy and MMS center was notified.
+
+			// Remove from unrespondedTransactions.
+			delete(mediator.unrespondedTransactions, mmsState.MNotificationInd.TransactionId)
+
+			if checkInHistoryService {
+				// Get message from history service and if read or not exist, delete and don't spawn handlers.
+				eventId := string(mediator.telepathyService.GenMessagePath(uuid))
+				hsMessage, err := historyService.GetMessage(eventId)
+				if err != nil {
+					log.Printf("Error getting message %s from HistoryService: %v", eventId, err)
+				} else {
+					// If message is doesn't exist, break (don't spawn handlers).
+					if !hsMessage.Exists() {
+						log.Printf("Message %s doesn't exist in HistoryService, no need to store, deleting.", uuid)
+						if err := storage.Destroy(uuid); err != nil {
+							log.Printf("Error destroying message: %v", err)
+						}
+						break
+					}
+
+					// If message is marked as read (is not new), break (don't spawn handlers).
+					if isnew, err := hsMessage.IsNew(); err != nil {
+						log.Printf("Error checking if message is new in HistoryService: %s", err)
+					} else if isnew == false {
+						log.Printf("Message %s is marked as read in HistoryService, no need to store, deleting.", uuid)
+						if err := storage.Destroy(uuid); err != nil {
+							log.Printf("Error destroying message: %v", err)
+						}
+						break
+					}
+				}
+			}
+
+			startTelepathyHandlers = true
 
 		default:
 			log.Printf("Unknown MMSState.State: %s", mmsState.State)
 			break
 		}
 
-		//TODO:jezek - Telepathy-ofono service should spawn dbus listeners for MarkRead/Delete requests for unread messages os startup.
+		if startTelepathyHandlers {
+			mRetrieveConf, _ := mediator.getMRetrieveConf(uuid)
+			if err := mediator.telepathyService.InitializationMessageAdded(mRetrieveConf, mmsState.MNotificationInd); err != nil {
+				log.Printf("Error adding initialization message for message %s: %v", uuid, err)
+			}
+		}
 	}
 
+}
+
+// Responds to MMS center, that message was successfully downloaded.
+func (mediator *Mediator) respondMessage(mmsState storage.MMSState) error {
+	mediator.contextLock.Lock()
+	defer mediator.contextLock.Unlock()
+
+	mRetrieveConf, err := mediator.getMRetrieveConf(mmsState.MNotificationInd.UUID)
+	if err != nil {
+		return err
+	}
+	// Notify MMS center about successful download.
+	mNotifyRespInd := mRetrieveConf.NewMNotifyRespInd(useDeliveryReports)
+	if !mmsState.MNotificationInd.IsDebug() {
+		mmsContext, deactivateMMSContext, err := mediator.activateMMSContext()
+		if err != nil {
+			return fmt.Errorf("error activating ofono context: %w", err)
+		}
+		if deactivateMMSContext != nil {
+			defer deactivateMMSContext()
+		}
+		// TODO deferred case
+		filePath := mediator.handleMNotifyRespInd(mNotifyRespInd)
+		if filePath == "" {
+			return fmt.Errorf("Getting file for m-notifyresp.ind failed")
+		}
+		if err := mediator.sendMNotifyRespInd(filePath, &mmsContext); err != nil {
+			return fmt.Errorf("error sending m-notifyresp.ind: %w", err)
+		}
+	} else {
+		log.Print("This is a local test, skipping m-notifyresp.ind")
+		if err := mmsState.MNotificationInd.PopDebugError(mms.DebugErrorRespondHandle); err != nil {
+			log.Printf("Forcing debug error: %#v", err)
+			storage.UpdateMNotificationInd(mmsState.MNotificationInd)
+			return err
+		}
+	}
+	return nil
 }

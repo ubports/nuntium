@@ -33,6 +33,7 @@ import (
 
 	"github.com/ubports/nuntium/mms"
 	"github.com/ubports/nuntium/storage"
+	"github.com/ubports/nuntium/telepathy/history"
 	"launchpad.net/go-dbus/v1"
 )
 
@@ -116,15 +117,11 @@ func (*MMSService) getMMSState(objectPath dbus.ObjectPath) (storage.MMSState, er
 
 func (service *MMSService) watchMessageDeleteCalls() {
 	for msgObjectPath := range service.msgDeleteChan {
-		log.Printf("jezek - MMSService.watchMessageDeleteCalls: msgObjectPath: %v", msgObjectPath)
-
 		if mmsState, err := service.getMMSState(msgObjectPath); err == nil {
-			if mmsState.State == storage.NOTIFICATION {
-				log.Printf("jezek - MMSService.watchMessageDeleteCalls: Message not fully downloaded, not deleting.")
+			if mmsState.State != storage.RESPONDED && mmsState.MNotificationInd != nil && !mmsState.MNotificationInd.Expired() {
+				log.Printf("Message %s is not responded and not expired, not deleting.", string(msgObjectPath))
 				continue
 			}
-		} else {
-			log.Printf("jezek - MMSService.watchMessageRedownloadCalls: error retrieving message state: %v", err)
 		}
 
 		if err := service.MessageRemoved(msgObjectPath); err != nil {
@@ -135,8 +132,6 @@ func (service *MMSService) watchMessageDeleteCalls() {
 
 func (service *MMSService) watchMessageRedownloadCalls() {
 	for msgObjectPath := range service.msgRedownloadChan {
-		log.Printf("jezek - MMSService.watchMessageRedownloadCalls: msgObjectPath: %v", msgObjectPath)
-
 		mmsState, err := service.getMMSState(msgObjectPath)
 		if err != nil {
 			log.Printf("Redownload of %s error: retrieving message state error: %v", string(msgObjectPath), err)
@@ -150,7 +145,6 @@ func (service *MMSService) watchMessageRedownloadCalls() {
 			log.Printf("Redownload of %s error: no mNotificationInd found", string(msgObjectPath))
 			continue
 		}
-		log.Printf("jezek - MMSService.watchMessageRedownloadCalls: mNotificationInd: %#v", mmsState.MNotificationInd)
 
 		// Stop previous message handling, remove and notify.
 		if err := service.MessageRemoved(msgObjectPath); err != nil {
@@ -162,24 +156,23 @@ func (service *MMSService) watchMessageRedownloadCalls() {
 		newMNotificationInd.RedownloadOfUUID = mmsState.MNotificationInd.UUID
 		newMNotificationInd.UUID = mms.GenUUID()
 		storage.Create(mmsState.ModemId, newMNotificationInd)
-		log.Printf("jezek - MMSService.watchMessageRedownloadCalls: new mNotificationInd new: %#v", newMNotificationInd)
 		service.mNotificationIndChan <- newMNotificationInd
 	}
 }
 
 func (service *MMSService) watchDBusMethodCalls() {
-	log.Printf("jezek - service %v: watchDBusMethodCalls(): start", service.identity)
-	defer log.Printf("jezek - service %v: watchDBusMethodCalls(): end", service.identity)
 	for msg := range service.msgChan {
-		log.Printf("jezek - service %v: watchDBusMethodCalls(): Received message: %s - %v", service.identity, msg.Member, msg)
 		var reply *dbus.Message
 		if msg.Interface != MMS_SERVICE_DBUS_IFACE {
-			log.Println("Received unkown method call on", msg.Interface, msg.Member)
+			log.Println("Received unknown interface call on", msg.Interface, msg.Member)
 			reply = dbus.NewErrorMessage(
 				msg,
 				"org.freedesktop.DBus.Error.UnknownInterface",
-				fmt.Sprintf("No such interface '%s' at object path '%s'", msg.Interface, msg.Path))
-			//TODO:jezek Send the reply?
+				fmt.Sprintf("No such interface '%s' at object path '%s'", msg.Interface, msg.Path),
+			)
+			if err := service.conn.Send(reply); err != nil {
+				log.Println("Could not send reply:", err)
+			}
 			continue
 		}
 		switch msg.Member {
@@ -232,11 +225,12 @@ func (service *MMSService) watchDBusMethodCalls() {
 				service.outMessage <- &outMessage
 			}
 		default:
-			log.Println("Received unkown method call on", msg.Interface, msg.Member)
+			log.Println("Received unknown method call on", msg.Interface, msg.Member)
 			reply = dbus.NewErrorMessage(
 				msg,
 				"org.freedesktop.DBus.Error.UnknownMethod",
-				fmt.Sprintf("No such method '%s' at object path '%s'", msg.Member, msg.Path))
+				fmt.Sprintf("No such method '%s' at object path '%s'", msg.Member, msg.Path),
+			)
 			if err := service.conn.Send(reply); err != nil {
 				log.Println("Could not send reply:", err)
 			}
@@ -298,6 +292,10 @@ func (service *MMSService) setProperty(msg *dbus.Message) error {
 // MessageRemoved closes message handlers, removes message from storage and emits the MessageRemoved signal to mms service dbus interface for message identified by objectPath parameter in this order.
 // If message is not handled, removing from storage or sending signal fails, error is returned.
 func (service *MMSService) MessageRemoved(objectPath dbus.ObjectPath) error {
+	if service == nil {
+		return ErrorNilMMSService
+	}
+
 	if _, ok := service.messageHandlers[objectPath]; !ok {
 		return fmt.Errorf("message not handled")
 	}
@@ -318,6 +316,10 @@ func (service *MMSService) MessageRemoved(objectPath dbus.ObjectPath) error {
 
 // Sends messageRemovedSignal signal to MMS_SERVICE_DBUS_IFACE to indicate, that the message stopped being handled and was removed from nuntium storage.
 func (service *MMSService) SingnalMessageRemoved(objectPath dbus.ObjectPath) error {
+	if service == nil {
+		return ErrorNilMMSService
+	}
+
 	signal := dbus.NewSignalMessage(service.payload.Path, MMS_SERVICE_DBUS_IFACE, messageRemovedSignal)
 	if err := signal.AppendArgs(objectPath); err != nil {
 		return err
@@ -329,35 +331,29 @@ func (service *MMSService) SingnalMessageRemoved(objectPath dbus.ObjectPath) err
 }
 
 func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotificationInd, downloadError error) error {
-	//just handle that mms as an empty MMS
+	if service == nil {
+		return fmt.Errorf("Nil MMSService")
+	}
+
+	if err := mNotificationInd.PopDebugError(mms.DebugErrorTelepathyErrorNotify); err != nil {
+		log.Printf("Forcing IncomingMessageFailAdded debug error: %#v", err)
+		storage.UpdateMNotificationInd(mNotificationInd)
+		return err
+	}
+
 	params := make(map[string]dbus.Variant)
 
-	// Signal path:
-	// https://github.com/ubports/telepathy-ofono/blob/040321101e7bfe5950934a1b718875f3fe29c495/mmsdservice.cpp#L118
-	// https://github.com/ubports/telepathy-ofono/blob/040321101e7bfe5950934a1b718875f3fe29c495/connection.cpp#L518
-	// https://github.com/ubports/telepathy-ofono/blob/040321101e7bfe5950934a1b718875f3fe29c495/connection.cpp#L423
-	// https://github.com/ubports/telepathy-ofono/blob/db5e35b68f244d007468b8de2d9ad9998a2c8bd7/ofonotextchannel.cpp#L473
-	// https://github.com/TelepathyIM/telepathy-qt/blob/7cf3e35fdf6cf7ea7d8fc301eae04fe43930b17f/TelepathyQt/base-channel.cpp#L460
-	// https://github.com/ubports/history-service/blob/8285a4a3174b84a04f00d600fff99905aec6c4e2/daemon/historydaemon.cpp#L1023
 	params["Status"] = dbus.Variant{"received"}
-
-	date := time.Now().Format(time.RFC3339)
-	params["Date"] = dbus.Variant{date}
-
-	sender := mNotificationInd.From
-	if strings.HasSuffix(mNotificationInd.From, PLMN) {
-		params["Sender"] = dbus.Variant{sender[:len(sender)-len(PLMN)]}
-	}
+	params["Date"] = dbus.Variant{time.Now().Format(time.RFC3339)}
+	params["Sender"] = dbus.Variant{strings.TrimSuffix(mNotificationInd.From, PLMN)}
 
 	errorCode := "x-ubports-nuntium-mms-error-unknown"
 	if eci, ok := downloadError.(interface{ Code() string }); ok {
-		log.Printf("jezek - downloadError has Code() function returning: %v", eci.Code())
 		errorCode = eci.Code()
 	}
 
 	allowRedownload := false
 	if ari, ok := downloadError.(interface{ AllowRedownload() bool }); ok {
-		log.Printf("jezek - downloadError has AllowRedownload() function returning: %v", ari.AllowRedownload())
 		allowRedownload = ari.AllowRedownload()
 	}
 
@@ -372,7 +368,7 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 	if enabled, err := service.MobileDataEnabled(); err == nil {
 		mobileData = &enabled
 	} else {
-		log.Printf("Error detecting mobile data enabled: %v", err)
+		log.Printf("Error detecting if mobile data is enabled: %v", err)
 	}
 
 	errorMessage, err := json.Marshal(&struct {
@@ -397,14 +393,29 @@ func (service *MMSService) IncomingMessageFailAdded(mNotificationInd *mms.MNotif
 	}
 
 	payload := Payload{Path: service.GenMessagePath(mNotificationInd.UUID), Properties: params}
-	//TODO:jezek - if no redownload/expired, don't spawn listeners (or listen to delete?) & remove from storage...
-	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, service.msgRedownloadChan)
+
+	// Don't pass a redownload channel to NewMessageInterface if redownload not allowed.
+	redownloadChan := service.msgRedownloadChan
+	if !allowRedownload {
+		redownloadChan = nil
+	}
+	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, redownloadChan)
 	return service.MessageAdded(&payload)
 }
 
 //IncomingMessageAdded emits a MessageAdded with the path to the added message which
 //is taken as a parameter and creates an object path on the message interface.
 func (service *MMSService) IncomingMessageAdded(mRetConf *mms.MRetrieveConf, mNotificationInd *mms.MNotificationInd) error {
+	if service == nil {
+		return ErrorNilMMSService
+	}
+
+	if err := mNotificationInd.PopDebugError(mms.DebugErrorReceiveHandle); err != nil {
+		log.Printf("Forcing getAndHandleMRetrieveConf debug error: %#v", err)
+		storage.UpdateMNotificationInd(mNotificationInd)
+		return err
+	}
+
 	payload, err := service.parseMessage(mRetConf)
 	if err != nil {
 		return err
@@ -417,14 +428,53 @@ func (service *MMSService) IncomingMessageAdded(mRetConf *mms.MRetrieveConf, mNo
 		payload.Properties["Received"] = dbus.Variant{mNotificationInd.Received.Unix()}
 	}
 
-	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, service.msgRedownloadChan)
+	service.messageHandlers[payload.Path] = NewMessageInterface(service.conn, payload.Path, service.msgDeleteChan, nil)
+	return service.MessageAdded(&payload)
+}
+
+func (service *MMSService) InitializationMessageAdded(mRetConf *mms.MRetrieveConf, mNotificationInd *mms.MNotificationInd) error {
+	if service == nil {
+		return ErrorNilMMSService
+	}
+
+	if mNotificationInd == nil {
+		return ErrorNilMNotificationInd
+	}
+
+	path := service.GenMessagePath(mNotificationInd.UUID)
+	if _, ok := service.messageHandlers[path]; ok {
+		return fmt.Errorf("message is already handled")
+	}
+
+	// Initialization message only needs these properties to spawn proper handles in telepathy.
+	payload := Payload{Path: path, Properties: map[string]dbus.Variant{
+		"Status":  dbus.Variant{"received"},
+		"Sender":  dbus.Variant{strings.TrimSuffix(mNotificationInd.From, PLMN)},
+		"Rescued": dbus.Variant{true},
+		"Silent":  dbus.Variant{true},
+	}}
+
+	// Extract "Sender" and "Recipients" property from mRetConf, if any.
+	if mRetConf != nil {
+		if pl, err := service.parseMessage(mRetConf); err == nil {
+			if _, ok := pl.Properties["Sender"]; !ok {
+				payload.Properties["Sender"] = pl.Properties["Sender"]
+			}
+			if _, ok := pl.Properties["Recipients"]; !ok {
+				payload.Properties["Recipients"] = pl.Properties["Recipients"]
+			}
+		} else {
+			log.Printf("Error parsing mRetConf for initialization message %s: %v", path, err)
+		}
+	}
+
+	service.messageHandlers[path] = NewMessageInterface(service.conn, path, service.msgDeleteChan, service.msgRedownloadChan)
 	return service.MessageAdded(&payload)
 }
 
 //MessageAdded emits a MessageAdded with the path to the added message which
 //is taken as a parameter
 func (service *MMSService) MessageAdded(msgPayload *Payload) error {
-	log.Printf("jezek - service %v: MessageAdded(): payload: %v", service.identity, msgPayload)
 	signal := dbus.NewSignalMessage(service.payload.Path, MMS_SERVICE_DBUS_IFACE, messageAddedSignal)
 	if err := signal.AppendArgs(msgPayload.Path, msgPayload.Properties); err != nil {
 		return err
@@ -451,14 +501,10 @@ func (service *MMSService) parseMessage(mRetConf *mms.MRetrieveConf) (Payload, e
 	params := make(map[string]dbus.Variant)
 	params["Status"] = dbus.Variant{"received"}
 	//TODO retrieve date correctly
-	date := parseDate(mRetConf.Date)
-	params["Date"] = dbus.Variant{date}
+	params["Date"] = dbus.Variant{parseDate(mRetConf.Date)}
+	params["Sender"] = dbus.Variant{strings.TrimSuffix(mRetConf.From, PLMN)}
 	if mRetConf.Subject != "" {
 		params["Subject"] = dbus.Variant{mRetConf.Subject}
-	}
-	sender := mRetConf.From
-	if strings.HasSuffix(mRetConf.From, PLMN) {
-		params["Sender"] = dbus.Variant{sender[:len(sender)-len(PLMN)]}
 	}
 
 	params["Recipients"] = dbus.Variant{parseRecipients(strings.Join(mRetConf.To, ","))}
@@ -509,7 +555,6 @@ func (service *MMSService) MessageDestroy(uuid string) error {
 	if msgInterface, ok := service.messageHandlers[msgObjectPath]; ok {
 		msgInterface.Close()
 		delete(service.messageHandlers, msgObjectPath)
-		log.Printf("jezek - MessageDestroyed/unhandled(%v)", uuid)
 		return nil
 	}
 	return fmt.Errorf("no message interface handler for object path %s", msgObjectPath)
@@ -529,7 +574,7 @@ func (service *MMSService) ReplySendMessage(reply *dbus.Message, uuid string) (d
 	if err := service.conn.Send(reply); err != nil {
 		return "", err
 	}
-	msg := NewMessageInterface(service.conn, msgObjectPath, service.msgDeleteChan, service.msgRedownloadChan)
+	msg := NewMessageInterface(service.conn, msgObjectPath, service.msgDeleteChan, nil)
 	service.messageHandlers[msgObjectPath] = msg
 	service.MessageAdded(msg.GetPayload())
 	return msgObjectPath, nil
@@ -537,19 +582,11 @@ func (service *MMSService) ReplySendMessage(reply *dbus.Message, uuid string) (d
 
 //TODO randomly creating a uuid until the download manager does this for us
 func (service *MMSService) GenMessagePath(uuid string) dbus.ObjectPath {
-	return dbus.ObjectPath(MMS_DBUS_PATH + "/" + service.identity + "/" + uuid)
-}
-
-// Creates handlers for message.
-// If already handled, returns error.
-func (service *MMSService) MessageHandle(uuid string) error {
-	path := service.GenMessagePath(uuid)
-	if _, ok := service.messageHandlers[path]; ok {
-		return fmt.Errorf("message is already handled")
+	if service == nil {
+		return dbus.ObjectPath(MMS_DBUS_PATH + "//" + uuid)
 	}
-	log.Printf("jezek - MessageHandle(%v)", uuid)
-	service.messageHandlers[path] = NewMessageInterface(service.conn, path, service.msgDeleteChan, service.msgRedownloadChan)
-	return nil
+
+	return dbus.ObjectPath(MMS_DBUS_PATH + "/" + service.identity + "/" + uuid)
 }
 
 // Returns if mobile data is enabled right now.
@@ -562,7 +599,6 @@ func (service *MMSService) MessageHandle(uuid string) error {
 // string:com.ubuntu.connectivity1.Private \
 // 	string:'MobileDataEnabled'
 func (service *MMSService) MobileDataEnabled() (bool, error) {
-	log.Printf("jezek - MobileDataEnabled()")
 	call := dbus.NewMethodCallMessage("com.ubuntu.connectivity1", "/com/ubuntu/connectivity1/Private", "org.freedesktop.DBus.Properties", "Get")
 	call.AppendArgs("com.ubuntu.connectivity1.Private", "MobileDataEnabled")
 	reply, err := service.conn.SendWithReply(call)
@@ -585,119 +621,9 @@ func (service *MMSService) MobileDataEnabled() (bool, error) {
 	return enabled, nil
 }
 
-// Returns message identified by parameters from HistoryService.
-func (service *MMSService) GetSingleMessage(accountId, threadId, eventId string) (map[string]dbus.Variant, error) {
-	call := dbus.NewMethodCallMessage("com.canonical.HistoryService", "/com/canonical/HistoryService", "com.canonical.HistoryService", "GetSingleEvent")
-	eventType := int32(0) // History::EventTypeText
-	call.AppendArgs(eventType, accountId, threadId, eventId)
-	reply, err := service.conn.SendWithReply(call)
-	if err != nil {
-		return nil, fmt.Errorf("send with reply error: %w", err)
+func (service *MMSService) HistoryService() *history.HistoryService {
+	if service == nil {
+		return nil
 	}
-	if reply.Type == dbus.TypeError {
-		return nil, fmt.Errorf("reply is error: %w", reply.AsError())
-	}
-
-	msg := map[string]dbus.Variant{}
-	if err := reply.Args(&msg); err != nil {
-		return nil, fmt.Errorf("reply decoding error: %w", err)
-	}
-
-	return msg, nil
-}
-
-// Returns message identified by eventId from HistoryService.
-func (service *MMSService) GetMessage(eventId string) (map[string]dbus.Variant, error) {
-	log.Printf("jezek - GetMessage(%s) - start", eventId)
-	defer log.Printf("jezek - GetMessage() - end")
-
-	//TODO:jezek - Pack into historyservice pkg.
-	// Get event view.
-	call := dbus.NewMethodCallMessage("com.canonical.HistoryService", "/com/canonical/HistoryService", "com.canonical.HistoryService", "QueryEvents")
-	eventType := int32(0) // History::EventTypeText
-	sort := map[string]dbus.Variant(nil)
-	filter := map[string]dbus.Variant{
-		"filterType":     dbus.Variant{int32(0)}, // FilterTypeStandard
-		"filterProperty": dbus.Variant{"eventId"},
-		"filterValue":    dbus.Variant{eventId},
-		"matchFlags":     dbus.Variant{int32(1)}, // MatchCaseSensitive
-	}
-	call.AppendArgs(eventType, sort, filter)
-	reply, err := service.conn.SendWithReply(call)
-	if err != nil {
-		log.Printf("QueryEvents send error: %s - %#v", err.Error(), err)
-		return nil, err
-	}
-	if reply.Type == dbus.TypeError {
-		log.Printf("QueryEvents reply is error: %v", reply.AsError())
-		return nil, reply.AsError()
-	}
-	log.Printf("QueryEvents reply: %#v", reply.AllArgs())
-	eventView := ""
-	if err := reply.Args(&eventView); err != nil {
-		return nil, err
-	}
-	log.Printf("Event View: %s", eventView)
-
-	// Destroy event view at end.
-	// dbus-send --session --print-reply --dest=com.canonical.HistoryService /com/canonical/HistoryService/eventview2413609620210130164828892 com.canonical.HistoryService.EventView.Destroy
-	defer func() {
-		destroyCall := dbus.NewMethodCallMessage("com.canonical.HistoryService", dbus.ObjectPath(eventView), "com.canonical.HistoryService.EventView", "Destroy")
-		destroyReply, err := service.conn.SendWithReply(destroyCall)
-		if err != nil {
-			log.Printf("Destroy send error: %s - %#v", err.Error(), err)
-			return
-		}
-		if destroyReply.Type == dbus.TypeError {
-			log.Printf("Destroy reply is error: %v", destroyReply.AsError())
-			return
-		}
-		log.Printf("Destroy reply: %#v", destroyReply.AllArgs())
-	}()
-
-	// Check if query is valid.
-	validCall := dbus.NewMethodCallMessage("com.canonical.HistoryService", dbus.ObjectPath(eventView), "com.canonical.HistoryService.EventView", "IsValid")
-	validReply, err := service.conn.SendWithReply(validCall)
-	if err != nil {
-		log.Printf("Is valid send error: %s - %#v", err.Error(), err)
-		return nil, err
-	}
-	if validReply.Type == dbus.TypeError {
-		log.Printf("Is valid reply is error: %v", validReply.AsError())
-		return nil, validReply.AsError()
-	}
-	log.Printf("Is valid reply: %#v", validReply.AllArgs())
-	isValid := false
-	if err := validReply.Args(&isValid); err != nil {
-		return nil, err
-	}
-	if !isValid {
-		return nil, fmt.Errorf("QueryEvents got invalid query")
-	}
-	log.Printf("Is valid: %v", isValid)
-
-	// Get message.
-	nextCall := dbus.NewMethodCallMessage("com.canonical.HistoryService", dbus.ObjectPath(eventView), "com.canonical.HistoryService.EventView", "NextPage")
-	nextReply, err := service.conn.SendWithReply(nextCall)
-	if err != nil {
-		log.Printf("Next page reply error: %s - %#v", err.Error(), err)
-		return nil, err
-	}
-	if nextReply.Type == dbus.TypeError {
-		log.Printf("Next page reply is error: %v", nextReply.AsError())
-		return nil, nextReply.AsError()
-	}
-	log.Printf("Next page reply: %#v", nextReply.AllArgs())
-	msgs := []map[string]dbus.Variant(nil)
-	if err := nextReply.Args(&msgs); err != nil {
-		return nil, err
-	}
-	log.Printf("Messages: %#v", msgs)
-	if len(msgs) > 1 {
-		return nil, fmt.Errorf("Too many meesages found: %d", len(msgs))
-	}
-	if len(msgs) == 0 {
-		return nil, nil
-	}
-	return msgs[0], nil
+	return history.NewHistoryService(service.conn)
 }

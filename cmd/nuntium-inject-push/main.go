@@ -25,6 +25,22 @@ type mainFlags struct {
 	DenialCount int `long:"denial-count" short:"d" description:"Number of serving denials until successful message serving" default:"0"`
 	// TransactionId is an string, which uniqely identifies an message.
 	TransactionId string `long:"transaction-id" short:"t" description:"Unique identifier for the push notification. If empty, TransactionId will not be filled"`
+	// ErrorActivateContext indicates how many nuntium ErrorActivateContext errors will be thrown (and communicated to telepathy), before message download attempt starts.
+	ErrorActivateContext uint64 `long:"error-activate-context" description:"Number of activate context errors before message download attempt starts"`
+	// ErrorGetProxy indicates how many nuntium ErrorGetProxy errors will be thrown (and communicated to telepathy), before message download attempt starts.
+	ErrorGetProxy uint64 `long:"error-get-proxy" description:"Number of get proxy errors before message download attempt starts"`
+	// ErrorDownloadStorage indicates how many nuntium ErrorDownloadStorage errors will be thrown (and communicated to telepathy), after message was successfully downloaded.
+	ErrorDownloadStorage uint64 `long:"error-storage-download" description:"Number of storage errors after successful message download"`
+	// ErrorReceiveHandle indicates how many nuntium ErrorForward errors will be thrown (and communicated to telepathy), after message was successfully downloaded and state stored.
+	ErrorReceiveHandle uint64 `long:"error-receive" description:"Number of receive handling errors after successful message download"`
+	// ErrorReceiveStorage indicates how many times will nuntium throw an storage error after message was successfully downloaded and forwarded to telepathy.
+	ErrorReceiveStorage uint64 `long:"error-storage-receive" description:"Number of storage errors after successful message forwarding to telepathy"`
+	// ErrorRespondHandle indicates how many times will nuntium throw an error, after message was successfully communicated to telepathy and state stored. This means to simulate an error sending m-notifyresp.ind to MMS center.
+	ErrorRespondHandle uint64 `long:"error-respond" description:"Number of respond handling errors after successful message forward"`
+	// ErrorRespondStorage indicates how many times will nuntium throw an storage error after message was successfully downloaded, forwarded to telepathy and responded to MMS center.
+	ErrorRespondStorage uint64 `long:"error-storage-respond" description:"Number of storage errors after successful message handling"`
+	// ErrorTelepathyErrorNotify indicates how many times will nuntium throw an error when message handling error is communicated to telepathy.
+	ErrorTelepathyErrorNotify uint64 `long:"error-telepathy-error-notify" description:"Number of telepathy notify errors after message handling error"`
 }
 
 func main() {

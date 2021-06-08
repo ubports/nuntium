@@ -66,26 +66,31 @@ func (msgInterface *MessageInterface) Close() {
 }
 
 func (msgInterface *MessageInterface) watchDBusMethodCalls() {
-	log.Printf("jezek - msgInterface %v: watchDBusMethodCalls(): start", msgInterface.objectPath)
-	defer log.Printf("jezek - msgInterface %v: watchDBusMethodCalls(): end", msgInterface.objectPath)
 	var reply *dbus.Message
 
 	for msg := range msgInterface.msgChan {
-		log.Printf("jezek - msgInterface %v: Received message: %v", msgInterface.objectPath, msg)
 		if msg.Interface != MMS_MESSAGE_DBUS_IFACE {
-			//TODO:jezek Distinguish between this and next "Received unknown ..." error in log.
-			log.Println("Received unkown method call on", msg.Interface, msg.Member)
-			reply = dbus.NewErrorMessage(msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method")
-			//TODO:jezek Send the reply?
+			log.Println("Received unknown interface call on", msg.Interface, msg.Member)
+			reply = dbus.NewErrorMessage(
+				msg,
+				"org.freedesktop.DBus.Error.UnknownInterface",
+				fmt.Sprintf("No such interface '%s' at object path '%s'", msg.Interface, msg.Path),
+			)
+			if err := msgInterface.conn.Send(reply); err != nil {
+				log.Println("Could not send reply:", err)
+			}
 			continue
 		}
 		switch msg.Member {
 		case "Delete":
-			//TODO:jezek - on some occasions (nuntium crash & restart) the telephony-service (or smthg. else) sends multiple read/delete requests. This crashes nuntium, when on first delete closing chanel whilst second del. req. is waiting in cannel.
 			reply = dbus.NewMethodReturnMessage(msg)
 			//TODO implement store and forward
 			if err := msgInterface.conn.Send(reply); err != nil {
 				log.Println("Could not send reply:", err)
+			}
+			if msgInterface.deleteChan == nil {
+				log.Printf("Deletion of %s is not allowed", msg.Path)
+				continue
 			}
 			msgInterface.deleteChan <- msgInterface.objectPath
 		case "Redownload":
@@ -94,10 +99,18 @@ func (msgInterface *MessageInterface) watchDBusMethodCalls() {
 			if err := msgInterface.conn.Send(reply); err != nil {
 				log.Println("Could not send reply:", err)
 			}
+			if msgInterface.redownloadChan == nil {
+				log.Printf("Redownload of %s is not allowed", msg.Path)
+				continue
+			}
 			msgInterface.redownloadChan <- msgInterface.objectPath
 		default:
-			log.Println("Received unkown method call on", msg.Interface, msg.Member)
-			reply = dbus.NewErrorMessage(msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method")
+			log.Println("Received unknown method call on", msg.Interface, msg.Member)
+			reply = dbus.NewErrorMessage(
+				msg,
+				"org.freedesktop.DBus.Error.UnknownMethod",
+				fmt.Sprintf("No such method '%s' at object path '%s'", msg.Member, msg.Path),
+			)
 			if err := msgInterface.conn.Send(reply); err != nil {
 				log.Println("Could not send reply:", err)
 			}

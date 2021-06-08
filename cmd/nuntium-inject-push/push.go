@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/ubports/nuntium/mms"
 	"launchpad.net/go-dbus/v1"
@@ -114,6 +116,55 @@ func getMNotificationIndPayload(args mainFlags) []byte {
 		)
 	}
 
+	contentLocation := mNotificationIndContentLocation
+	params := map[string]uint64{}
+	if args.ErrorActivateContext > 0 {
+		params[mms.DebugErrorActivateContext] = args.ErrorActivateContext
+	}
+	if args.ErrorGetProxy > 0 {
+		params[mms.DebugErrorGetProxy] = args.ErrorGetProxy
+	}
+	if args.ErrorDownloadStorage > 0 {
+		params[mms.DebugErrorDownloadStorage] = args.ErrorDownloadStorage
+	}
+	if args.ErrorReceiveHandle > 0 {
+		params[mms.DebugErrorReceiveHandle] = args.ErrorReceiveHandle
+	}
+	if args.ErrorReceiveStorage > 0 {
+		params[mms.DebugErrorReceiveStorage] = args.ErrorReceiveStorage
+	}
+	if args.ErrorRespondHandle > 0 {
+		params[mms.DebugErrorRespondHandle] = args.ErrorRespondHandle
+	}
+	if args.ErrorRespondStorage > 0 {
+		params[mms.DebugErrorRespondStorage] = args.ErrorRespondStorage
+	}
+	if args.ErrorTelepathyErrorNotify > 0 {
+		params[mms.DebugErrorTelepathyErrorNotify] = args.ErrorTelepathyErrorNotify
+	}
+	if len(params) > 0 {
+		v := url.Values{}
+		for s, ui64 := range params {
+			v.Add(s, strconv.FormatUint(ui64, 10))
+		}
+		contentLocation = bytes.Join(
+			[][]byte{
+				[]byte{
+					// Content location + "http://localhost:9191/mms\0"
+					0x80 + mms.X_MMS_CONTENT_LOCATION,
+					// h     t     t     p     :     /     /
+					0x68, 0x74, 0x74, 0x70, 0x3a, 0x2f, 0x2f,
+					// l     o     c     a     l     h     o     s     t
+					0x6c, 0x6f, 0x63, 0x61, 0x6c, 0x68, 0x6f, 0x73, 0x74,
+					// :     9     1     9     1     /     m     m     s
+					0x3a, 0x39, 0x31, 0x39, 0x31, 0x2f, 0x6d, 0x6d, 0x73},
+				[]byte("?" + v.Encode()),
+				[]byte{0x00},
+			},
+			nil,
+		)
+	}
+
 	return bytes.Join(
 		[][]byte{
 			mNotificationIndHeader,
@@ -123,7 +174,7 @@ func getMNotificationIndPayload(args mainFlags) []byte {
 			mNotificationIndClass,
 			mNotificationIndSize,
 			mNotificationIndExpire,
-			mNotificationIndContentLocation,
+			contentLocation,
 		},
 		nil,
 	)

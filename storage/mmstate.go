@@ -55,13 +55,16 @@ type SendInfo map[string]string
 // ModemId represents ID of modem to which the message belongs
 //
 // MNotificationInd holds the received m-Notify.Ind until PDU downloaded (is not nil when State is "notification").
+//
+// TelepathyErrorNotified holds information whether telepathy-ofono was notified of some message handling error.
 type MMSState struct {
-	Id               string
-	State            string
-	ContentLocation  string
-	SendState        SendInfo
-	ModemId          string
-	MNotificationInd *mms.MNotificationInd
+	Id                     string
+	State                  string
+	ContentLocation        string
+	SendState              SendInfo
+	ModemId                string
+	MNotificationInd       *mms.MNotificationInd
+	TelepathyErrorNotified bool
 }
 
 func (m MMSState) IsIncoming() bool {

@@ -1,19 +1,17 @@
 msc {
 
-hscale = 3;
-a [label="ofono"], b [label="nuntium"], c [label="telepathy-ofono"], d [label="Message Center"];
+hscale = 2;
+d [label="Message Center"], a [label="ofono"], b [label="nuntium"], c [label="telepathy-ofono"];
 
 a => b [label="ReceiveNotification(M-Notification.ind)"];
-...;
 --- [label="Content Type is application/vnd.wap.mms-message"];
-...;
+b note b [label="storage state:\nNOTIFICATION"];
 b => a [label="Activate context for MMS"];
-...;
 b => d [label="Download(M-Retrieve.conf)"];
-...;
-b => d [label="Upload(M-NotifyResp.ind)"];
-...;
-b => a [label="Deactivate context for MMS"];
-...;
+b note b [label="storage state:\nDOWNLOADED"];
 b -> c [label="MessageAdded(MMS payload)"];
+b note b [label="storage state:\nRECEIVED"];
+b => d [label="Upload(M-NotifyResp.ind)"];
+b note b [label="storage state:\nRESPONDED"];
+b => a [label="Deactivate context for MMS"];
 }
