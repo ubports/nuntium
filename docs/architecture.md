@@ -19,10 +19,21 @@ false:
 
 ![MMS Retrieval](assets/receiving_success_deferral_disabled.png)
 
+#### Message path from nuntium to history service through code in Ubuntu Touch
+- telepathy-ofono
+  - [MMSDService::onMessageAdded](https://github.com/ubports/telepathy-ofono/blob/xenial/mmsdservice.cpp#L116)
+  - [oFonoConnection::onMMSAdded](https://github.com/ubports/telepathy-ofono/blob/xenial/connection.cpp#L518)
+  - [oFonoConnection::addMMSToService](https://github.com/ubports/telepathy-ofono/blob/xenial/connection.cpp#L423)
+  - [oFonoTextChannel::mmsReceived](https://github.com/ubports/telepathy-ofono/blob/xenial/ofonotextchannel.cpp#L473)
+- telepathy-qt
+  - [BaseChannelTextType::addReceivedMessage](https://github.com/TelepathyIM/telepathy-qt/blob/telepathy-qt-0.9.7/TelepathyQt/base-channel.cpp#L473)
+- history-service
+  - [HistoryDaemon::onMessageReceived](https://github.com/ubports/history-service/blob/xenial/daemon/historydaemon.cpp#L1023)
 
 ### Sending an MMS
 
 This is a simplified scenario for sending a message with message delivery set
 to false:
 
-![MMS Retrieval](assets/send_success_delivery_disabled.png)
+![MMS Sending](assets/send_success_delivery_disabled.png)
+

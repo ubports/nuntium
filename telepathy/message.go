@@ -37,20 +37,22 @@ func init() {
 }
 
 type MessageInterface struct {
-	conn       *dbus.Connection
-	objectPath dbus.ObjectPath
-	msgChan    chan *dbus.Message
-	deleteChan chan dbus.ObjectPath
-	status     string
+	conn           *dbus.Connection
+	objectPath     dbus.ObjectPath
+	msgChan        chan *dbus.Message
+	deleteChan     chan dbus.ObjectPath
+	redownloadChan chan dbus.ObjectPath
+	status         string
 }
 
-func NewMessageInterface(conn *dbus.Connection, objectPath dbus.ObjectPath, deleteChan chan dbus.ObjectPath) *MessageInterface {
+func NewMessageInterface(conn *dbus.Connection, objectPath dbus.ObjectPath, deleteChan chan dbus.ObjectPath, redownloadChan chan dbus.ObjectPath) *MessageInterface {
 	msgInterface := MessageInterface{
-		conn:       conn,
-		objectPath: objectPath,
-		deleteChan: deleteChan,
-		msgChan:    make(chan *dbus.Message),
-		status:     "draft",
+		conn:           conn,
+		objectPath:     objectPath,
+		deleteChan:     deleteChan,
+		redownloadChan: redownloadChan,
+		msgChan:        make(chan *dbus.Message),
+		status:         "draft",
 	}
 	go msgInterface.watchDBusMethodCalls()
 	conn.RegisterObjectPath(msgInterface.objectPath, msgInterface.msgChan)
@@ -68,8 +70,15 @@ func (msgInterface *MessageInterface) watchDBusMethodCalls() {
 
 	for msg := range msgInterface.msgChan {
 		if msg.Interface != MMS_MESSAGE_DBUS_IFACE {
-			log.Println("Received unkown method call on", msg.Interface, msg.Member)
-			reply = dbus.NewErrorMessage(msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method")
+			log.Println("Received unknown interface call on", msg.Interface, msg.Member)
+			reply = dbus.NewErrorMessage(
+				msg,
+				"org.freedesktop.DBus.Error.UnknownInterface",
+				fmt.Sprintf("No such interface '%s' at object path '%s'", msg.Interface, msg.Path),
+			)
+			if err := msgInterface.conn.Send(reply); err != nil {
+				log.Println("Could not send reply:", err)
+			}
 			continue
 		}
 		switch msg.Member {
@@ -79,10 +88,29 @@ func (msgInterface *MessageInterface) watchDBusMethodCalls() {
 			if err := msgInterface.conn.Send(reply); err != nil {
 				log.Println("Could not send reply:", err)
 			}
+			if msgInterface.deleteChan == nil {
+				log.Printf("Deletion of %s is not allowed", msg.Path)
+				continue
+			}
 			msgInterface.deleteChan <- msgInterface.objectPath
+		case "Redownload":
+			reply = dbus.NewMethodReturnMessage(msg)
+			//TODO implement store and forward
+			if err := msgInterface.conn.Send(reply); err != nil {
+				log.Println("Could not send reply:", err)
+			}
+			if msgInterface.redownloadChan == nil {
+				log.Printf("Redownload of %s is not allowed", msg.Path)
+				continue
+			}
+			msgInterface.redownloadChan <- msgInterface.objectPath
 		default:
-			log.Println("Received unkown method call on", msg.Interface, msg.Member)
-			reply = dbus.NewErrorMessage(msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method")
+			log.Println("Received unknown method call on", msg.Interface, msg.Member)
+			reply = dbus.NewErrorMessage(
+				msg,
+				"org.freedesktop.DBus.Error.UnknownMethod",
+				fmt.Sprintf("No such method '%s' at object path '%s'", msg.Member, msg.Path),
+			)
 			if err := msgInterface.conn.Send(reply); err != nil {
 				log.Println("Could not send reply:", err)
 			}

@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/ubports/nuntium/mms"
 	"launchpad.net/go-dbus/v1"
 )
 
@@ -92,13 +93,13 @@ func (manager *MMSManager) serviceAdded(payload *Payload) error {
 	return nil
 }
 
-func (manager *MMSManager) AddService(identity string, modemObjPath dbus.ObjectPath, outgoingChannel chan *OutgoingMessage, useDeliveryReports bool) (*MMSService, error) {
+func (manager *MMSManager) AddService(identity string, modemObjPath dbus.ObjectPath, outgoingChannel chan *OutgoingMessage, useDeliveryReports bool, mNotificationIndChan chan<- *mms.MNotificationInd) (*MMSService, error) {
 	for i := range manager.services {
 		if manager.services[i].isService(identity) {
 			return manager.services[i], nil
 		}
 	}
-	service := NewMMSService(manager.conn, modemObjPath, identity, outgoingChannel, useDeliveryReports)
+	service := NewMMSService(manager.conn, modemObjPath, identity, outgoingChannel, useDeliveryReports, mNotificationIndChan)
 	if err := manager.serviceAdded(&service.payload); err != nil {
 		return &MMSService{}, err
 	}

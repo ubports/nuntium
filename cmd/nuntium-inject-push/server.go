@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-func createSpace(mRetrieveConfPath string, done chan<- bool) (handler http.HandlerFunc, err error) {
-	if mRetrieveConfPath != "" {
-		f, err := os.Open(mRetrieveConfPath)
+func createSpace(args mainFlags, done chan<- bool) (handler http.HandlerFunc, err error) {
+	if args.MRetrieveConf != "" {
+		f, err := os.Open(args.MRetrieveConf)
 		if err != nil {
 			return handler, err
 		}
@@ -22,7 +22,7 @@ func createSpace(mRetrieveConfPath string, done chan<- bool) (handler http.Handl
 		}
 	} else {
 		handler = func(w http.ResponseWriter, r *http.Request) {
-			http.ServeContent(w, r, "mms", time.Time{}, bytes.NewReader(mRetrieveConf))
+			http.ServeContent(w, r, "mms", time.Time{}, bytes.NewReader(getMRetrieveConfPayload(args)))
 			done <- true
 		}
 	}
