@@ -25,7 +25,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -222,16 +224,19 @@ type MSendConf struct {
 type MNotificationInd struct {
 	MMSReader
 	UUID                                 string
+	RedownloadOfUUID                     string // If not empty, it means that the struct was created to redownload a previously failed message download with UUID stored in field.
+	Received                             time.Time
 	Type, Version, Class, DeliveryReport byte
 	ReplyCharging, ReplyChargingDeadline byte
 	Priority                             byte
 	ReplyChargingId                      string
 	TransactionId, ContentLocation       string
 	From, Subject                        string
-	Expiry, Size                         uint64
+	Expiry                               time.Time
+	Size                                 uint64
 }
 
-// MNotificationInd holds a m-notifyresp.ind message defined in
+// MNotifyRespInd holds a m-notifyresp.ind message defined in
 // OMA-WAP-MMS-ENC-v1.1 section 6.2
 type MNotifyRespInd struct {
 	UUID          string `encode:"no"`
@@ -269,7 +274,7 @@ func NewMSendReq(recipients []string, attachments []*Attachment, deliveryReport 
 	for i := range recipients {
 		recipients[i] += "/TYPE=PLMN"
 	}
-	uuid := genUUID()
+	uuid := GenUUID()
 
 	orderedAttachments, smilStart, smilType := processAttachments(attachments)
 
@@ -298,12 +303,90 @@ func NewMSendConf() *MSendConf {
 	}
 }
 
-func NewMNotificationInd() *MNotificationInd {
-	return &MNotificationInd{Type: TYPE_NOTIFICATION_IND, UUID: genUUID()}
+func NewMNotificationInd(received time.Time) *MNotificationInd {
+	return &MNotificationInd{Type: TYPE_NOTIFICATION_IND, UUID: GenUUID(), Received: received}
 }
 
 func (mNotificationInd *MNotificationInd) IsLocal() bool {
+	log.Printf("MNotificationInd.IsLocal() is deprecated, use MNotificationInd.IsDebug() instead")
+	return mNotificationInd.IsDebug()
+}
+
+func (mNotificationInd *MNotificationInd) IsDebug() bool {
 	return strings.HasPrefix(mNotificationInd.ContentLocation, "http://localhost:9191/mms")
+}
+
+// When there is a 'name' parameter in ContentLocation URI with non zero positive integer as value,
+// the value is decreased and corresponding error is returned. Nil error is returned otherwise or if result of IsDebug method is false.
+func (mNotificationInd *MNotificationInd) PopDebugError(name string) error {
+	if mNotificationInd == nil || mNotificationInd.IsDebug() == false {
+		return nil
+	}
+	uri, err := url.ParseRequestURI(mNotificationInd.ContentLocation)
+	if err != nil {
+		log.Printf("Parsing ContentLocation \"%s\" as URI error: %s", mNotificationInd.ContentLocation, err)
+		return nil
+	}
+	values := uri.Query()
+	defer func() {
+		uri.RawQuery = values.Encode()
+		mNotificationInd.ContentLocation = uri.String()
+	}()
+	value := values.Get(name)
+	if value == "" {
+		values.Del(name)
+		return nil
+	}
+	ui64, err := strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		log.Printf("Parsing ContentLocation query %s value %s as uint64 error: %s", name, value, err)
+		values.Del(name)
+		return nil
+	}
+	if ui64 == 0 {
+		values.Del(name)
+		return nil
+	}
+
+	values.Del(name)
+	ui64 -= 1
+	if ui64 > 0 {
+		values.Add(name, strconv.FormatUint(ui64, 10))
+	}
+
+	return ForcedDebugError(name)
+}
+
+// Default expire duration is 15 days.
+const ExpiryDefaultDuration = 15 * 24 * time.Hour
+
+// Returns the expiry time of the MNotificationInd, which is stored in Expiry field.
+// If Expiry field is empty/zero, function returns the time ExpiryDefaultDuration after the time in Received field.
+// If both Received and Expiry fields are empty/zero, function returns zero time.
+func (mNotificationInd *MNotificationInd) Expire() time.Time {
+	if mNotificationInd == nil {
+		return time.Time{}
+	}
+	if mNotificationInd.Expiry.IsZero() {
+		if mNotificationInd.Received.IsZero() {
+			return time.Time{}
+		}
+		return mNotificationInd.Received.Add(ExpiryDefaultDuration)
+	}
+	return mNotificationInd.Expiry
+}
+
+// Expiry returns if MNotificationInd is expired at the time of calling this function.
+// If both Received and Expiry fields are empty/zero, function returns false.
+func (mNotificationInd *MNotificationInd) Expired() bool {
+	if mNotificationInd == nil {
+		return false
+	}
+	expire := mNotificationInd.Expire()
+	if expire.IsZero() {
+		return false
+	}
+	return time.Now().After(expire)
 }
 
 func (mNotificationInd *MNotificationInd) NewMNotifyRespInd(status byte, deliveryReport bool) *MNotifyRespInd {
@@ -336,7 +419,7 @@ func NewMRetrieveConf(uuid string) *MRetrieveConf {
 	return &MRetrieveConf{Type: TYPE_RETRIEVE_CONF, UUID: uuid}
 }
 
-func genUUID() string {
+func GenUUID() string {
 	var id string
 	random, err := os.Open("/dev/urandom")
 	if err != nil {

@@ -21,8 +21,8 @@ Crossbuilder:
 
 ```bash
 crossbuilder inst-foreign dh-golang \
-    golang-1.6-doc \
-    golang-1.6 \
+    golang-1.13-doc \
+    golang-1.13 \
     golang-go-dbus-dev \
     golang-go-flags-dev \
     golang-go-xdg-dev \
