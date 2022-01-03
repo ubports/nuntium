@@ -1,3 +1,17 @@
+nuntium (2.0) xenial; urgency=medium
+
+  * Store incoming message notification (MN)
+  * Send error message to telepathy-ofono on failed MN handling
+  * Listen to and handle re-download requests of failed MN
+  * Handle MNs with the same id to prevent duplicate user notifications
+  * Change MN Expiry field format and handle absolute/relative token during
+  	decoding
+  * Storage cleanup and MN error recovery on application start
+  * Introduce new flags for the nuntium-inject-push command
+  * Update architecture documentation.
+
+ -- jEzEk <jezek@chicki.sk>  Mon, 3 Jan 2022 18:03:08 +0200
+ 
 nuntium (1.4+ubports1) xenial; urgency=medium
 
   * Imported to UBports
