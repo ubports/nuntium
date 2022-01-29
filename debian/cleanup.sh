@@ -10,7 +10,6 @@ rm -r \
 	$gopkg_path/storage \
 	$gopkg_path/scripts \
 	$gopkg_path/docs \
-	$gopkg_path/.travis.yml \
 	$gopkg_path/.gitignore \
 	$gopkg_path/README.md \
 	$gopkg_path/cmd \

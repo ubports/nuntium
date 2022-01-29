@@ -14,8 +14,7 @@ DEB_HOST_ARCH := $(shell dpkg-architecture -qDEB_HOST_ARCH)
 %:
 	dh $@ \
 		--buildsystem=golang \
-		--with=golang \
-		--fail-missing
+		--with=golang
 
 override_dh_auto_test:
 # The test runners panic when running on powerpc64.
