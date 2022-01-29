@@ -4,7 +4,7 @@ nuntium (1.4+ubports1) xenial; urgency=medium
 
  -- Florian Leeber <florian@ubports.com>  Fri, 4 Apr 2020 14:34:03 +0200
  
- nuntium (1.4+15.10.20150902-0ubuntu1) wily; urgency=medium
+nuntium (1.4+15.10.20150902-0ubuntu1) wily; urgency=medium
 
   [ Alfonso Sanchez-Beato ]
   * [ Dimitri John Ledkov ] Migrate from :sys:started events to dbus

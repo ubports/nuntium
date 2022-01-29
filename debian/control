@@ -2,18 +2,17 @@ Source: nuntium
 Section: devel
 Priority: optional
 Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
-Build-Depends: debhelper (>= 9),
+Build-Depends: debhelper-compat (= 12),
                dh-golang,
                golang-1.13-go,
                golang-go-dbus-dev,
                golang-go-flags-dev,
                golang-go-xdg-dev,
-               golang-gocheck-dev,
+               golang-check.v1-dev,
                golang-udm-dev,
 Standards-Version: 3.9.5
-Homepage: https://launchpad.net/nuntium
-Vcs-Browser: http://bazaar.launchpad.net/~phablet-team/packaging/trunk/files
-Vcs-Bzr: lp:packaging
+Homepage: https://github.com/ubports/nuntium
+Vcs-Browser: https://github.com/ubports/nuntium
 
 Package: nuntium
 Architecture: any
