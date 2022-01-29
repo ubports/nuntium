@@ -1,10 +1,9 @@
 package history
 
 import (
+	"launchpad.net/go-dbus"
 	"reflect"
 	"testing"
-
-	"launchpad.net/go-dbus/v1"
 )
 
 func TestMessage_Exists(t *testing.T) {

@@ -24,13 +24,12 @@ package ofono
 import (
 	"errors"
 	"fmt"
+	"launchpad.net/go-dbus"
 	"log"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
-
-	"launchpad.net/go-dbus/v1"
 )
 
 const (

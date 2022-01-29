@@ -22,13 +22,13 @@
 package main
 
 import (
+	"launchpad.net/go-dbus"
 	"log"
 	"os"
 	"syscall"
 
 	"github.com/ubports/nuntium/ofono"
 	"github.com/ubports/nuntium/telepathy"
-	"launchpad.net/go-dbus/v1"
 )
 
 func main() {

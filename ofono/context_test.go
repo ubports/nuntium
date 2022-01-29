@@ -23,8 +23,7 @@ package ofono
 
 import (
 	"errors"
-
-	"launchpad.net/go-dbus/v1"
+	"launchpad.net/go-dbus"
 	. "launchpad.net/gocheck"
 )
 

@@ -22,9 +22,8 @@
 package ofono
 
 import (
+	"launchpad.net/go-dbus"
 	"log"
-
-	"launchpad.net/go-dbus/v1"
 )
 
 type Modems map[dbus.ObjectPath]*Modem

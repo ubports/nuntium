@@ -2,9 +2,8 @@ package history
 
 import (
 	"fmt"
+	"launchpad.net/go-dbus"
 	"log"
-
-	"launchpad.net/go-dbus/v1"
 )
 
 // HistoryService allows to communicate with message history service through dbus.

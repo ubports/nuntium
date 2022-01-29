@@ -23,10 +23,10 @@ package telepathy
 
 import (
 	"fmt"
+	"launchpad.net/go-dbus"
 	"log"
 
 	"github.com/ubports/nuntium/mms"
-	"launchpad.net/go-dbus/v1"
 )
 
 type MMSManager struct {

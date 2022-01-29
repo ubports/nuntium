@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"launchpad.net/go-xdg"
 	"net/http"
 	"os"
 	"os/exec"
@@ -9,7 +10,6 @@ import (
 	"strings"
 
 	flags "github.com/jessevdk/go-flags"
-	"launchpad.net/go-xdg/v0"
 )
 
 type mainFlags struct {

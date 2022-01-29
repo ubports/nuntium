@@ -25,14 +25,13 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"launchpad.net/go-dbus"
+	"launchpad.net/go-xdg"
 	"os"
 	"path/filepath"
 	"sync"
 
 	"log"
-
-	"launchpad.net/go-dbus/v1"
-	"launchpad.net/go-xdg/v0"
 )
 
 var preferredContextPath string = filepath.Join(filepath.Base(os.Args[0]), "preferredContext")

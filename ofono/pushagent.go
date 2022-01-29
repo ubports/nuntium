@@ -24,11 +24,11 @@ package ofono
 import (
 	"encoding/hex"
 	"fmt"
+	"launchpad.net/go-dbus"
 	"log"
 	"sync"
 
 	"github.com/ubports/nuntium/mms"
-	"launchpad.net/go-dbus/v1"
 )
 
 /*

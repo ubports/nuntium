@@ -25,6 +25,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"launchpad.net/go-xdg"
 	"log"
 	"os"
 	"path"
@@ -35,7 +36,6 @@ import (
 	"time"
 
 	"github.com/ubports/nuntium/mms"
-	"launchpad.net/go-xdg/v0"
 )
 
 const SUBPATH = "nuntium/store"

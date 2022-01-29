@@ -23,10 +23,9 @@ package telepathy
 
 import (
 	"fmt"
+	"launchpad.net/go-dbus"
 	"log"
 	"sort"
-
-	"launchpad.net/go-dbus/v1"
 )
 
 var validStatus sort.StringSlice

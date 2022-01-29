@@ -1,0 +1,12 @@
+github.com/jessevdk/go-flags v1.5.0 h1:1jKYvbxEjfUl0fmqTCOfonvskHHXMjBySTLW4y9LFvc=
+github.com/jessevdk/go-flags v1.5.0/go.mod h1:Fw0T6WPc1dYxT4mKEZRfG5kJhaTDP9pj1c2EWnYs/m4=
+github.com/z3ntu/go-dbus v0.0.0-20170220120108-c022b8b2e127 h1:5uM5CyMgvx0a/ctLJ3ThGt2fghWoX6cPniYNgGeCuJI=
+github.com/z3ntu/go-dbus v0.0.0-20170220120108-c022b8b2e127/go.mod h1:bUTQ2+DQ82yitPELjqsyPbSZGg05fEKaC3eHCGkCiV4=
+gitlab.com/sap_nocops/golang-udm v0.0.0-20220129171329-13c5f4438d5d h1:sY1eD295uuRY+Grul5jXQW0W/VFiZE2xEwVLmIFIyV4=
+gitlab.com/sap_nocops/golang-udm v0.0.0-20220129171329-13c5f4438d5d/go.mod h1:ZJjl85c+rw5WhUYm83y6Qx3b941zUCU1WgiKsgJFgNY=
+golang.org/x/sys v0.0.0-20210320140829-1e4c9ba3b0c4 h1:EZ2mChiOa8udjfp6rRmswTbtZN/QzUQp4ptM4rnjHvc=
+golang.org/x/sys v0.0.0-20210320140829-1e4c9ba3b0c4/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+launchpad.net/go-xdg v0.0.0-20140208094800-000000000010 h1:67YK4VRwVpu+qdmji/6lNv7y/O6NmH1oaSb/4ETtTck=
+launchpad.net/go-xdg v0.0.0-20140208094800-000000000010/go.mod h1:LvhuQF+z2nM+7tjWchL2jH2sbCGTtyHFhi4s/dDQEOk=
+launchpad.net/gocheck v0.0.0-20140225173054-000000000087 h1:Izowp2XBH6Ya6rv+hqbceQyw/gSGoXfH/UPoTGduL54=
+launchpad.net/gocheck v0.0.0-20140225173054-000000000087/go.mod h1:hj7XX3B/0A+80Vse0e+BUHsHMTEhd0O4cpUHr/e/BUM=

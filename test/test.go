@@ -2,9 +2,8 @@ package main
 
 import (
 	"fmt"
+	"launchpad.net/go-dbus"
 	"os"
-
-	"launchpad.net/go-dbus/v1"
 )
 
 func main() {

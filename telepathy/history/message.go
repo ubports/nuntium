@@ -2,8 +2,7 @@ package history
 
 import (
 	"fmt"
-
-	"launchpad.net/go-dbus/v1"
+	"launchpad.net/go-dbus"
 )
 
 type Message map[string]dbus.Variant

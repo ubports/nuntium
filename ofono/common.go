@@ -21,7 +21,7 @@
 
 package ofono
 
-import "launchpad.net/go-dbus/v1"
+import "launchpad.net/go-dbus"
 
 const (
 	AGENT_TAG                         = dbus.ObjectPath("/nuntium")

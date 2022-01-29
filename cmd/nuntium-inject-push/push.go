@@ -3,11 +3,11 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"launchpad.net/go-dbus"
 	"net/url"
 	"strconv"
 
 	"github.com/ubports/nuntium/mms"
-	"launchpad.net/go-dbus/v1"
 )
 
 const (

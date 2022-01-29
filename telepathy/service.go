@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"launchpad.net/go-dbus"
 	"log"
 	"path/filepath"
 	"reflect"
@@ -34,7 +35,6 @@ import (
 	"github.com/ubports/nuntium/mms"
 	"github.com/ubports/nuntium/storage"
 	"github.com/ubports/nuntium/telepathy/history"
-	"launchpad.net/go-dbus/v1"
 )
 
 //Payload is used to build the dbus messages; this is a workaround as v1 of go-dbus

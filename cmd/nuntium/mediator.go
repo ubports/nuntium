@@ -24,6 +24,7 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"launchpad.net/go-dbus"
 	"log"
 	"os"
 	"os/user"
@@ -34,7 +35,6 @@ import (
 	"github.com/ubports/nuntium/ofono"
 	"github.com/ubports/nuntium/storage"
 	"github.com/ubports/nuntium/telepathy"
-	"launchpad.net/go-dbus/v1"
 )
 
 type Mediator struct {
